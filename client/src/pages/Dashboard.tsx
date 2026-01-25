@@ -3,7 +3,7 @@ import { useProjects } from "@/hooks/use-projects";
 import { useAllTasks } from "@/hooks/use-tasks";
 import { useEquipment } from "@/hooks/use-equipment";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { LayoutDashboard, Clock, AlertCircle, CheckCircle2, HardHat } from "lucide-react";
+import { LayoutDashboard, Clock, AlertCircle, CheckCircle2, HardHat, Truck } from "lucide-react";
 import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis, Tooltip } from "recharts";
 import { format } from "date-fns";
 import { Link } from "wouter";
