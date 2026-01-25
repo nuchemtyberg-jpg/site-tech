@@ -1,7 +1,7 @@
 import { useAllTasks } from "@/hooks/use-tasks";
 import { format, startOfWeek, addDays, isSameDay } from "date-fns";
 import { useState } from "react";
-import { ChevronLeft, ChevronRight, Calendar as CalendarIcon } from "lucide-react";
+import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
