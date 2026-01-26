@@ -152,24 +152,48 @@ export async function registerRoutes(
       // Update the task
       const task = await storage.updateTask(taskId, input);
       
-      // Log status/percent changes if there were any
-      if ((statusChanged || percentChanged) && req.user) {
-        const user = req.user as User;
-        const userName = [user.firstName, user.lastName].filter(Boolean).join(' ') || user.email || 'Unknown User';
-        await storage.createTaskStatusHistory({
-          taskId,
-          previousStatus: statusChanged ? currentTask.status : null,
-          newStatus: statusChanged ? input.status! : null,
-          previousPercentComplete: percentChanged ? currentTask.percentComplete : null,
-          newPercentComplete: percentChanged ? input.percentComplete! : null,
-          changedByUserId: user.id,
-          changedByName: userName,
-        });
+      // Log status/percent changes if there were any (non-blocking - don't fail the update if history fails)
+      if (statusChanged || percentChanged) {
+        try {
+          let changedByUserId = "unknown";
+          let changedByName = "Unknown User";
+          
+          if (req.user) {
+            const user = req.user as User;
+            // Safely get user id, falling back to "unknown" if null/undefined
+            if (user.id) {
+              changedByUserId = user.id;
+            }
+            const fullName = [user.firstName, user.lastName].filter(Boolean).join(' ');
+            if (fullName) {
+              changedByName = fullName;
+            } else if (user.email) {
+              changedByName = user.email;
+            }
+          }
+          
+          await storage.createTaskStatusHistory({
+            taskId,
+            previousStatus: statusChanged ? currentTask.status : null,
+            newStatus: statusChanged ? input.status! : null,
+            previousPercentComplete: percentChanged ? currentTask.percentComplete : null,
+            newPercentComplete: percentChanged ? input.percentComplete! : null,
+            changedByUserId,
+            changedByName,
+          });
+        } catch (historyErr) {
+          console.error("Failed to create task status history:", historyErr);
+          // Continue anyway - task update succeeded
+        }
       }
       
       res.json(task);
     } catch (err) {
-      return res.status(404).json({ message: "Task not found" });
+      console.error("Error updating task:", err);
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0].message });
+      }
+      return res.status(500).json({ message: "Failed to update task" });
     }
   });
 

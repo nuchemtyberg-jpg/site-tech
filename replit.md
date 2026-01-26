@@ -46,10 +46,16 @@ The server uses a storage abstraction layer (`server/storage.ts`) implementing t
 Authentication is handled through `server/replit_integrations/auth/` with Passport.js and OpenID Connect strategy. Protected routes use the `isAuthenticated` middleware.
 
 ### Data Models
-Four main entities defined in `shared/schema.ts`:
+Main entities defined in `shared/schema.ts`:
 - **Projects**: Core entity with projectNumber (auto-generated S-1000+), name, streetAddress, city, state, customerId, status, notes, and color
   - Status options: new, bidding, takeoff_done, proposal_sent, active, completed, bid_lost, archive
-- **Tasks**: Belong to projects with title, description, dates, status, and priority
+- **Tasks**: Belong to projects with title, description, dates, status, priority, and percentComplete (0-100%)
+  - Percent complete uses 5% increments in the UI slider
+  - Status auto-updates based on percent: 0% = pending, 1-99% = in_progress, 100% = completed
+- **TaskStatusHistory**: Audit trail for task status and percent changes
+  - Tracks previousStatus, newStatus, previousPercentComplete, newPercentComplete
+  - Records changedByUserId and changedByName for attribution
+  - API: GET /api/tasks/:id/history returns history entries ordered by date descending
 - **Equipment**: Inventory items with type, status, and notes
 - **Allocations**: Link equipment to projects for scheduling
 - **Customers**: Customer information with name, company, contact details
