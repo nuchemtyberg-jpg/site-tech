@@ -1,5 +1,9 @@
 import { z } from 'zod';
-import { insertProjectSchema, insertTaskSchema, insertEquipmentSchema, insertAllocationSchema, projects, tasks, equipment, allocations } from './schema';
+import { 
+  insertProjectSchema, insertTaskSchema, insertEquipmentSchema, insertAllocationSchema,
+  insertCustomerSchema, insertDailyReportSchema, insertMaintenanceLogSchema, insertCommunicationSchema,
+  projects, tasks, equipment, allocations, customers, dailyReports, maintenanceLogs, communications
+} from './schema';
 
 export const errorSchemas = {
   validation: z.object({
@@ -15,6 +19,53 @@ export const errorSchemas = {
 };
 
 export const api = {
+  // Customers
+  customers: {
+    list: {
+      method: 'GET' as const,
+      path: '/api/customers',
+      responses: {
+        200: z.array(z.custom<typeof customers.$inferSelect>()),
+      },
+    },
+    get: {
+      method: 'GET' as const,
+      path: '/api/customers/:id',
+      responses: {
+        200: z.custom<typeof customers.$inferSelect>(),
+        404: errorSchemas.notFound,
+      },
+    },
+    create: {
+      method: 'POST' as const,
+      path: '/api/customers',
+      input: insertCustomerSchema,
+      responses: {
+        201: z.custom<typeof customers.$inferSelect>(),
+        400: errorSchemas.validation,
+      },
+    },
+    update: {
+      method: 'PUT' as const,
+      path: '/api/customers/:id',
+      input: insertCustomerSchema.partial(),
+      responses: {
+        200: z.custom<typeof customers.$inferSelect>(),
+        400: errorSchemas.validation,
+        404: errorSchemas.notFound,
+      },
+    },
+    delete: {
+      method: 'DELETE' as const,
+      path: '/api/customers/:id',
+      responses: {
+        204: z.void(),
+        404: errorSchemas.notFound,
+      },
+    },
+  },
+
+  // Projects
   projects: {
     list: {
       method: 'GET' as const,
@@ -59,6 +110,8 @@ export const api = {
       },
     },
   },
+
+  // Tasks
   tasks: {
     list: {
       method: 'GET' as const,
@@ -69,7 +122,7 @@ export const api = {
     },
     getAll: {
       method: 'GET' as const,
-      path: '/api/tasks', // Global task list for Gantt
+      path: '/api/tasks',
       responses: {
         200: z.array(z.custom<typeof tasks.$inferSelect>()),
       },
@@ -102,12 +155,22 @@ export const api = {
       },
     },
   },
+
+  // Equipment
   equipment: {
     list: {
       method: 'GET' as const,
       path: '/api/equipment',
       responses: {
         200: z.array(z.custom<typeof equipment.$inferSelect>()),
+      },
+    },
+    get: {
+      method: 'GET' as const,
+      path: '/api/equipment/:id',
+      responses: {
+        200: z.custom<typeof equipment.$inferSelect>(),
+        404: errorSchemas.notFound,
       },
     },
     create: {
@@ -138,6 +201,107 @@ export const api = {
       },
     },
   },
+
+  // Maintenance Logs
+  maintenanceLogs: {
+    list: {
+      method: 'GET' as const,
+      path: '/api/equipment/:equipmentId/maintenance',
+      responses: {
+        200: z.array(z.custom<typeof maintenanceLogs.$inferSelect>()),
+      },
+    },
+    create: {
+      method: 'POST' as const,
+      path: '/api/equipment/:equipmentId/maintenance',
+      input: insertMaintenanceLogSchema,
+      responses: {
+        201: z.custom<typeof maintenanceLogs.$inferSelect>(),
+        400: errorSchemas.validation,
+      },
+    },
+    delete: {
+      method: 'DELETE' as const,
+      path: '/api/maintenance/:id',
+      responses: {
+        204: z.void(),
+      },
+    },
+  },
+
+  // Daily Reports
+  dailyReports: {
+    list: {
+      method: 'GET' as const,
+      path: '/api/projects/:projectId/reports',
+      responses: {
+        200: z.array(z.custom<typeof dailyReports.$inferSelect>()),
+      },
+    },
+    get: {
+      method: 'GET' as const,
+      path: '/api/reports/:id',
+      responses: {
+        200: z.custom<typeof dailyReports.$inferSelect>(),
+        404: errorSchemas.notFound,
+      },
+    },
+    create: {
+      method: 'POST' as const,
+      path: '/api/projects/:projectId/reports',
+      input: insertDailyReportSchema,
+      responses: {
+        201: z.custom<typeof dailyReports.$inferSelect>(),
+        400: errorSchemas.validation,
+      },
+    },
+    update: {
+      method: 'PUT' as const,
+      path: '/api/reports/:id',
+      input: insertDailyReportSchema.partial(),
+      responses: {
+        200: z.custom<typeof dailyReports.$inferSelect>(),
+        400: errorSchemas.validation,
+        404: errorSchemas.notFound,
+      },
+    },
+    delete: {
+      method: 'DELETE' as const,
+      path: '/api/reports/:id',
+      responses: {
+        204: z.void(),
+      },
+    },
+  },
+
+  // Communications
+  communications: {
+    list: {
+      method: 'GET' as const,
+      path: '/api/customers/:customerId/communications',
+      responses: {
+        200: z.array(z.custom<typeof communications.$inferSelect>()),
+      },
+    },
+    create: {
+      method: 'POST' as const,
+      path: '/api/customers/:customerId/communications',
+      input: insertCommunicationSchema,
+      responses: {
+        201: z.custom<typeof communications.$inferSelect>(),
+        400: errorSchemas.validation,
+      },
+    },
+    delete: {
+      method: 'DELETE' as const,
+      path: '/api/communications/:id',
+      responses: {
+        204: z.void(),
+      },
+    },
+  },
+
+  // Allocations
   allocations: {
     list: {
       method: 'GET' as const,
@@ -155,6 +319,15 @@ export const api = {
         400: errorSchemas.validation,
       },
     },
+    update: {
+      method: 'PUT' as const,
+      path: '/api/allocations/:id',
+      input: insertAllocationSchema.partial(),
+      responses: {
+        200: z.custom<typeof allocations.$inferSelect>(),
+        400: errorSchemas.validation,
+      },
+    },
     delete: {
       method: 'DELETE' as const,
       path: '/api/allocations/:id',
@@ -164,12 +337,14 @@ export const api = {
       },
     },
   },
+
+  // Files
   files: {
     list: {
       method: 'GET' as const,
       path: '/api/projects/:projectId/files',
       responses: {
-        200: z.array(z.custom<any>()), // Simplified for now
+        200: z.array(z.custom<any>()),
       },
     },
     create: {
@@ -194,6 +369,8 @@ export const api = {
       },
     },
   },
+
+  // Folders
   folders: {
     list: {
       method: 'GET' as const,

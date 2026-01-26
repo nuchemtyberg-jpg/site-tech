@@ -320,12 +320,12 @@ export default function ProjectDetails() {
 
                 <div className="grid grid-cols-2 gap-4">
                   <div className="grid gap-2">
-                    <Label htmlFor="startDate">Start Date</Label>
-                    <Input id="startDate" type="date" {...form.register("startDate", { valueAsDate: true })} data-testid="input-task-start" />
+                    <Label htmlFor="scheduledDate">Scheduled Date</Label>
+                    <Input id="scheduledDate" type="date" {...form.register("scheduledDate")} data-testid="input-task-scheduled" />
                   </div>
                   <div className="grid gap-2">
-                    <Label htmlFor="endDate">End Date</Label>
-                    <Input id="endDate" type="date" {...form.register("endDate", { valueAsDate: true })} data-testid="input-task-end" />
+                    <Label htmlFor="dueDate">Due Date</Label>
+                    <Input id="dueDate" type="date" {...form.register("dueDate")} data-testid="input-task-due" />
                   </div>
                 </div>
 
@@ -394,7 +394,7 @@ export default function ProjectDetails() {
                       <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
                         <span className="flex items-center gap-1">
                           <Calendar className="w-3 h-3" />
-                          {formatDateRange(task.startDate, task.endDate)}
+                          {formatDateRange(task.scheduledDate, task.dueDate)}
                         </span>
                         <span className={cn(
                           "px-2 py-0.5 rounded uppercase tracking-wider font-bold",

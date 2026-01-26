@@ -17,6 +17,46 @@ export async function registerRoutes(
   // Object Storage Setup
   registerObjectStorageRoutes(app);
 
+  // Customers
+  app.get(api.customers.list.path, async (req, res) => {
+    const customers = await storage.getCustomers();
+    res.json(customers);
+  });
+
+  app.get(api.customers.get.path, async (req, res) => {
+    const customer = await storage.getCustomer(Number(req.params.id));
+    if (!customer) return res.status(404).json({ message: "Customer not found" });
+    res.json(customer);
+  });
+
+  app.post(api.customers.create.path, async (req, res) => {
+    try {
+      const input = api.customers.create.input.parse(req.body);
+      const customer = await storage.createCustomer(input);
+      res.status(201).json(customer);
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0].message });
+      }
+      throw err;
+    }
+  });
+
+  app.put(api.customers.update.path, async (req, res) => {
+    try {
+      const input = api.customers.update.input.parse(req.body);
+      const customer = await storage.updateCustomer(Number(req.params.id), input);
+      res.json(customer);
+    } catch (err) {
+      return res.status(404).json({ message: "Customer not found" });
+    }
+  });
+
+  app.delete(api.customers.delete.path, async (req, res) => {
+    await storage.deleteCustomer(Number(req.params.id));
+    res.status(204).send();
+  });
+
   // Projects
   app.get(api.projects.list.path, async (req, res) => {
     const projects = await storage.getProjects();
@@ -31,11 +71,7 @@ export async function registerRoutes(
 
   app.post(api.projects.create.path, async (req, res) => {
     try {
-      const bodySchema = api.projects.create.input.extend({
-        startDate: z.coerce.date().nullable().optional(),
-        endDate: z.coerce.date().nullable().optional(),
-      });
-      const input = bodySchema.parse(req.body);
+      const input = api.projects.create.input.parse(req.body);
       const project = await storage.createProject(input);
       res.status(201).json(project);
     } catch (err) {
@@ -48,17 +84,10 @@ export async function registerRoutes(
 
   app.put(api.projects.update.path, async (req, res) => {
     try {
-      const bodySchema = api.projects.update.input.extend({
-        startDate: z.coerce.date().nullable().optional(),
-        endDate: z.coerce.date().nullable().optional(),
-      });
-      const input = bodySchema.parse(req.body);
+      const input = api.projects.update.input.parse(req.body);
       const project = await storage.updateProject(Number(req.params.id), input);
       res.json(project);
     } catch (err) {
-       if (err instanceof z.ZodError) {
-        return res.status(400).json({ message: err.errors[0].message });
-      }
       return res.status(404).json({ message: "Project not found" });
     }
   });
@@ -81,12 +110,7 @@ export async function registerRoutes(
 
   app.post(api.tasks.create.path, async (req, res) => {
     try {
-      const bodySchema = api.tasks.create.input.extend({
-        startDate: z.coerce.date().nullable().optional(),
-        endDate: z.coerce.date().nullable().optional(),
-        projectId: z.coerce.number(),
-      });
-      const input = bodySchema.parse(req.body);
+      const input = api.tasks.create.input.parse(req.body);
       const task = await storage.createTask(input);
       res.status(201).json(task);
     } catch (err) {
@@ -99,12 +123,7 @@ export async function registerRoutes(
 
   app.put(api.tasks.update.path, async (req, res) => {
     try {
-      const bodySchema = api.tasks.update.input.extend({
-        startDate: z.coerce.date().nullable().optional(),
-        endDate: z.coerce.date().nullable().optional(),
-        projectId: z.coerce.number().optional(),
-      });
-      const input = bodySchema.parse(req.body);
+      const input = api.tasks.update.input.parse(req.body);
       const task = await storage.updateTask(Number(req.params.id), input);
       res.json(task);
     } catch (err) {
@@ -121,6 +140,12 @@ export async function registerRoutes(
   app.get(api.equipment.list.path, async (req, res) => {
     const list = await storage.getEquipmentList();
     res.json(list);
+  });
+
+  app.get(api.equipment.get.path, async (req, res) => {
+    const item = await storage.getEquipment(Number(req.params.id));
+    if (!item) return res.status(404).json({ message: "Equipment not found" });
+    res.json(item);
   });
 
   app.post(api.equipment.create.path, async (req, res) => {
@@ -151,6 +176,103 @@ export async function registerRoutes(
     res.status(204).send();
   });
 
+  // Maintenance Logs
+  app.get(api.maintenanceLogs.list.path, async (req, res) => {
+    const logs = await storage.getMaintenanceLogs(Number(req.params.equipmentId));
+    res.json(logs);
+  });
+
+  app.post(api.maintenanceLogs.create.path, async (req, res) => {
+    try {
+      const input = api.maintenanceLogs.create.input.parse(req.body);
+      const log = await storage.createMaintenanceLog({
+        ...input,
+        equipmentId: Number(req.params.equipmentId),
+      });
+      res.status(201).json(log);
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0].message });
+      }
+      throw err;
+    }
+  });
+
+  app.delete(api.maintenanceLogs.delete.path, async (req, res) => {
+    await storage.deleteMaintenanceLog(Number(req.params.id));
+    res.status(204).send();
+  });
+
+  // Daily Reports
+  app.get(api.dailyReports.list.path, async (req, res) => {
+    const reports = await storage.getDailyReports(Number(req.params.projectId));
+    res.json(reports);
+  });
+
+  app.get(api.dailyReports.get.path, async (req, res) => {
+    const report = await storage.getDailyReport(Number(req.params.id));
+    if (!report) return res.status(404).json({ message: "Report not found" });
+    res.json(report);
+  });
+
+  app.post(api.dailyReports.create.path, async (req, res) => {
+    try {
+      const input = api.dailyReports.create.input.parse(req.body);
+      const report = await storage.createDailyReport({
+        ...input,
+        projectId: Number(req.params.projectId),
+      });
+      res.status(201).json(report);
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0].message });
+      }
+      throw err;
+    }
+  });
+
+  app.put(api.dailyReports.update.path, async (req, res) => {
+    try {
+      const input = api.dailyReports.update.input.parse(req.body);
+      const report = await storage.updateDailyReport(Number(req.params.id), input);
+      res.json(report);
+    } catch (err) {
+      return res.status(404).json({ message: "Report not found" });
+    }
+  });
+
+  app.delete(api.dailyReports.delete.path, async (req, res) => {
+    await storage.deleteDailyReport(Number(req.params.id));
+    res.status(204).send();
+  });
+
+  // Communications
+  app.get(api.communications.list.path, async (req, res) => {
+    const comms = await storage.getCommunications(Number(req.params.customerId));
+    res.json(comms);
+  });
+
+  app.post(api.communications.create.path, async (req, res) => {
+    try {
+      const input = api.communications.create.input.parse(req.body);
+      const comm = await storage.createCommunication({
+        ...input,
+        customerId: Number(req.params.customerId),
+      });
+      res.status(201).json(comm);
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0].message });
+      }
+      throw err;
+    }
+  });
+
+  app.delete(api.communications.delete.path, async (req, res) => {
+    await storage.deleteCommunication(Number(req.params.id));
+    res.status(204).send();
+  });
+
   // Allocations
   app.get(api.allocations.list.path, async (req, res) => {
     const list = await storage.getAllocations();
@@ -160,17 +282,23 @@ export async function registerRoutes(
   app.post(api.allocations.create.path, async (req, res) => {
     try {
       const input = api.allocations.create.input.parse(req.body);
-      const allocation = await storage.createAllocation({
-        ...input,
-        startDate: new Date(input.startDate),
-        endDate: new Date(input.endDate),
-      });
+      const allocation = await storage.createAllocation(input);
       res.status(201).json(allocation);
     } catch (err) {
-       if (err instanceof z.ZodError) {
+      if (err instanceof z.ZodError) {
         return res.status(400).json({ message: err.errors[0].message });
       }
       throw err;
+    }
+  });
+
+  app.put(api.allocations.update.path, async (req, res) => {
+    try {
+      const input = api.allocations.update.input.parse(req.body);
+      const allocation = await storage.updateAllocation(Number(req.params.id), input);
+      res.json(allocation);
+    } catch (err) {
+      return res.status(404).json({ message: "Allocation not found" });
     }
   });
 
@@ -235,67 +363,5 @@ export async function registerRoutes(
     res.status(204).send();
   });
 
-  // Seed Data
-  await seedDatabase();
-
   return httpServer;
-}
-
-async function seedDatabase() {
-  const projects = await storage.getProjects();
-  if (projects.length === 0) {
-    const p1 = await storage.createProject({
-      name: "Downtown Office Complex",
-      description: "Excavation and foundation work for 12-story office building",
-      location: "100 Main St, Cityville",
-      startDate: new Date("2024-03-01"),
-      endDate: new Date("2024-08-15"),
-      status: "active",
-      color: "#f97316"
-    });
-    
-    const p2 = await storage.createProject({
-      name: "Highway 95 Expansion",
-      description: "Road widening and drainage installation",
-      location: "Highway 95, Mile Marker 45-50",
-      startDate: new Date("2024-04-15"),
-      endDate: new Date("2024-11-30"),
-      status: "planning",
-      color: "#3b82f6"
-    });
-
-    await storage.createTask({
-      projectId: p1.id,
-      title: "Site Clearing",
-      description: "Remove vegetation and existing debris",
-      startDate: new Date("2024-03-01"),
-      endDate: new Date("2024-03-14"),
-      status: "completed",
-      priority: "high"
-    });
-
-    await storage.createTask({
-      projectId: p1.id,
-      title: "Foundation Excavation",
-      description: "Dig main foundation pit to 20ft depth",
-      startDate: new Date("2024-03-15"),
-      endDate: new Date("2024-04-30"),
-      status: "in_progress",
-      priority: "high"
-    });
-
-    await storage.createEquipment({
-      name: "CAT 336 Excavator",
-      type: "excavator",
-      status: "in_use",
-      notes: "Unit #101"
-    });
-
-    await storage.createEquipment({
-      name: "D8 Dozer",
-      type: "dozer",
-      status: "available",
-      notes: "Unit #205"
-    });
-  }
 }

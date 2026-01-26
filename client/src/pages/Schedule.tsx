@@ -1,49 +1,75 @@
-import { useAllTasks } from "@/hooks/use-tasks";
-import { format, startOfWeek, addDays, isSameDay } from "date-fns";
+import { useQuery } from "@tanstack/react-query";
+import { format, startOfWeek, addDays, isSameDay, parseISO } from "date-fns";
 import { useState } from "react";
 import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import type { Task, Project, Allocation } from "@shared/schema";
 
 export default function Schedule() {
-  const { data: tasks, isLoading } = useAllTasks();
+  const { data: tasks = [], isLoading: tasksLoading } = useQuery<Task[]>({
+    queryKey: ["/api/tasks"],
+  });
+
+  const { data: projects = [] } = useQuery<Project[]>({
+    queryKey: ["/api/projects"],
+  });
+
+  const { data: allocations = [] } = useQuery<Allocation[]>({
+    queryKey: ["/api/allocations"],
+  });
+
   const [currentDate, setCurrentDate] = useState(new Date());
 
-  const startDate = startOfWeek(currentDate, { weekStartsOn: 1 }); // Monday start
+  const startDate = startOfWeek(currentDate, { weekStartsOn: 1 });
   const weekDays = Array.from({ length: 7 }, (_, i) => addDays(startDate, i));
 
   const nextWeek = () => setCurrentDate(addDays(currentDate, 7));
   const prevWeek = () => setCurrentDate(addDays(currentDate, -7));
   const today = () => setCurrentDate(new Date());
 
-  // Group tasks by day for this view (simplified logic for MVP)
-  const getTasksForDay = (date: Date) => {
-    return tasks?.filter(task => {
-      const taskStart = new Date(task.startDate);
-      const taskEnd = new Date(task.endDate);
-      // Check if date is within range
-      return date >= taskStart && date <= taskEnd;
-    }) || [];
+  const getItemsForDay = (date: Date) => {
+    const dateStr = format(date, "yyyy-MM-dd");
+    
+    const dayTasks = tasks.filter(task => {
+      if (task.scheduledDate === dateStr) return true;
+      if (task.dueDate === dateStr) return true;
+      return false;
+    });
+
+    const dayAllocations = allocations.filter(alloc => {
+      if (!alloc.startDate || !alloc.endDate) return false;
+      const allocStart = parseISO(alloc.startDate);
+      const allocEnd = parseISO(alloc.endDate);
+      return date >= allocStart && date <= allocEnd;
+    });
+
+    return { tasks: dayTasks, allocations: dayAllocations };
+  };
+
+  const getProjectById = (id: number | null) => {
+    if (!id) return null;
+    return projects.find(p => p.id === id);
   };
 
   return (
-    <div className="space-y-6 animate-enter h-[calc(100vh-8rem)] flex flex-col">
-      <div className="flex items-center justify-between">
+    <div className="space-y-6 h-[calc(100vh-8rem)] flex flex-col">
+      <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
-          <h1 className="text-3xl font-bold">Master Schedule</h1>
-          <p className="text-muted-foreground mt-1">Weekly timeline of all project tasks</p>
+          <h1 className="text-3xl font-bold">Scheduling</h1>
+          <p className="text-muted-foreground mt-1">Weekly calendar view of tasks and allocations</p>
         </div>
         <div className="flex items-center gap-2 bg-card border border-border p-1 rounded-lg">
-          <Button variant="ghost" size="icon" onClick={prevWeek}>
+          <Button variant="ghost" size="icon" onClick={prevWeek} data-testid="button-prev-week">
             <ChevronLeft className="w-4 h-4" />
           </Button>
-          <Button variant="outline" size="sm" onClick={today} className="px-4">
+          <Button variant="outline" size="sm" onClick={today} className="px-4" data-testid="button-today">
             Today
           </Button>
           <div className="px-4 font-medium min-w-[140px] text-center">
             {format(startDate, "MMM d")} - {format(addDays(startDate, 6), "MMM d, yyyy")}
           </div>
-          <Button variant="ghost" size="icon" onClick={nextWeek}>
+          <Button variant="ghost" size="icon" onClick={nextWeek} data-testid="button-next-week">
             <ChevronRight className="w-4 h-4" />
           </Button>
         </div>
@@ -70,36 +96,63 @@ export default function Schedule() {
 
         {/* Calendar Grid */}
         <div className="flex-1 grid grid-cols-7 overflow-y-auto">
-          {isLoading ? (
-             <div className="col-span-7 flex items-center justify-center h-full text-muted-foreground">
-               Loading schedule...
-             </div>
+          {tasksLoading ? (
+            <div className="col-span-7 flex items-center justify-center h-full text-muted-foreground">
+              Loading schedule...
+            </div>
           ) : (
             weekDays.map((day) => {
-              const dayTasks = getTasksForDay(day);
+              const { tasks: dayTasks, allocations: dayAllocs } = getItemsForDay(day);
               return (
                 <div key={day.toString()} className={cn(
                   "border-r border-border last:border-r-0 p-2 min-h-[200px] relative hover:bg-muted/10 transition-colors",
                   isSameDay(day, new Date()) && "bg-primary/5"
                 )}>
-                  {dayTasks.length > 0 ? (
+                  {(dayTasks.length > 0 || dayAllocs.length > 0) ? (
                     <div className="space-y-2">
-                      {dayTasks.map(task => (
-                        <div 
-                          key={task.id} 
-                          className={cn(
-                            "p-2 rounded border text-xs shadow-sm cursor-pointer hover:scale-[1.02] transition-transform",
-                            task.priority === 'high' ? "bg-red-500/10 border-red-500/30 text-red-500" :
-                            task.status === 'completed' ? "bg-muted text-muted-foreground border-border" :
-                            "bg-primary/10 border-primary/20 text-foreground"
-                          )}
-                        >
-                          <div className="font-semibold truncate">{task.title}</div>
-                          <div className="opacity-70 text-[10px] uppercase tracking-wide mt-1">
-                            {task.status.replace('_', ' ')}
+                      {dayTasks.map(task => {
+                        const project = getProjectById(task.projectId);
+                        return (
+                          <div 
+                            key={task.id} 
+                            className={cn(
+                              "p-2 rounded border text-xs shadow-sm cursor-pointer hover:scale-[1.02] transition-transform",
+                              task.priority === 'high' || task.priority === 'urgent' 
+                                ? "bg-red-500/10 border-red-500/30 text-red-500" 
+                                : task.status === 'completed' 
+                                  ? "bg-muted text-muted-foreground border-border" 
+                                  : "bg-primary/10 border-primary/20 text-foreground"
+                            )}
+                            style={project?.color ? { borderLeftColor: project.color, borderLeftWidth: 3 } : {}}
+                            data-testid={`schedule-task-${task.id}`}
+                          >
+                            <div className="font-semibold truncate">{task.title}</div>
+                            {project && (
+                              <div className="text-[10px] opacity-70 truncate">{project.name}</div>
+                            )}
+                            <div className="opacity-70 text-[10px] uppercase tracking-wide mt-1">
+                              {task.status.replace('_', ' ')}
+                            </div>
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
+                      {dayAllocs.map(alloc => {
+                        const project = getProjectById(alloc.projectId || null);
+                        return (
+                          <div 
+                            key={alloc.id} 
+                            className="p-2 rounded border text-xs shadow-sm bg-blue-500/10 border-blue-500/30"
+                            data-testid={`schedule-allocation-${alloc.id}`}
+                          >
+                            <div className="font-semibold truncate">
+                              {alloc.allocationType === 'crew' ? alloc.crewMember : 'Equipment'}
+                            </div>
+                            {project && (
+                              <div className="text-[10px] opacity-70 truncate">{project.name}</div>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
                   ) : (
                     <div className="absolute inset-0 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">

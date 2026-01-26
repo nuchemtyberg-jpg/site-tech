@@ -2,9 +2,10 @@ import { Link, useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { 
   LayoutDashboard, 
-  Map, 
-  HardHat, 
+  FolderKanban, 
+  Calendar, 
   Truck, 
+  Users,
   LogOut, 
   Menu,
   X,
@@ -21,8 +22,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
   const navItems = [
     { href: "/", label: "Dashboard", icon: LayoutDashboard },
-    { href: "/projects", label: "Projects", icon: Map },
-    { href: "/schedule", label: "Schedule", icon: HardHat },
+    { href: "/projects", label: "Projects", icon: FolderKanban },
+    { href: "/customers", label: "Customers", icon: Users },
+    { href: "/schedule", label: "Scheduling", icon: Calendar },
     { href: "/equipment", label: "Equipment", icon: Truck },
   ];
 
@@ -32,9 +34,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
       <div className="md:hidden flex items-center justify-between p-4 bg-card border-b border-border">
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 bg-primary rounded-md flex items-center justify-center">
-            <span className="text-primary-foreground font-bold font-display">CS</span>
+            <span className="text-primary-foreground font-bold font-display">ST</span>
           </div>
-          <span className="font-display font-bold text-lg">ConstructOS</span>
+          <span className="font-display font-bold text-lg">SiteTech</span>
         </div>
         <Button variant="ghost" size="icon" onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>
           {mobileMenuOpen ? <X /> : <Menu />}
@@ -48,25 +50,28 @@ export function Layout({ children }: { children: React.ReactNode }) {
       )}>
         <div className="p-6 hidden md:flex items-center gap-3">
           <div className="w-10 h-10 bg-gradient-to-br from-primary to-orange-600 rounded-lg shadow-lg shadow-primary/20 flex items-center justify-center">
-            <span className="text-primary-foreground font-bold font-display text-xl">CS</span>
+            <span className="text-primary-foreground font-bold font-display text-xl">ST</span>
           </div>
           <div className="flex flex-col">
-            <span className="font-display font-bold text-xl tracking-tight">ConstructOS</span>
-            <span className="text-xs text-muted-foreground uppercase tracking-widest">Enterprise</span>
+            <span className="font-display font-bold text-xl tracking-tight">SiteTech</span>
+            <span className="text-xs text-muted-foreground uppercase tracking-widest">Sitework Management</span>
           </div>
         </div>
 
         <nav className="flex-1 px-4 py-4 space-y-1">
           {navItems.map((item) => {
-            const isActive = location === item.href;
+            const isActive = location === item.href || (item.href !== "/" && location.startsWith(item.href));
             return (
               <Link key={item.href} href={item.href}>
-                <div className={cn(
-                  "flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all duration-200 cursor-pointer group",
-                  isActive 
-                    ? "bg-primary text-primary-foreground shadow-lg shadow-primary/25" 
-                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                )}>
+                <div 
+                  className={cn(
+                    "flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all duration-200 cursor-pointer group",
+                    isActive 
+                      ? "bg-primary text-primary-foreground shadow-lg shadow-primary/25" 
+                      : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                  )}
+                  onClick={() => setMobileMenuOpen(false)}
+                >
                   <item.icon className={cn("w-5 h-5", isActive ? "text-primary-foreground" : "text-muted-foreground group-hover:text-foreground")} />
                   {item.label}
                 </div>
@@ -93,6 +98,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
             variant="outline" 
             className="w-full justify-start gap-2 hover:bg-destructive/10 hover:text-destructive hover:border-destructive/50"
             onClick={() => logout()}
+            data-testid="button-logout"
           >
             <LogOut className="w-4 h-4" />
             Log Out
@@ -102,7 +108,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
       {/* Main Content */}
       <main className="flex-1 overflow-y-auto h-[calc(100vh-64px)] md:h-screen p-4 md:p-8 bg-background relative">
-        {/* Background Grid Pattern */}
         <div className="absolute inset-0 z-0 opacity-[0.03] pointer-events-none" 
              style={{ 
                backgroundImage: `linear-gradient(var(--border) 1px, transparent 1px), linear-gradient(90deg, var(--border) 1px, transparent 1px)`,

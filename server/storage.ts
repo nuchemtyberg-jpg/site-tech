@@ -1,20 +1,30 @@
 import {
-  projects, tasks, equipment, allocations, folders, files, users, sessions,
+  projects, tasks, equipment, allocations, folders, files, users, customers, dailyReports, maintenanceLogs, communications,
   type InsertProject, type InsertTask, type InsertEquipment, type InsertAllocation, type InsertFolder, type InsertFileMetadata,
+  type InsertCustomer, type InsertDailyReport, type InsertMaintenanceLog, type InsertCommunication,
   type Project, type Task, type Equipment, type Allocation, type Folder, type FileMetadata,
+  type Customer, type DailyReport, type MaintenanceLog, type Communication,
   type User, type UpsertUser
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and } from "drizzle-orm";
 
 export interface IStorage {
-  // Auth (from Replit Auth integration)
+  // Auth
   getUser(id: string): Promise<User | undefined>;
   upsertUser(user: UpsertUser): Promise<User>;
+
+  // Customers
+  getCustomers(): Promise<Customer[]>;
+  getCustomer(id: number): Promise<Customer | undefined>;
+  createCustomer(customer: InsertCustomer): Promise<Customer>;
+  updateCustomer(id: number, customer: Partial<InsertCustomer>): Promise<Customer>;
+  deleteCustomer(id: number): Promise<void>;
 
   // Projects
   getProjects(): Promise<Project[]>;
   getProject(id: number): Promise<Project | undefined>;
+  getProjectsByCustomer(customerId: number): Promise<Project[]>;
   createProject(project: InsertProject): Promise<Project>;
   updateProject(id: number, project: Partial<InsertProject>): Promise<Project>;
   deleteProject(id: number): Promise<void>;
@@ -33,9 +43,27 @@ export interface IStorage {
   updateEquipment(id: number, equipment: Partial<InsertEquipment>): Promise<Equipment>;
   deleteEquipment(id: number): Promise<void>;
 
+  // Maintenance Logs
+  getMaintenanceLogs(equipmentId: number): Promise<MaintenanceLog[]>;
+  createMaintenanceLog(log: InsertMaintenanceLog): Promise<MaintenanceLog>;
+  deleteMaintenanceLog(id: number): Promise<void>;
+
+  // Daily Reports
+  getDailyReports(projectId: number): Promise<DailyReport[]>;
+  getDailyReport(id: number): Promise<DailyReport | undefined>;
+  createDailyReport(report: InsertDailyReport): Promise<DailyReport>;
+  updateDailyReport(id: number, report: Partial<InsertDailyReport>): Promise<DailyReport>;
+  deleteDailyReport(id: number): Promise<void>;
+
+  // Communications
+  getCommunications(customerId: number): Promise<Communication[]>;
+  createCommunication(comm: InsertCommunication): Promise<Communication>;
+  deleteCommunication(id: number): Promise<void>;
+
   // Allocations
   getAllocations(): Promise<Allocation[]>;
   createAllocation(allocation: InsertAllocation): Promise<Allocation>;
+  updateAllocation(id: number, allocation: Partial<InsertAllocation>): Promise<Allocation>;
   deleteAllocation(id: number): Promise<void>;
 
   // Folders & Files
@@ -44,6 +72,7 @@ export interface IStorage {
   deleteFolder(id: number): Promise<void>;
 
   getFiles(projectId: number): Promise<FileMetadata[]>;
+  getFile(id: number): Promise<FileMetadata | undefined>;
   createFile(file: InsertFileMetadata): Promise<FileMetadata>;
   deleteFile(id: number): Promise<void>;
 }
@@ -70,13 +99,36 @@ export class DatabaseStorage implements IStorage {
     return user;
   }
 
+  // Customers
+  async getCustomers(): Promise<Customer[]> {
+    return await db.select().from(customers).orderBy(customers.name);
+  }
+  async getCustomer(id: number): Promise<Customer | undefined> {
+    const [customer] = await db.select().from(customers).where(eq(customers.id, id));
+    return customer;
+  }
+  async createCustomer(insertCustomer: InsertCustomer): Promise<Customer> {
+    const [customer] = await db.insert(customers).values(insertCustomer).returning();
+    return customer;
+  }
+  async updateCustomer(id: number, updates: Partial<InsertCustomer>): Promise<Customer> {
+    const [customer] = await db.update(customers).set(updates).where(eq(customers.id, id)).returning();
+    return customer;
+  }
+  async deleteCustomer(id: number): Promise<void> {
+    await db.delete(customers).where(eq(customers.id, id));
+  }
+
   // Projects
   async getProjects(): Promise<Project[]> {
-    return await db.select().from(projects).orderBy(desc(projects.startDate));
+    return await db.select().from(projects).orderBy(desc(projects.createdAt));
   }
   async getProject(id: number): Promise<Project | undefined> {
     const [project] = await db.select().from(projects).where(eq(projects.id, id));
     return project;
+  }
+  async getProjectsByCustomer(customerId: number): Promise<Project[]> {
+    return await db.select().from(projects).where(eq(projects.customerId, customerId));
   }
   async createProject(insertProject: InsertProject): Promise<Project> {
     const [project] = await db.insert(projects).values(insertProject).returning();
@@ -93,9 +145,9 @@ export class DatabaseStorage implements IStorage {
   // Tasks
   async getTasks(projectId?: number): Promise<Task[]> {
     if (projectId) {
-      return await db.select().from(tasks).where(eq(tasks.projectId, projectId)).orderBy(tasks.startDate);
+      return await db.select().from(tasks).where(eq(tasks.projectId, projectId)).orderBy(tasks.scheduledDate);
     }
-    return await db.select().from(tasks).orderBy(tasks.startDate);
+    return await db.select().from(tasks).orderBy(tasks.scheduledDate);
   }
   async getTask(id: number): Promise<Task | undefined> {
     const [task] = await db.select().from(tasks).where(eq(tasks.id, id));
@@ -133,18 +185,67 @@ export class DatabaseStorage implements IStorage {
     await db.delete(equipment).where(eq(equipment.id, id));
   }
 
+  // Maintenance Logs
+  async getMaintenanceLogs(equipmentId: number): Promise<MaintenanceLog[]> {
+    return await db.select().from(maintenanceLogs).where(eq(maintenanceLogs.equipmentId, equipmentId)).orderBy(desc(maintenanceLogs.performedDate));
+  }
+  async createMaintenanceLog(insertLog: InsertMaintenanceLog): Promise<MaintenanceLog> {
+    const [log] = await db.insert(maintenanceLogs).values(insertLog).returning();
+    return log;
+  }
+  async deleteMaintenanceLog(id: number): Promise<void> {
+    await db.delete(maintenanceLogs).where(eq(maintenanceLogs.id, id));
+  }
+
+  // Daily Reports
+  async getDailyReports(projectId: number): Promise<DailyReport[]> {
+    return await db.select().from(dailyReports).where(eq(dailyReports.projectId, projectId)).orderBy(desc(dailyReports.reportDate));
+  }
+  async getDailyReport(id: number): Promise<DailyReport | undefined> {
+    const [report] = await db.select().from(dailyReports).where(eq(dailyReports.id, id));
+    return report;
+  }
+  async createDailyReport(insertReport: InsertDailyReport): Promise<DailyReport> {
+    const [report] = await db.insert(dailyReports).values(insertReport).returning();
+    return report;
+  }
+  async updateDailyReport(id: number, updates: Partial<InsertDailyReport>): Promise<DailyReport> {
+    const [report] = await db.update(dailyReports).set(updates).where(eq(dailyReports.id, id)).returning();
+    return report;
+  }
+  async deleteDailyReport(id: number): Promise<void> {
+    await db.delete(dailyReports).where(eq(dailyReports.id, id));
+  }
+
+  // Communications
+  async getCommunications(customerId: number): Promise<Communication[]> {
+    return await db.select().from(communications).where(eq(communications.customerId, customerId)).orderBy(desc(communications.contactDate));
+  }
+  async createCommunication(insertComm: InsertCommunication): Promise<Communication> {
+    const [comm] = await db.insert(communications).values(insertComm).returning();
+    return comm;
+  }
+  async deleteCommunication(id: number): Promise<void> {
+    await db.delete(communications).where(eq(communications.id, id));
+  }
+
   // Allocations
   async getAllocations(): Promise<Allocation[]> {
-    return await db.select().from(allocations);
+    return await db.select().from(allocations).orderBy(allocations.startDate);
   }
   async createAllocation(insertAllocation: InsertAllocation): Promise<Allocation> {
     const [allocation] = await db.insert(allocations).values(insertAllocation).returning();
+    return allocation;
+  }
+  async updateAllocation(id: number, updates: Partial<InsertAllocation>): Promise<Allocation> {
+    const [allocation] = await db.update(allocations).set(updates).where(eq(allocations.id, id)).returning();
     return allocation;
   }
   async deleteAllocation(id: number): Promise<void> {
     await db.delete(allocations).where(eq(allocations.id, id));
   }
 
+  // Folders
   async getFolders(projectId: number): Promise<Folder[]> {
     return await db.select().from(folders).where(eq(folders.projectId, projectId));
   }
@@ -160,6 +261,10 @@ export class DatabaseStorage implements IStorage {
   async getFiles(projectId: number): Promise<FileMetadata[]> {
     return await db.select().from(files).where(eq(files.projectId, projectId));
   }
+  async getFile(id: number): Promise<FileMetadata | undefined> {
+    const [file] = await db.select().from(files).where(eq(files.id, id));
+    return file;
+  }
   async createFile(insertFile: InsertFileMetadata): Promise<FileMetadata> {
     const [file] = await db.insert(files).values(insertFile).returning();
     return file;
@@ -170,4 +275,4 @@ export class DatabaseStorage implements IStorage {
 }
 
 export const storage = new DatabaseStorage();
-export const authStorage = storage; // Alias for Replit Auth
+export const authStorage = storage;

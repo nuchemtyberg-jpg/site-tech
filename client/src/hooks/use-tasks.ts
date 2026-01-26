@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api, buildUrl, type InsertTask } from "@shared/routes";
+import { api, buildUrl } from "@shared/routes";
+import type { InsertTask } from "@shared/schema";
 
 export function useProjectTasks(projectId: number) {
   return useQuery({
@@ -81,8 +82,6 @@ export function useDeleteTask() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [api.tasks.getAll.path] });
-      // Note: We can't easily validate specific project list without knowing projectId here, 
-      // but invalidating getAll is often enough or we could return projectId from delete response
       queryClient.refetchQueries({ queryKey: [api.tasks.list.path] }); 
     },
   });

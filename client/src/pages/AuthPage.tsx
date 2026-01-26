@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { HardHat } from "lucide-react";
+import { Truck } from "lucide-react";
 
 export default function AuthPage() {
   return (
@@ -12,22 +12,22 @@ export default function AuthPage() {
         
         <div className="relative z-10 flex items-center gap-2">
            <div className="w-10 h-10 bg-primary rounded-lg flex items-center justify-center">
-             <span className="font-display font-bold text-xl text-primary-foreground">CS</span>
+             <span className="font-display font-bold text-xl text-primary-foreground">ST</span>
            </div>
-           <span className="font-display font-bold text-2xl text-white tracking-wide">ConstructOS</span>
+           <span className="font-display font-bold text-2xl text-white tracking-wide">SiteTech</span>
         </div>
 
         <div className="relative z-10 max-w-lg">
           <h1 className="font-display text-5xl font-bold text-white leading-tight mb-4">
-            Build smarter,<br/>schedule faster.
+            Sitework management,<br/>simplified.
           </h1>
           <p className="text-zinc-400 text-lg">
-            The all-in-one platform for construction management. Track equipment, manage crews, and deliver projects on time.
+            The all-in-one platform for sitework companies. Track equipment, manage crews, schedule projects, and keep customers informed.
           </p>
         </div>
 
         <div className="relative z-10 text-zinc-500 text-sm">
-          &copy; 2024 ConstructOS Inc. All rights reserved.
+          &copy; 2024 SiteTech. All rights reserved.
         </div>
       </div>
 
@@ -36,9 +36,9 @@ export default function AuthPage() {
         <div className="w-full max-w-md space-y-8">
           <div className="text-center lg:hidden mb-8">
              <div className="w-12 h-12 bg-primary rounded-lg flex items-center justify-center mx-auto mb-4">
-               <span className="font-display font-bold text-2xl text-primary-foreground">CS</span>
+               <span className="font-display font-bold text-2xl text-primary-foreground">ST</span>
              </div>
-             <h1 className="text-2xl font-bold">ConstructOS</h1>
+             <h1 className="text-2xl font-bold">SiteTech</h1>
           </div>
 
           <Card className="border-border shadow-xl">
@@ -53,6 +53,7 @@ export default function AuthPage() {
                 className="w-full h-12 text-base font-semibold shadow-lg shadow-primary/20" 
                 size="lg"
                 onClick={() => window.location.href = "/api/login"}
+                data-testid="button-login"
               >
                 Log in with Replit
               </Button>
@@ -62,12 +63,12 @@ export default function AuthPage() {
                 </div>
                 <div className="relative flex justify-center text-xs uppercase">
                   <span className="bg-card px-2 text-muted-foreground">
-                    Secure Enterprise Access
+                    Secure Access
                   </span>
                 </div>
               </div>
               <div className="text-center text-sm text-muted-foreground pt-4">
-                <HardHat className="w-12 h-12 mx-auto mb-2 text-primary/20" />
+                <Truck className="w-12 h-12 mx-auto mb-2 text-primary/20" />
                 <p>Authorized personnel only.</p>
               </div>
             </CardContent>
