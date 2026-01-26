@@ -14,7 +14,9 @@ import {
   FolderPlus,
   Upload,
   File,
-  Folder
+  Folder,
+  ChevronRight,
+  Home
 } from "lucide-react";
 import { 
   DropdownMenu, 
@@ -60,8 +62,28 @@ export default function ProjectDetails() {
   const [isTaskOpen, setIsTaskOpen] = useState(false);
   const [isFolderOpen, setIsFolderOpen] = useState(false);
   const [folderName, setFolderName] = useState("");
+  const [currentFolderId, setCurrentFolderId] = useState<number | null>(null);
   const uploadedFilePathsRef = useRef<Map<string, string>>(new Map());
   const { toast } = useToast();
+
+  const currentFolders = folders?.filter(f => f.parentId === currentFolderId) || [];
+  const currentFiles = files?.filter(f => f.folderId === currentFolderId) || [];
+  
+  const currentFolder = folders?.find(f => f.id === currentFolderId);
+  
+  const getBreadcrumbs = () => {
+    const crumbs: Array<{ id: number | null; name: string }> = [{ id: null, name: "Documents" }];
+    if (currentFolderId && folders) {
+      let folder = folders.find(f => f.id === currentFolderId);
+      const path: typeof crumbs = [];
+      while (folder) {
+        path.unshift({ id: folder.id, name: folder.name });
+        folder = folder.parentId ? folders.find(f => f.id === folder!.parentId) : undefined;
+      }
+      crumbs.push(...path);
+    }
+    return crumbs;
+  };
 
   const form = useForm<InsertTask>({
     resolver: zodResolver(insertTaskSchema),
@@ -102,7 +124,7 @@ export default function ProjectDetails() {
 
   const handleCreateFolder = () => {
     if (!folderName.trim()) return;
-    createFolderMutation.mutate({ name: folderName.trim() }, {
+    createFolderMutation.mutate({ name: folderName.trim(), parentId: currentFolderId }, {
       onSuccess: () => {
         setIsFolderOpen(false);
         setFolderName("");
@@ -132,6 +154,7 @@ export default function ProjectDetails() {
           objectPath: objectPath,
           contentType: file.type,
           size: file.size,
+          folderId: currentFolderId,
         });
         successCount++;
       } catch (err) {
@@ -408,9 +431,28 @@ export default function ProjectDetails() {
             </ObjectUploader>
           </div>
 
+          {/* Breadcrumb Navigation */}
+          <div className="flex items-center gap-1 text-sm text-muted-foreground flex-wrap">
+            {getBreadcrumbs().map((crumb, idx, arr) => (
+              <div key={crumb.id ?? 'root'} className="flex items-center gap-1">
+                <button
+                  onClick={() => setCurrentFolderId(crumb.id)}
+                  className={cn(
+                    "hover:text-primary transition-colors",
+                    idx === arr.length - 1 ? "text-foreground font-medium" : ""
+                  )}
+                  data-testid={`breadcrumb-${crumb.id ?? 'root'}`}
+                >
+                  {idx === 0 ? <Home className="w-4 h-4" /> : crumb.name}
+                </button>
+                {idx < arr.length - 1 && <ChevronRight className="w-4 h-4" />}
+              </div>
+            ))}
+          </div>
+
           {(isFilesLoading || isFoldersLoading) ? (
             <div className="py-10 text-center text-muted-foreground">Loading documents...</div>
-          ) : (folders?.length === 0 && files?.length === 0) ? (
+          ) : (currentFolders.length === 0 && currentFiles.length === 0) ? (
             <div className="py-20 text-center bg-card border border-dashed border-border rounded-xl">
               <FileText className="w-12 h-12 mx-auto text-muted-foreground/50 mb-4" />
               <p className="text-muted-foreground">No documents yet. Upload files or create folders to organize your project documents.</p>
@@ -418,20 +460,27 @@ export default function ProjectDetails() {
           ) : (
             <div className="space-y-4">
               {/* Folders */}
-              {folders && folders.length > 0 && (
+              {currentFolders.length > 0 && (
                 <div className="grid gap-2">
                   <h3 className="text-sm font-medium text-muted-foreground mb-2">Folders</h3>
-                  {folders.map(folder => (
+                  {currentFolders.map(folder => (
                     <div key={folder.id} className="group bg-card border border-border rounded-lg p-3 hover:border-primary/50 transition-all flex items-center justify-between" data-testid={`folder-item-${folder.id}`}>
-                      <div className="flex items-center gap-3">
+                      <button 
+                        className="flex items-center gap-3 flex-1 text-left hover:text-primary transition-colors"
+                        onClick={() => setCurrentFolderId(folder.id)}
+                        data-testid={`button-open-folder-${folder.id}`}
+                      >
                         <Folder className="w-5 h-5 text-primary" />
                         <span className="font-medium">{folder.name}</span>
-                      </div>
+                      </button>
                       <Button 
                         variant="ghost" 
                         size="icon" 
-                        className="opacity-0 group-hover:opacity-100 hover:text-destructive hover:bg-destructive/10"
-                        onClick={() => deleteFolderMutation.mutate(folder.id)}
+                        className="opacity-0 group-hover:opacity-100"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          deleteFolderMutation.mutate(folder.id);
+                        }}
                         data-testid={`button-delete-folder-${folder.id}`}
                       >
                         <Trash2 className="w-4 h-4" />
@@ -442,10 +491,10 @@ export default function ProjectDetails() {
               )}
 
               {/* Files */}
-              {files && files.length > 0 && (
+              {currentFiles.length > 0 && (
                 <div className="grid gap-2">
                   <h3 className="text-sm font-medium text-muted-foreground mb-2">Files</h3>
-                  {files.map(file => (
+                  {currentFiles.map(file => (
                     <div key={file.id} className="group bg-card border border-border rounded-lg p-3 hover:border-primary/50 transition-all flex items-center justify-between" data-testid={`file-item-${file.id}`}>
                       <a 
                         href={file.objectPath} 
