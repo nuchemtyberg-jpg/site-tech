@@ -48,6 +48,7 @@ import { insertTaskSchema, type InsertTask, type FileMetadata } from "@shared/sc
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { ObjectUploader } from "@/components/ObjectUploader";
+import { PDFViewer } from "@/components/PDFViewer";
 
 export default function ProjectDetails() {
   const { id } = useParams();
@@ -592,12 +593,12 @@ export default function ProjectDetails() {
                 className="w-full h-auto object-contain rounded-lg"
               />
             ) : isPdfFile(viewingFile.contentType) ? (
-              <iframe
-                src={viewingFile.objectPath}
-                title={viewingFile.name}
-                className="absolute inset-0 w-full h-full bg-white"
+              <div 
+                className="absolute inset-0 w-full h-full" 
                 onClick={(e) => e.stopPropagation()}
-              />
+              >
+                <PDFViewer url={viewingFile.objectPath} />
+              </div>
             ) : (
               <div className="bg-card p-8 rounded-lg text-center" onClick={(e) => e.stopPropagation()}>
                 <File className="w-16 h-16 mx-auto text-muted-foreground mb-4" />
