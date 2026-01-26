@@ -19,10 +19,7 @@ import {
   Home,
   X,
   Share2,
-  Download,
-  ExternalLink,
-  ZoomIn,
-  ZoomOut
+  Download
 } from "lucide-react";
 import { 
   DropdownMenu, 
@@ -50,6 +47,7 @@ import { insertTaskSchema, type InsertTask, type FileMetadata } from "@shared/sc
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { ObjectUploader } from "@/components/ObjectUploader";
+import { PDFViewer } from "@/components/PDFViewer";
 
 export default function ProjectDetails() {
   const { id } = useParams();
@@ -70,7 +68,6 @@ export default function ProjectDetails() {
   const [folderName, setFolderName] = useState("");
   const [currentFolderId, setCurrentFolderId] = useState<number | null>(null);
   const [viewingFile, setViewingFile] = useState<FileMetadata | null>(null);
-  const [pdfZoom, setPdfZoom] = useState(100);
   const currentFolderIdRef = useRef<number | null>(null);
   const uploadedFilePathsRef = useRef<Map<string, string>>(new Map());
   
@@ -583,81 +580,31 @@ export default function ProjectDetails() {
         </TabsContent>
       </Tabs>
 
-      {/* Document Viewer Modal */}
-      {viewingFile && (
-        <div className="fixed inset-0 z-50 bg-black/90 flex flex-col" data-testid="document-viewer-modal">
-          {/* Content - centered */}
-          <div className="flex-1 flex items-center justify-center p-4 overflow-auto" onClick={() => setViewingFile(null)}>
-            {isImageFile(viewingFile.contentType) ? (
-              <img 
-                src={viewingFile.objectPath} 
-                alt={viewingFile.name}
-                className="w-full h-auto object-contain rounded-lg"
-              />
-            ) : isPdfFile(viewingFile.contentType) ? (
-              <div 
-                className="absolute inset-0 w-full h-full overflow-auto bg-gray-200"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <div 
-                  style={{ 
-                    transform: `scale(${pdfZoom / 100})`, 
-                    transformOrigin: 'top left',
-                    width: `${10000 / pdfZoom}%`,
-                    height: `${10000 / pdfZoom}%`
-                  }}
-                >
-                  <iframe
-                    src={viewingFile.objectPath}
-                    title={viewingFile.name}
-                    className="w-full h-full bg-white border-0"
-                  />
-                </div>
-              </div>
-            ) : (
-              <div className="bg-card p-8 rounded-lg text-center" onClick={(e) => e.stopPropagation()}>
-                <File className="w-16 h-16 mx-auto text-muted-foreground mb-4" />
-                <p className="text-lg font-medium mb-2">{viewingFile.name}</p>
-                <p className="text-muted-foreground mb-4">This file type cannot be previewed.</p>
-                <a
-                  href={viewingFile.objectPath}
-                  download={viewingFile.name}
-                  className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
-                >
-                  <Download className="w-4 h-4" /> Download File
-                </a>
-              </div>
-            )}
-          </div>
+      {/* PDF Viewer with markup tools */}
+      {viewingFile && isPdfFile(viewingFile.contentType) && (
+        <PDFViewer 
+          url={viewingFile.objectPath}
+          fileName={viewingFile.name}
+          onClose={() => setViewingFile(null)}
+          onShare={() => handleShareFile(viewingFile)}
+        />
+      )}
 
-          {/* Bottom toolbar - closer to content on mobile */}
+      {/* Image Viewer Modal */}
+      {viewingFile && isImageFile(viewingFile.contentType) && (
+        <div className="fixed inset-0 z-50 bg-black/90 flex flex-col" data-testid="document-viewer-modal">
+          <div className="flex-1 flex items-center justify-center p-4 overflow-auto" onClick={() => setViewingFile(null)}>
+            <img 
+              src={viewingFile.objectPath} 
+              alt={viewingFile.name}
+              className="max-w-full max-h-full object-contain rounded-lg"
+              onClick={(e) => e.stopPropagation()}
+            />
+          </div>
           <div className="bg-black/80 backdrop-blur-sm border-t border-white/10 p-3 safe-area-bottom">
             <div className="flex items-center justify-between max-w-lg mx-auto gap-2">
               <p className="text-white text-sm font-medium truncate flex-1">{viewingFile.name}</p>
               <div className="flex items-center gap-1">
-                {isPdfFile(viewingFile.contentType) && (
-                  <>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="text-white hover:bg-white/20"
-                      onClick={() => setPdfZoom(z => Math.max(50, z - 25))}
-                      data-testid="button-zoom-out"
-                    >
-                      <ZoomOut className="w-5 h-5" />
-                    </Button>
-                    <span className="text-white text-xs min-w-[3rem] text-center">{pdfZoom}%</span>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="text-white hover:bg-white/20"
-                      onClick={() => setPdfZoom(z => Math.min(200, z + 25))}
-                      data-testid="button-zoom-in"
-                    >
-                      <ZoomIn className="w-5 h-5" />
-                    </Button>
-                  </>
-                )}
                 <Button
                   variant="ghost"
                   size="icon"
@@ -679,7 +626,7 @@ export default function ProjectDetails() {
                   variant="ghost"
                   size="icon"
                   className="text-white hover:bg-white/20"
-                  onClick={() => { setViewingFile(null); setPdfZoom(100); }}
+                  onClick={() => setViewingFile(null)}
                   data-testid="button-close-viewer"
                 >
                   <X className="w-5 h-5" />
@@ -687,6 +634,30 @@ export default function ProjectDetails() {
               </div>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Other file types - download prompt */}
+      {viewingFile && !isPdfFile(viewingFile.contentType) && !isImageFile(viewingFile.contentType) && (
+        <div className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4" data-testid="document-viewer-modal">
+          <div className="bg-card p-8 rounded-lg text-center max-w-md" onClick={(e) => e.stopPropagation()}>
+            <File className="w-16 h-16 mx-auto text-muted-foreground mb-4" />
+            <p className="text-lg font-medium mb-2">{viewingFile.name}</p>
+            <p className="text-muted-foreground mb-4">This file type cannot be previewed.</p>
+            <div className="flex gap-2 justify-center">
+              <a
+                href={viewingFile.objectPath}
+                download={viewingFile.name}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
+              >
+                <Download className="w-4 h-4" /> Download
+              </a>
+              <Button variant="outline" onClick={() => setViewingFile(null)}>
+                Close
+              </Button>
+            </div>
+          </div>
+          <div className="absolute inset-0 -z-10" onClick={() => setViewingFile(null)} />
         </div>
       )}
     </div>

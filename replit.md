@@ -65,3 +65,34 @@ Four main entities defined in `shared/schema.ts`:
 - **react-day-picker**: Calendar component for scheduling
 - **zod**: Runtime type validation for API inputs/outputs
 - **drizzle-zod**: Integration between Drizzle schemas and Zod validation
+- **pdf-lib**: PDF manipulation for exporting annotated PDFs
+- **@uppy/core**, **@uppy/react**, **@uppy/xhr-upload**: File upload with drag-and-drop (max 50 files, 50MB each)
+
+## PDF Viewer Architecture
+
+The PDF viewer (`client/src/components/PDFViewer.tsx`) provides professional markup capabilities:
+
+### Core Features
+- **Rendering**: iframe + canvas overlay approach (not react-pdf or PDF.js)
+- **Gestures**: Pinch-to-zoom (0.5x-6x), pan, double-tap to reset
+- **Tools**: Pen, highlighter, rectangle, arrow, line, text annotation, eraser
+- **Color/Thickness**: Configurable for all markup tools
+
+### Annotation Persistence
+- Annotations stored in localStorage keyed by PDF URL
+- Auto-save on close via beforeunload handler
+- Data structure: `{ paths: DrawPath[], shapes: ShapeAnnotation[], texts: TextAnnotation[] }`
+
+### Undo/Redo Implementation
+- Uses refs (`pathsRef`, `shapesRef`, `textsRef`, `historyRef`, `historyIndexRef`) to avoid stale closures
+- Centralized `applyAnnotationChange` function handles all state mutations
+- `isRestoringRef` prevents history recording during undo/redo operations
+- All operations read from refs and update refs synchronously before setState
+
+### PDF Export
+- Uses pdf-lib to embed annotations into downloadable PDF
+- Converts canvas drawings to image and overlays on PDF pages
+
+### Limitations
+- Annotations currently limited to first page only (multi-page support not implemented)
+- Text annotations use native browser prompt for input
