@@ -911,7 +911,7 @@ export default function ProjectDetails() {
                   </div>
 
                   <div className="grid gap-2">
-                    <Label htmlFor="dueDate">Due Date</Label>
+                    <Label htmlFor="dueDate">Scheduled Date</Label>
                     <Input id="dueDate" type="date" {...form.register("dueDate")} data-testid="input-task-due" className="bg-white dark:bg-zinc-900 text-black dark:text-white" />
                   </div>
 
