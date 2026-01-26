@@ -28,7 +28,9 @@ import {
   User,
   DollarSign,
   StickyNote,
-  Building2
+  Building2,
+  Check,
+  ChevronsUpDown
 } from "lucide-react";
 import { 
   DropdownMenu, 
@@ -152,6 +154,8 @@ export default function ProjectDetails() {
   const [customTaskTitles, setCustomTaskTitles] = useState<string[]>([]);
   const [isCustomTitleOpen, setIsCustomTitleOpen] = useState(false);
   const [newCustomTitle, setNewCustomTitle] = useState("");
+  const [taskTitleSearch, setTaskTitleSearch] = useState("");
+  const [taskTitlePopoverOpen, setTaskTitlePopoverOpen] = useState(false);
 
   const getStatusColor = (status: string) => {
     const statusObj = PROJECT_STATUSES.find(s => s.value === status);
@@ -835,30 +839,69 @@ export default function ProjectDetails() {
                 <form onSubmit={form.handleSubmit(onSubmitTask)} className="space-y-4 mt-4">
                   <div className="grid gap-2">
                     <Label htmlFor="title">Task Title</Label>
-                    <Select 
-                      onValueChange={(val) => {
-                        if (val === "__add_new__") {
-                          setIsCustomTitleOpen(true);
-                        } else {
-                          form.setValue("title", val);
-                        }
-                      }} 
-                      value={form.watch("title")}
-                    >
-                      <SelectTrigger data-testid="select-task-title" className="bg-white dark:bg-zinc-900 text-black dark:text-white">
-                        <SelectValue placeholder="Select a task title" />
-                      </SelectTrigger>
-                      <SelectContent className="bg-white dark:bg-zinc-900 text-black dark:text-white max-h-60">
-                        {[...PREDEFINED_TASK_TITLES, ...customTaskTitles].sort().map((title) => (
-                          <SelectItem key={title} value={title}>{title}</SelectItem>
-                        ))}
-                        <SelectItem value="__add_new__" className="text-primary font-medium border-t mt-1 pt-2">
-                          <span className="flex items-center gap-2">
-                            <Plus className="w-4 h-4" /> Add New Title...
-                          </span>
-                        </SelectItem>
-                      </SelectContent>
-                    </Select>
+                    <Popover open={taskTitlePopoverOpen} onOpenChange={setTaskTitlePopoverOpen}>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          role="combobox"
+                          aria-expanded={taskTitlePopoverOpen}
+                          className="w-full justify-between bg-white dark:bg-zinc-900 text-black dark:text-white"
+                          data-testid="select-task-title"
+                        >
+                          {form.watch("title") || "Select a task title..."}
+                          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-[400px] p-0 bg-white dark:bg-zinc-900" align="start">
+                        <Command className="bg-white dark:bg-zinc-900">
+                          <CommandInput 
+                            placeholder="Search task titles..." 
+                            value={taskTitleSearch}
+                            onValueChange={setTaskTitleSearch}
+                            data-testid="input-search-task-title"
+                            className="bg-white dark:bg-zinc-900 text-black dark:text-white"
+                          />
+                          <CommandList className="max-h-60">
+                            <CommandEmpty>No task title found.</CommandEmpty>
+                            <CommandGroup>
+                              {[...PREDEFINED_TASK_TITLES, ...customTaskTitles].sort().map((title) => (
+                                <CommandItem
+                                  key={title}
+                                  value={title}
+                                  onSelect={() => {
+                                    form.setValue("title", title);
+                                    setTaskTitlePopoverOpen(false);
+                                    setTaskTitleSearch("");
+                                  }}
+                                  className="cursor-pointer"
+                                >
+                                  <Check
+                                    className={cn(
+                                      "mr-2 h-4 w-4",
+                                      form.watch("title") === title ? "opacity-100" : "opacity-0"
+                                    )}
+                                  />
+                                  {title}
+                                </CommandItem>
+                              ))}
+                            </CommandGroup>
+                            <CommandGroup>
+                              <CommandItem
+                                onSelect={() => {
+                                  setTaskTitlePopoverOpen(false);
+                                  setIsCustomTitleOpen(true);
+                                  setTaskTitleSearch("");
+                                }}
+                                className="cursor-pointer text-primary font-medium border-t"
+                              >
+                                <Plus className="mr-2 h-4 w-4" />
+                                Add New Title...
+                              </CommandItem>
+                            </CommandGroup>
+                          </CommandList>
+                        </Command>
+                      </PopoverContent>
+                    </Popover>
                     {form.formState.errors.title && <p className="text-red-500 text-xs">{form.formState.errors.title.message}</p>}
                   </div>
                   
