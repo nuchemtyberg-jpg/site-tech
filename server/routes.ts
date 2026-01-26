@@ -116,7 +116,14 @@ export async function registerRoutes(
   app.post(api.tasks.create.path, async (req, res) => {
     try {
       const input = api.tasks.create.input.parse(req.body);
-      const task = await storage.createTask(input);
+      // Convert empty strings to null for date fields
+      const sanitizedInput = {
+        ...input,
+        dueDate: input.dueDate || null,
+        scheduledDate: input.scheduledDate || null,
+        description: input.description || null,
+      };
+      const task = await storage.createTask(sanitizedInput);
       res.status(201).json(task);
     } catch (err) {
       if (err instanceof z.ZodError) {
