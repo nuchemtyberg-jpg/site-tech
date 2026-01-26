@@ -1,6 +1,7 @@
 import { useParams, Link } from "wouter";
 import { useProject, useDeleteProject } from "@/hooks/use-projects";
 import { useProjectTasks, useCreateTask, useDeleteTask } from "@/hooks/use-tasks";
+import { useProjectFiles, useProjectFolders, useCreateFile, useDeleteFile, useCreateFolder, useDeleteFolder } from "@/hooks/use-files";
 import { Button } from "@/components/ui/button";
 import { 
   ArrowLeft, 
@@ -8,10 +9,12 @@ import {
   Calendar, 
   MoreVertical, 
   Plus, 
-  CheckCircle2, 
-  Clock, 
-  AlertOctagon,
-  Trash2
+  Trash2,
+  FileText,
+  FolderPlus,
+  Upload,
+  File,
+  Folder
 } from "lucide-react";
 import { 
   DropdownMenu, 
@@ -38,16 +41,26 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { insertTaskSchema, type InsertTask } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { ObjectUploader } from "@/components/ObjectUploader";
 
 export default function ProjectDetails() {
   const { id } = useParams();
   const projectId = Number(id);
   const { data: project, isLoading: isProjectLoading } = useProject(projectId);
   const { data: tasks, isLoading: isTasksLoading } = useProjectTasks(projectId);
+  const { data: files, isLoading: isFilesLoading } = useProjectFiles(projectId);
+  const { data: folders, isLoading: isFoldersLoading } = useProjectFolders(projectId);
   const deleteTaskMutation = useDeleteTask();
   const deleteProjectMutation = useDeleteProject();
   const createTaskMutation = useCreateTask();
+  const createFileMutation = useCreateFile(projectId);
+  const deleteFileMutation = useDeleteFile(projectId);
+  const createFolderMutation = useCreateFolder(projectId);
+  const deleteFolderMutation = useDeleteFolder(projectId);
   const [isTaskOpen, setIsTaskOpen] = useState(false);
+  const [isFolderOpen, setIsFolderOpen] = useState(false);
+  const [folderName, setFolderName] = useState("");
+  const [uploadedFilePaths, setUploadedFilePaths] = useState<Map<string, string>>(new Map());
   const { toast } = useToast();
 
   const form = useForm<InsertTask>({
@@ -65,7 +78,6 @@ export default function ProjectDetails() {
   if (!project) return <div className="p-10 text-center">Project not found</div>;
 
   const onSubmitTask = (data: InsertTask) => {
-    // Ensure projectId is set correctly
     data.projectId = projectId;
     
     createTaskMutation.mutate(data, {
@@ -88,6 +100,53 @@ export default function ProjectDetails() {
     }
   };
 
+  const handleCreateFolder = () => {
+    if (!folderName.trim()) return;
+    createFolderMutation.mutate({ name: folderName.trim() }, {
+      onSuccess: () => {
+        setIsFolderOpen(false);
+        setFolderName("");
+        toast({ title: "Folder Created", description: "New folder added." });
+      },
+      onError: (err) => {
+        toast({ title: "Error", description: err.message, variant: "destructive" });
+      }
+    });
+  };
+
+  const handleUploadComplete = async (result: any) => {
+    const successfulUploads = result.successful || [];
+    let successCount = 0;
+    
+    for (const file of successfulUploads) {
+      const objectPath = uploadedFilePaths.get(file.id) || file.meta?.objectPath || "";
+      
+      if (!objectPath) {
+        console.error("Missing objectPath for file:", file.name);
+        continue;
+      }
+      
+      try {
+        await createFileMutation.mutateAsync({
+          name: file.name,
+          objectPath: objectPath,
+          contentType: file.type,
+          size: file.size,
+        });
+        successCount++;
+      } catch (err) {
+        console.error("Failed to save file metadata:", err);
+        toast({ title: "Error", description: `Failed to save ${file.name}`, variant: "destructive" });
+      }
+    }
+    
+    setUploadedFilePaths(new Map());
+    
+    if (successCount > 0) {
+      toast({ title: "Upload Complete", description: `${successCount} file(s) uploaded successfully.` });
+    }
+  };
+
   const statusColor = (status: string) => {
     switch(status) {
       case 'active': return 'bg-green-500 text-white';
@@ -96,6 +155,18 @@ export default function ProjectDetails() {
       case 'on_hold': return 'bg-yellow-500 text-black';
       default: return 'bg-gray-500';
     }
+  };
+
+  const formatDate = (date: Date | string | null) => {
+    if (!date) return "Not set";
+    return format(new Date(date), "MMM d, yyyy");
+  };
+
+  const formatDateRange = (start: Date | string | null, end: Date | string | null) => {
+    if (!start && !end) return "Dates not set";
+    if (!start) return `Until ${formatDate(end)}`;
+    if (!end) return `From ${formatDate(start)}`;
+    return `${format(new Date(start), "MMM d")} - ${format(new Date(end), "MMM d, yyyy")}`;
   };
 
   return (
@@ -123,19 +194,19 @@ export default function ProjectDetails() {
               </div>
               <div className="flex items-center gap-2 bg-muted/50 px-3 py-1.5 rounded-full">
                 <Calendar className="w-4 h-4 text-primary" />
-                {format(new Date(project.startDate), "MMM d")} - {format(new Date(project.endDate), "MMM d, yyyy")}
+                {formatDateRange(project.startDate, project.endDate)}
               </div>
             </div>
           </div>
           
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="icon">
+              <Button variant="outline" size="icon" data-testid="button-project-menu">
                 <MoreVertical className="w-4 h-4" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem className="text-destructive focus:text-destructive cursor-pointer" onClick={handleDeleteProject}>
+              <DropdownMenuItem className="text-destructive focus:text-destructive cursor-pointer" onClick={handleDeleteProject} data-testid="button-delete-project">
                 <Trash2 className="w-4 h-4 mr-2" /> Delete Project
               </DropdownMenuItem>
             </DropdownMenuContent>
@@ -145,16 +216,15 @@ export default function ProjectDetails() {
 
       {/* Tabs */}
       <Tabs defaultValue="tasks" className="w-full">
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
           <TabsList>
-            <TabsTrigger value="tasks">Tasks</TabsTrigger>
-            <TabsTrigger value="team" disabled>Team</TabsTrigger>
-            <TabsTrigger value="documents" disabled>Documents</TabsTrigger>
+            <TabsTrigger value="tasks" data-testid="tab-tasks">Tasks</TabsTrigger>
+            <TabsTrigger value="documents" data-testid="tab-documents">Documents</TabsTrigger>
           </TabsList>
           
           <Dialog open={isTaskOpen} onOpenChange={setIsTaskOpen}>
             <DialogTrigger asChild>
-              <Button>
+              <Button data-testid="button-add-task">
                 <Plus className="w-4 h-4 mr-2" /> Add Task
               </Button>
             </DialogTrigger>
@@ -165,23 +235,23 @@ export default function ProjectDetails() {
               <form onSubmit={form.handleSubmit(onSubmitTask)} className="space-y-4 mt-4">
                 <div className="grid gap-2">
                   <Label htmlFor="title">Task Title</Label>
-                  <Input id="title" {...form.register("title")} placeholder="e.g. Foundation Pour" />
+                  <Input id="title" {...form.register("title")} placeholder="e.g. Foundation Pour" data-testid="input-task-title" />
                   {form.formState.errors.title && <p className="text-red-500 text-xs">{form.formState.errors.title.message}</p>}
                 </div>
                 
                 <div className="grid gap-2">
                   <Label htmlFor="description">Description</Label>
-                  <Input id="description" {...form.register("description")} placeholder="Details..." />
+                  <Input id="description" {...form.register("description")} placeholder="Details..." data-testid="input-task-description" />
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
                   <div className="grid gap-2">
                     <Label htmlFor="startDate">Start Date</Label>
-                    <Input id="startDate" type="date" {...form.register("startDate", { valueAsDate: true })} />
+                    <Input id="startDate" type="date" {...form.register("startDate", { valueAsDate: true })} data-testid="input-task-start" />
                   </div>
                   <div className="grid gap-2">
                     <Label htmlFor="endDate">End Date</Label>
-                    <Input id="endDate" type="date" {...form.register("endDate", { valueAsDate: true })} />
+                    <Input id="endDate" type="date" {...form.register("endDate", { valueAsDate: true })} data-testid="input-task-end" />
                   </div>
                 </div>
 
@@ -189,7 +259,7 @@ export default function ProjectDetails() {
                   <div className="grid gap-2">
                     <Label htmlFor="status">Status</Label>
                     <Select onValueChange={(val) => form.setValue("status", val)} defaultValue="pending">
-                      <SelectTrigger>
+                      <SelectTrigger data-testid="select-task-status">
                         <SelectValue placeholder="Status" />
                       </SelectTrigger>
                       <SelectContent>
@@ -203,7 +273,7 @@ export default function ProjectDetails() {
                   <div className="grid gap-2">
                     <Label htmlFor="priority">Priority</Label>
                     <Select onValueChange={(val) => form.setValue("priority", val)} defaultValue="medium">
-                      <SelectTrigger>
+                      <SelectTrigger data-testid="select-task-priority">
                         <SelectValue placeholder="Priority" />
                       </SelectTrigger>
                       <SelectContent>
@@ -216,7 +286,7 @@ export default function ProjectDetails() {
                 </div>
 
                 <DialogFooter>
-                  <Button type="submit" disabled={createTaskMutation.isPending}>
+                  <Button type="submit" disabled={createTaskMutation.isPending} data-testid="button-submit-task">
                     {createTaskMutation.isPending ? "Adding..." : "Add Task"}
                   </Button>
                 </DialogFooter>
@@ -235,7 +305,7 @@ export default function ProjectDetails() {
           ) : (
             <div className="grid gap-4">
               {tasks?.map(task => (
-                <div key={task.id} className="group bg-card border border-border rounded-lg p-4 hover:border-primary/50 transition-all shadow-sm hover:shadow-md flex items-center justify-between">
+                <div key={task.id} className="group bg-card border border-border rounded-lg p-4 hover:border-primary/50 transition-all shadow-sm hover:shadow-md flex items-center justify-between" data-testid={`task-item-${task.id}`}>
                   <div className="flex items-start gap-4">
                     <div className={cn(
                       "mt-1 w-2 h-2 rounded-full",
@@ -250,7 +320,7 @@ export default function ProjectDetails() {
                       <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
                         <span className="flex items-center gap-1">
                           <Calendar className="w-3 h-3" />
-                          {format(new Date(task.startDate), "MMM d")} - {format(new Date(task.endDate), "MMM d")}
+                          {formatDateRange(task.startDate, task.endDate)}
                         </span>
                         <span className={cn(
                           "px-2 py-0.5 rounded uppercase tracking-wider font-bold",
@@ -266,11 +336,150 @@ export default function ProjectDetails() {
                     size="icon" 
                     className="opacity-0 group-hover:opacity-100 hover:text-destructive hover:bg-destructive/10"
                     onClick={() => deleteTaskMutation.mutate(task.id)}
+                    data-testid={`button-delete-task-${task.id}`}
                   >
                     <Trash2 className="w-4 h-4" />
                   </Button>
                 </div>
               ))}
+            </div>
+          )}
+        </TabsContent>
+
+        <TabsContent value="documents" className="space-y-4">
+          <div className="flex items-center gap-2 justify-end flex-wrap">
+            <Dialog open={isFolderOpen} onOpenChange={setIsFolderOpen}>
+              <DialogTrigger asChild>
+                <Button variant="outline" data-testid="button-new-folder">
+                  <FolderPlus className="w-4 h-4 mr-2" /> New Folder
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Create New Folder</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4 mt-4">
+                  <div className="grid gap-2">
+                    <Label htmlFor="folderName">Folder Name</Label>
+                    <Input 
+                      id="folderName" 
+                      value={folderName} 
+                      onChange={(e) => setFolderName(e.target.value)} 
+                      placeholder="e.g. Site Photos"
+                      data-testid="input-folder-name"
+                    />
+                  </div>
+                  <DialogFooter>
+                    <Button onClick={handleCreateFolder} disabled={createFolderMutation.isPending} data-testid="button-create-folder">
+                      {createFolderMutation.isPending ? "Creating..." : "Create Folder"}
+                    </Button>
+                  </DialogFooter>
+                </div>
+              </DialogContent>
+            </Dialog>
+
+            <ObjectUploader
+              maxNumberOfFiles={10}
+              maxFileSize={52428800}
+              buttonClassName="data-testid-upload-files"
+              onGetUploadParameters={async (file) => {
+                const res = await fetch("/api/uploads/request-url", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    name: file.name,
+                    size: file.size,
+                    contentType: file.type,
+                  }),
+                });
+                const { uploadURL, objectPath } = await res.json();
+                
+                setUploadedFilePaths(prev => {
+                  const newMap = new Map(prev);
+                  newMap.set(file.id, objectPath);
+                  return newMap;
+                });
+                
+                return {
+                  method: "PUT",
+                  url: uploadURL,
+                  headers: { "Content-Type": file.type || "application/octet-stream" },
+                };
+              }}
+              onComplete={handleUploadComplete}
+            >
+              <Upload className="w-4 h-4 mr-2" /> Upload Files
+            </ObjectUploader>
+          </div>
+
+          {(isFilesLoading || isFoldersLoading) ? (
+            <div className="py-10 text-center text-muted-foreground">Loading documents...</div>
+          ) : (folders?.length === 0 && files?.length === 0) ? (
+            <div className="py-20 text-center bg-card border border-dashed border-border rounded-xl">
+              <FileText className="w-12 h-12 mx-auto text-muted-foreground/50 mb-4" />
+              <p className="text-muted-foreground">No documents yet. Upload files or create folders to organize your project documents.</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {/* Folders */}
+              {folders && folders.length > 0 && (
+                <div className="grid gap-2">
+                  <h3 className="text-sm font-medium text-muted-foreground mb-2">Folders</h3>
+                  {folders.map(folder => (
+                    <div key={folder.id} className="group bg-card border border-border rounded-lg p-3 hover:border-primary/50 transition-all flex items-center justify-between" data-testid={`folder-item-${folder.id}`}>
+                      <div className="flex items-center gap-3">
+                        <Folder className="w-5 h-5 text-primary" />
+                        <span className="font-medium">{folder.name}</span>
+                      </div>
+                      <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        className="opacity-0 group-hover:opacity-100 hover:text-destructive hover:bg-destructive/10"
+                        onClick={() => deleteFolderMutation.mutate(folder.id)}
+                        data-testid={`button-delete-folder-${folder.id}`}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Files */}
+              {files && files.length > 0 && (
+                <div className="grid gap-2">
+                  <h3 className="text-sm font-medium text-muted-foreground mb-2">Files</h3>
+                  {files.map(file => (
+                    <div key={file.id} className="group bg-card border border-border rounded-lg p-3 hover:border-primary/50 transition-all flex items-center justify-between" data-testid={`file-item-${file.id}`}>
+                      <a 
+                        href={file.objectPath} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-3 flex-1 hover:text-primary transition-colors"
+                      >
+                        <File className="w-5 h-5 text-muted-foreground" />
+                        <div>
+                          <span className="font-medium">{file.name}</span>
+                          {file.size && (
+                            <span className="text-xs text-muted-foreground ml-2">
+                              ({Math.round(file.size / 1024)} KB)
+                            </span>
+                          )}
+                        </div>
+                      </a>
+                      <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        className="opacity-0 group-hover:opacity-100"
+                        onClick={() => deleteFileMutation.mutate(file.id)}
+                        data-testid={`button-delete-file-${file.id}`}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </TabsContent>

@@ -186,12 +186,19 @@ export async function registerRoutes(
   });
 
   app.post(api.folders.create.path, async (req, res) => {
-    const input = api.folders.create.input.parse(req.body);
-    const folder = await storage.createFolder({
-      ...input,
-      projectId: Number(req.params.projectId),
-    });
-    res.status(201).json(folder);
+    try {
+      const input = api.folders.create.input.parse(req.body);
+      const folder = await storage.createFolder({
+        ...input,
+        projectId: Number(req.params.projectId),
+      });
+      res.status(201).json(folder);
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0].message });
+      }
+      throw err;
+    }
   });
 
   app.delete(api.folders.delete.path, async (req, res) => {
@@ -205,12 +212,22 @@ export async function registerRoutes(
   });
 
   app.post(api.files.create.path, async (req, res) => {
-    const input = api.files.create.input.parse(req.body);
-    const file = await storage.createFile({
-      ...input,
-      projectId: Number(req.params.projectId),
-    });
-    res.status(201).json(file);
+    try {
+      const input = api.files.create.input.parse(req.body);
+      if (!input.objectPath) {
+        return res.status(400).json({ message: "objectPath is required" });
+      }
+      const file = await storage.createFile({
+        ...input,
+        projectId: Number(req.params.projectId),
+      });
+      res.status(201).json(file);
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0].message });
+      }
+      throw err;
+    }
   });
 
   app.delete(api.files.delete.path, async (req, res) => {
