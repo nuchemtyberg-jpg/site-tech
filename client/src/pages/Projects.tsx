@@ -1,17 +1,19 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Link } from "wouter";
-import { Plus, Search, MapPin, Calendar, ArrowRight, DollarSign, UserPlus, Hash } from "lucide-react";
+import { Link, useLocation } from "wouter";
+import { Plus, Search, MapPin, Calendar, ArrowRight, UserPlus, Hash, LayoutGrid, List, ArrowUpDown, Filter, X, Building2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { AddressAutocomplete } from "@/components/AddressAutocomplete";
 import { Card, CardContent } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuCheckboxItem
+} from "@/components/ui/dropdown-menu";
 import { format } from "date-fns";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -19,20 +21,29 @@ import { z } from "zod";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import type { Project, Customer } from "@shared/schema";
+import type { Project, Customer, InsertCustomer } from "@shared/schema";
 
 const projectFormSchema = z.object({
   name: z.string().min(1, "Project name is required"),
-  streetAddress: z.string().optional(),
-  city: z.string().optional(),
-  state: z.string().optional(),
-  customerId: z.number().optional().nullable(),
-  status: z.string().default("new"),
+  streetAddress: z.string().min(1, "Street address is required"),
+  city: z.string().min(1, "City is required"),
+  state: z.string().min(1, "State is required"),
+  zip: z.string().optional(),
+  customerId: z.number({ required_error: "Customer is required" }),
+  status: z.string().min(1, "Status is required"),
   notes: z.string().optional(),
-  color: z.string().default("#f97316"),
 });
 
 type ProjectFormData = z.infer<typeof projectFormSchema>;
+
+const customerFormSchema = z.object({
+  name: z.string().min(1, "Customer name is required"),
+  company: z.string().optional(),
+  email: z.string().email().optional().or(z.literal("")),
+  phone: z.string().optional(),
+});
+
+type CustomerFormData = z.infer<typeof customerFormSchema>;
 
 const US_STATES = [
   "AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "FL", "GA",
@@ -43,22 +54,30 @@ const US_STATES = [
 ];
 
 const PROJECT_STATUSES = [
-  { value: "new", label: "New" },
-  { value: "bidding", label: "Bidding" },
-  { value: "takeoff_done", label: "Takeoff Done" },
-  { value: "proposal_sent", label: "Proposal Sent" },
-  { value: "active", label: "Active" },
-  { value: "completed", label: "Completed" },
-  { value: "bid_lost", label: "Bid Lost" },
-  { value: "archive", label: "Archive" },
+  { value: "new", label: "New", color: "#3b82f6" },
+  { value: "bidding", label: "Bidding", color: "#6366f1" },
+  { value: "takeoff_done", label: "Takeoff Done", color: "#8b5cf6" },
+  { value: "proposal_sent", label: "Proposal Sent", color: "#06b6d4" },
+  { value: "active", label: "Active", color: "#f97316" },
+  { value: "completed", label: "Completed", color: "#22c55e" },
+  { value: "bid_lost", label: "Bid Lost", color: "#ef4444" },
+  { value: "archive", label: "Archive", color: "#6b7280" },
 ];
 
+type SortOption = "name" | "date" | "status";
+
 export default function Projects() {
+  const [, navigate] = useLocation();
   const [search, setSearch] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [customerDialogOpen, setCustomerDialogOpen] = useState(false);
   const [customerSearch, setCustomerSearch] = useState("");
   const [customerPopoverOpen, setCustomerPopoverOpen] = useState(false);
   const [nextProjectNumber, setNextProjectNumber] = useState<string>("");
+  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+  const [sortBy, setSortBy] = useState<SortOption>("date");
+  const [filterStatus, setFilterStatus] = useState<string[]>([]);
+  const [filterCustomer, setFilterCustomer] = useState<number | null>(null);
   const { toast } = useToast();
 
   const { data: projects = [], isLoading } = useQuery<Project[]>({
@@ -69,7 +88,6 @@ export default function Projects() {
     queryKey: ["/api/customers"],
   });
 
-  // Fetch next project number when dialog opens
   useEffect(() => {
     if (dialogOpen) {
       fetch("/api/projects/next-number")
@@ -86,45 +104,97 @@ export default function Projects() {
       streetAddress: "",
       city: "",
       state: "",
-      customerId: null,
+      zip: "",
+      customerId: undefined,
       status: "new",
       notes: "",
-      color: "#f97316",
     },
   });
 
+  const customerForm = useForm<CustomerFormData>({
+    resolver: zodResolver(customerFormSchema),
+    defaultValues: {
+      name: "",
+      company: "",
+      email: "",
+      phone: "",
+    },
+  });
+
+  const getStatusColor = (status: string) => {
+    const statusObj = PROJECT_STATUSES.find(s => s.value === status);
+    return statusObj?.color || "#f97316";
+  };
+
   const createMutation = useMutation({
     mutationFn: async (data: ProjectFormData) => {
-      // Combine address for backward compatibility with location field
-      const location = [data.streetAddress, data.city, data.state].filter(Boolean).join(", ");
+      const location = [data.streetAddress, data.city, data.state, data.zip].filter(Boolean).join(", ");
+      const color = getStatusColor(data.status);
       return apiRequest("POST", "/api/projects", {
         ...data,
         location: location || null,
+        color,
       });
     },
-    onSuccess: () => {
+    onSuccess: async (response) => {
       queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
       setDialogOpen(false);
       form.reset();
       toast({ title: "Project created successfully" });
+      const newProject = await response.json();
+      navigate(`/projects/${newProject.id}`);
     },
     onError: () => {
       toast({ title: "Failed to create project", variant: "destructive" });
     },
   });
 
-  // Filter customers by search
+  const createCustomerMutation = useMutation({
+    mutationFn: async (data: CustomerFormData) => {
+      return apiRequest("POST", "/api/customers", data);
+    },
+    onSuccess: async (response) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/customers"] });
+      const newCustomer = await response.json();
+      form.setValue("customerId", newCustomer.id);
+      setCustomerDialogOpen(false);
+      customerForm.reset();
+      toast({ title: "Customer created successfully" });
+    },
+    onError: () => {
+      toast({ title: "Failed to create customer", variant: "destructive" });
+    },
+  });
+
   const filteredCustomers = customers.filter(c => 
     c.name.toLowerCase().includes(customerSearch.toLowerCase()) ||
     (c.company && c.company.toLowerCase().includes(customerSearch.toLowerCase()))
   );
 
-  const filteredProjects = projects.filter(
-    (p) =>
-      p.name.toLowerCase().includes(search.toLowerCase()) ||
+  let filteredProjects = projects.filter((p) => {
+    const matchesSearch = p.name.toLowerCase().includes(search.toLowerCase()) ||
       p.location?.toLowerCase().includes(search.toLowerCase()) ||
-      p.projectNumber?.toLowerCase().includes(search.toLowerCase())
-  );
+      p.projectNumber?.toLowerCase().includes(search.toLowerCase());
+    
+    const matchesStatus = filterStatus.length === 0 || filterStatus.includes(p.status);
+    const matchesCustomer = filterCustomer === null || p.customerId === filterCustomer;
+    
+    return matchesSearch && matchesStatus && matchesCustomer;
+  });
+
+  const statusOrder = PROJECT_STATUSES.map(s => s.value);
+  filteredProjects = [...filteredProjects].sort((a, b) => {
+    switch (sortBy) {
+      case "name":
+        return a.name.localeCompare(b.name);
+      case "date":
+        return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
+      case "status":
+        return statusOrder.indexOf(a.status) - statusOrder.indexOf(b.status);
+      default:
+        return 0;
+    }
+  });
 
   const getStatusStyle = (status: string) => {
     switch (status) {
@@ -154,6 +224,8 @@ export default function Projects() {
     return statusObj?.label || status.replace("_", " ");
   };
 
+  const hasActiveFilters = filterStatus.length > 0 || filterCustomer !== null;
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -170,10 +242,10 @@ export default function Projects() {
           <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Create New Project</DialogTitle>
+              <DialogDescription>Fill in the project details below. Fields marked with * are required.</DialogDescription>
             </DialogHeader>
             <Form {...form}>
               <form onSubmit={form.handleSubmit((data) => createMutation.mutate(data))} className="space-y-4">
-                {/* Project Number (auto-generated, read-only) */}
                 <div className="flex items-center gap-2 p-3 bg-muted/50 rounded-lg">
                   <Hash className="w-4 h-4 text-primary" />
                   <span className="text-sm text-muted-foreground">Project Number:</span>
@@ -194,9 +266,8 @@ export default function Projects() {
                   )}
                 />
 
-                {/* Address Fields with Autocomplete */}
                 <div className="space-y-4">
-                  <h4 className="text-sm font-medium text-muted-foreground">Project Address</h4>
+                  <h4 className="text-sm font-medium text-muted-foreground">Project Address *</h4>
                   <FormItem>
                     <FormLabel>Search Address</FormLabel>
                     <AddressAutocomplete
@@ -218,7 +289,7 @@ export default function Projects() {
                     name="streetAddress"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Street Address</FormLabel>
+                        <FormLabel>Street Address *</FormLabel>
                         <FormControl>
                           <Input placeholder="123 Main Street" {...field} data-testid="input-project-street" />
                         </FormControl>
@@ -226,13 +297,13 @@ export default function Projects() {
                       </FormItem>
                     )}
                   />
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-3 gap-4">
                     <FormField
                       control={form.control}
                       name="city"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>City</FormLabel>
+                          <FormLabel>City *</FormLabel>
                           <FormControl>
                             <Input placeholder="City" {...field} data-testid="input-project-city" />
                           </FormControl>
@@ -245,14 +316,14 @@ export default function Projects() {
                       name="state"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>State</FormLabel>
+                          <FormLabel>State *</FormLabel>
                           <Select onValueChange={field.onChange} value={field.value || ""}>
                             <FormControl>
-                              <SelectTrigger data-testid="select-project-state">
-                                <SelectValue placeholder="Select state" />
+                              <SelectTrigger data-testid="select-project-state" className="bg-white dark:bg-zinc-900">
+                                <SelectValue placeholder="Select" />
                               </SelectTrigger>
                             </FormControl>
-                            <SelectContent>
+                            <SelectContent className="bg-white dark:bg-zinc-900">
                               {US_STATES.map((state) => (
                                 <SelectItem key={state} value={state}>
                                   {state}
@@ -264,16 +335,28 @@ export default function Projects() {
                         </FormItem>
                       )}
                     />
+                    <FormField
+                      control={form.control}
+                      name="zip"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Zip Code</FormLabel>
+                          <FormControl>
+                            <Input placeholder="12345" {...field} data-testid="input-project-zip" />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
                   </div>
                 </div>
 
-                {/* Customer Selection */}
                 <FormField
                   control={form.control}
                   name="customerId"
                   render={({ field }) => (
                     <FormItem className="flex flex-col">
-                      <FormLabel>Customer</FormLabel>
+                      <FormLabel>Customer *</FormLabel>
                       <Popover open={customerPopoverOpen} onOpenChange={setCustomerPopoverOpen}>
                         <PopoverTrigger asChild>
                           <FormControl>
@@ -281,7 +364,7 @@ export default function Projects() {
                               variant="outline"
                               role="combobox"
                               className={cn(
-                                "w-full justify-between",
+                                "w-full justify-between bg-white dark:bg-zinc-900",
                                 !field.value && "text-muted-foreground"
                               )}
                               data-testid="select-project-customer"
@@ -293,8 +376,8 @@ export default function Projects() {
                             </Button>
                           </FormControl>
                         </PopoverTrigger>
-                        <PopoverContent className="w-full p-0" align="start">
-                          <Command>
+                        <PopoverContent className="w-full p-0 bg-white dark:bg-zinc-900" align="start">
+                          <Command className="bg-white dark:bg-zinc-900">
                             <CommandInput 
                               placeholder="Search customers..." 
                               value={customerSearch}
@@ -304,15 +387,31 @@ export default function Projects() {
                               <CommandEmpty>
                                 <div className="p-2 text-center">
                                   <p className="text-sm text-muted-foreground mb-2">No customer found.</p>
-                                  <Link href="/customers">
-                                    <Button size="sm" variant="outline">
-                                      <UserPlus className="w-4 h-4 mr-2" />
-                                      Add New Customer
-                                    </Button>
-                                  </Link>
+                                  <Button 
+                                    size="sm" 
+                                    variant="outline"
+                                    onClick={(e) => {
+                                      e.preventDefault();
+                                      setCustomerPopoverOpen(false);
+                                      setCustomerDialogOpen(true);
+                                    }}
+                                  >
+                                    <UserPlus className="w-4 h-4 mr-2" />
+                                    Add New Customer
+                                  </Button>
                                 </div>
                               </CommandEmpty>
                               <CommandGroup>
+                                <CommandItem
+                                  onSelect={() => {
+                                    setCustomerPopoverOpen(false);
+                                    setCustomerDialogOpen(true);
+                                  }}
+                                  className="text-primary"
+                                >
+                                  <UserPlus className="w-4 h-4 mr-2" />
+                                  Add New Customer
+                                </CommandItem>
                                 {filteredCustomers.map((customer) => (
                                   <CommandItem
                                     key={customer.id}
@@ -340,23 +439,28 @@ export default function Projects() {
                   )}
                 />
 
-                {/* Status */}
                 <FormField
                   control={form.control}
                   name="status"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Status</FormLabel>
+                      <FormLabel>Status *</FormLabel>
                       <Select onValueChange={field.onChange} value={field.value}>
                         <FormControl>
-                          <SelectTrigger data-testid="select-project-status">
+                          <SelectTrigger data-testid="select-project-status" className="bg-white dark:bg-zinc-900">
                             <SelectValue placeholder="Select status" />
                           </SelectTrigger>
                         </FormControl>
-                        <SelectContent>
+                        <SelectContent className="bg-white dark:bg-zinc-900">
                           {PROJECT_STATUSES.map((status) => (
                             <SelectItem key={status.value} value={status.value}>
-                              {status.label}
+                              <div className="flex items-center gap-2">
+                                <div 
+                                  className="w-3 h-3 rounded-full" 
+                                  style={{ backgroundColor: status.color }}
+                                />
+                                {status.label}
+                              </div>
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -366,7 +470,6 @@ export default function Projects() {
                   )}
                 />
 
-                {/* Notes */}
                 <FormField
                   control={form.control}
                   name="notes"
@@ -397,51 +500,298 @@ export default function Projects() {
             </Form>
           </DialogContent>
         </Dialog>
+
+        <Dialog open={customerDialogOpen} onOpenChange={setCustomerDialogOpen}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Add New Customer</DialogTitle>
+              <DialogDescription>Create a new customer to assign to this project.</DialogDescription>
+            </DialogHeader>
+            <Form {...customerForm}>
+              <form onSubmit={customerForm.handleSubmit((data) => createCustomerMutation.mutate(data))} className="space-y-4">
+                <FormField
+                  control={customerForm.control}
+                  name="name"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Customer Name *</FormLabel>
+                      <FormControl>
+                        <Input placeholder="John Smith" {...field} data-testid="input-customer-name" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={customerForm.control}
+                  name="company"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Company</FormLabel>
+                      <FormControl>
+                        <Input placeholder="ABC Construction" {...field} data-testid="input-customer-company" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={customerForm.control}
+                  name="email"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Email</FormLabel>
+                      <FormControl>
+                        <Input type="email" placeholder="john@example.com" {...field} data-testid="input-customer-email" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={customerForm.control}
+                  name="phone"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Phone</FormLabel>
+                      <FormControl>
+                        <Input placeholder="(555) 123-4567" {...field} data-testid="input-customer-phone" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <DialogFooter>
+                  <Button type="button" variant="outline" onClick={() => setCustomerDialogOpen(false)}>
+                    Cancel
+                  </Button>
+                  <Button type="submit" disabled={createCustomerMutation.isPending} data-testid="button-save-customer">
+                    {createCustomerMutation.isPending ? "Creating..." : "Create Customer"}
+                  </Button>
+                </DialogFooter>
+              </form>
+            </Form>
+          </DialogContent>
+        </Dialog>
       </div>
 
-      <div className="flex items-center gap-2 bg-card p-2 rounded-lg border border-border max-w-md">
-        <Search className="w-5 h-5 text-muted-foreground ml-2" />
-        <Input
-          placeholder="Search projects..."
-          className="border-0 bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          data-testid="input-search-projects"
-        />
+      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+        <div className="flex items-center gap-2 bg-card p-2 rounded-lg border border-border flex-1 max-w-md">
+          <Search className="w-5 h-5 text-muted-foreground ml-2" />
+          <Input
+            placeholder="Search projects..."
+            className="border-0 bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            data-testid="input-search-projects"
+          />
+        </div>
+
+        <div className="flex items-center gap-2">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" data-testid="button-sort">
+                <ArrowUpDown className="w-4 h-4 mr-2" />
+                Sort
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="bg-white dark:bg-zinc-900">
+              <DropdownMenuItem onClick={() => setSortBy("name")} className={sortBy === "name" ? "bg-accent" : ""}>
+                Name A-Z
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setSortBy("date")} className={sortBy === "date" ? "bg-accent" : ""}>
+                Date Created
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setSortBy("status")} className={sortBy === "status" ? "bg-accent" : ""}>
+                Status Order
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" className={hasActiveFilters ? "border-primary" : ""} data-testid="button-filter">
+                <Filter className="w-4 h-4 mr-2" />
+                Filter
+                {hasActiveFilters && <span className="ml-1 text-xs bg-primary text-primary-foreground rounded-full w-5 h-5 flex items-center justify-center">{filterStatus.length + (filterCustomer ? 1 : 0)}</span>}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56 bg-white dark:bg-zinc-900">
+              <div className="px-2 py-1.5 text-sm font-semibold">Status</div>
+              {PROJECT_STATUSES.map((status) => (
+                <DropdownMenuCheckboxItem
+                  key={status.value}
+                  checked={filterStatus.includes(status.value)}
+                  onCheckedChange={(checked) => {
+                    if (checked) {
+                      setFilterStatus([...filterStatus, status.value]);
+                    } else {
+                      setFilterStatus(filterStatus.filter(s => s !== status.value));
+                    }
+                  }}
+                >
+                  <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 rounded-full" style={{ backgroundColor: status.color }} />
+                    {status.label}
+                  </div>
+                </DropdownMenuCheckboxItem>
+              ))}
+              <DropdownMenuSeparator />
+              <div className="px-2 py-1.5 text-sm font-semibold">Customer</div>
+              <DropdownMenuCheckboxItem
+                checked={filterCustomer === null}
+                onCheckedChange={() => setFilterCustomer(null)}
+              >
+                All Customers
+              </DropdownMenuCheckboxItem>
+              {customers.map((customer) => (
+                <DropdownMenuCheckboxItem
+                  key={customer.id}
+                  checked={filterCustomer === customer.id}
+                  onCheckedChange={(checked) => {
+                    setFilterCustomer(checked ? customer.id : null);
+                  }}
+                >
+                  {customer.name}
+                </DropdownMenuCheckboxItem>
+              ))}
+              {hasActiveFilters && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem 
+                    onClick={() => {
+                      setFilterStatus([]);
+                      setFilterCustomer(null);
+                    }}
+                    className="text-destructive"
+                  >
+                    <X className="w-4 h-4 mr-2" />
+                    Clear Filters
+                  </DropdownMenuItem>
+                </>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          <div className="flex items-center border rounded-lg overflow-hidden">
+            <Button
+              variant={viewMode === "grid" ? "default" : "ghost"}
+              size="sm"
+              className="rounded-none"
+              onClick={() => setViewMode("grid")}
+              data-testid="button-view-grid"
+            >
+              <LayoutGrid className="w-4 h-4" />
+            </Button>
+            <Button
+              variant={viewMode === "list" ? "default" : "ghost"}
+              size="sm"
+              className="rounded-none"
+              onClick={() => setViewMode("list")}
+              data-testid="button-view-list"
+            >
+              <List className="w-4 h-4" />
+            </Button>
+          </div>
+        </div>
       </div>
 
       {isLoading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {[1, 2, 3].map((i) => (
-            <div key={i} className="h-64 rounded-xl bg-card animate-pulse border border-border" />
+        <div className={viewMode === "grid" ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4" : "space-y-2"}>
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className={viewMode === "grid" ? "h-40 rounded-lg bg-card animate-pulse border border-border" : "h-16 rounded-lg bg-card animate-pulse border border-border"} />
           ))}
         </div>
       ) : filteredProjects.length === 0 ? (
         <div className="text-center py-20 bg-card/50 rounded-xl border border-dashed border-border">
           <MapPin className="w-16 h-16 mx-auto mb-4 text-muted-foreground/30" />
           <h3 className="text-xl font-medium">No projects found</h3>
-          <p className="text-muted-foreground mt-2">Create your first project to get started.</p>
-          <Button className="mt-4" onClick={() => setDialogOpen(true)}>
-            <Plus className="w-4 h-4 mr-2" />
-            New Project
-          </Button>
+          <p className="text-muted-foreground mt-2">
+            {hasActiveFilters ? "Try adjusting your filters." : "Create your first project to get started."}
+          </p>
+          {hasActiveFilters ? (
+            <Button className="mt-4" variant="outline" onClick={() => { setFilterStatus([]); setFilterCustomer(null); }}>
+              <X className="w-4 h-4 mr-2" />
+              Clear Filters
+            </Button>
+          ) : (
+            <Button className="mt-4" onClick={() => setDialogOpen(true)}>
+              <Plus className="w-4 h-4 mr-2" />
+              New Project
+            </Button>
+          )}
         </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      ) : viewMode === "grid" ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {filteredProjects.map((project) => {
             const customer = customers.find((c) => c.id === project.customerId);
+            const statusColor = getStatusColor(project.status);
             return (
               <Link key={project.id} href={`/projects/${project.id}`}>
                 <Card 
                   className="hover-elevate cursor-pointer h-full overflow-hidden" 
                   data-testid={`card-project-${project.id}`}
                 >
-                  <div className="h-2 w-full" style={{ backgroundColor: project.color }} />
-                  <CardContent className="p-6 flex flex-col h-full">
-                    <div className="flex justify-between items-start mb-4">
-                      <div>
-                        <div className="flex items-center gap-2 mb-2">
-                          <span className={`inline-block px-2 py-1 rounded text-xs font-semibold tracking-wide uppercase ${getStatusStyle(project.status)}`}>
+                  <div className="h-1.5 w-full" style={{ backgroundColor: statusColor }} />
+                  <CardContent className="p-4 flex flex-col h-full">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className={`inline-block px-1.5 py-0.5 rounded text-xs font-medium ${getStatusStyle(project.status)}`}>
+                        {getStatusLabel(project.status)}
+                      </span>
+                      {project.projectNumber && (
+                        <span className="text-xs font-mono text-muted-foreground">
+                          {project.projectNumber}
+                        </span>
+                      )}
+                    </div>
+                    <h3 className="text-base font-bold line-clamp-1">{project.name}</h3>
+
+                    {customer && (
+                      <p className="text-xs text-primary mt-1 line-clamp-1">
+                        {customer.name}
+                      </p>
+                    )}
+
+                    {project.location && (
+                      <div className="flex items-center text-xs text-muted-foreground mt-2">
+                        <MapPin className="w-3 h-3 mr-1 text-primary shrink-0" />
+                        <span className="line-clamp-1">{project.location}</span>
+                      </div>
+                    )}
+
+                    <div className="mt-auto pt-2 flex items-center justify-between text-xs">
+                      {project.createdAt && (
+                        <span className="text-muted-foreground">
+                          {format(new Date(project.createdAt), "MMM d, yyyy")}
+                        </span>
+                      )}
+                      <span className="text-primary font-medium flex items-center">
+                        View <ArrowRight className="w-3 h-3 ml-1" />
+                      </span>
+                    </div>
+                  </CardContent>
+                </Card>
+              </Link>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {filteredProjects.map((project) => {
+            const customer = customers.find((c) => c.id === project.customerId);
+            const statusColor = getStatusColor(project.status);
+            return (
+              <Link key={project.id} href={`/projects/${project.id}`}>
+                <Card 
+                  className="hover-elevate cursor-pointer overflow-hidden" 
+                  data-testid={`card-project-${project.id}`}
+                >
+                  <div className="flex items-center">
+                    <div className="w-1.5 h-full self-stretch" style={{ backgroundColor: statusColor }} />
+                    <CardContent className="p-3 flex items-center gap-4 flex-1">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className={`inline-block px-1.5 py-0.5 rounded text-xs font-medium ${getStatusStyle(project.status)}`}>
                             {getStatusLabel(project.status)}
                           </span>
                           {project.projectNumber && (
@@ -449,49 +799,31 @@ export default function Projects() {
                               {project.projectNumber}
                             </span>
                           )}
+                          <h3 className="text-sm font-bold truncate">{project.name}</h3>
                         </div>
-                        <h3 className="text-xl font-bold">{project.name}</h3>
+                        <div className="flex items-center gap-4 mt-1 text-xs text-muted-foreground">
+                          {customer && (
+                            <span className="flex items-center gap-1">
+                              <Building2 className="w-3 h-3" />
+                              {customer.name}
+                            </span>
+                          )}
+                          {project.location && (
+                            <span className="flex items-center gap-1 truncate">
+                              <MapPin className="w-3 h-3" />
+                              {project.location}
+                            </span>
+                          )}
+                        </div>
                       </div>
-                    </div>
-
-                    {project.description && (
-                      <p className="text-muted-foreground text-sm line-clamp-2 mb-4 flex-1">
-                        {project.description}
-                      </p>
-                    )}
-
-                    {customer && (
-                      <p className="text-sm text-primary mb-2">
-                        {customer.name} {customer.company ? `- ${customer.company}` : ""}
-                      </p>
-                    )}
-
-                    <div className="space-y-2 pt-4 border-t border-border">
-                      {project.location && (
-                        <div className="flex items-center text-sm text-muted-foreground">
-                          <MapPin className="w-4 h-4 mr-2 text-primary" />
-                          {project.location}
-                        </div>
+                      {project.createdAt && (
+                        <span className="text-xs text-muted-foreground whitespace-nowrap">
+                          {format(new Date(project.createdAt), "MMM d, yyyy")}
+                        </span>
                       )}
-                      {project.startDate && (
-                        <div className="flex items-center text-sm text-muted-foreground">
-                          <Calendar className="w-4 h-4 mr-2 text-primary" />
-                          {format(new Date(project.startDate), "MMM d, yyyy")}
-                          {project.endDate && ` - ${format(new Date(project.endDate), "MMM d, yyyy")}`}
-                        </div>
-                      )}
-                      {project.estimatedValue && (
-                        <div className="flex items-center text-sm text-muted-foreground">
-                          <DollarSign className="w-4 h-4 mr-2 text-primary" />
-                          ${project.estimatedValue.toLocaleString()}
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="mt-4 flex items-center justify-end text-sm font-medium text-primary">
-                      View Details <ArrowRight className="w-4 h-4 ml-1" />
-                    </div>
-                  </CardContent>
+                      <ArrowRight className="w-4 h-4 text-primary shrink-0" />
+                    </CardContent>
+                  </div>
                 </Card>
               </Link>
             );

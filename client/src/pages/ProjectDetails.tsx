@@ -1,5 +1,5 @@
 import { useParams, Link, useLocation } from "wouter";
-import { useProject, useDeleteProject } from "@/hooks/use-projects";
+import { useProject, useDeleteProject, useUpdateProject } from "@/hooks/use-projects";
 import { useProjectTasks, useCreateTask, useDeleteTask } from "@/hooks/use-tasks";
 import { useProjectFiles, useProjectFolders, useCreateFile, useDeleteFile, useCreateFolder, useDeleteFolder } from "@/hooks/use-files";
 import { Button } from "@/components/ui/button";
@@ -22,7 +22,9 @@ import {
   Download,
   LayoutGrid,
   List,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Pencil,
+  Hash
 } from "lucide-react";
 import { 
   DropdownMenu, 
@@ -43,7 +45,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useState, useRef } from "react";
+import { Textarea } from "@/components/ui/textarea";
+import { useState, useRef, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { insertTaskSchema, type InsertTask, type FileMetadata } from "@shared/schema";
@@ -51,6 +54,45 @@ import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { ObjectUploader } from "@/components/ObjectUploader";
 import { PDFViewer } from "@/components/PDFViewer";
+import { useQuery } from "@tanstack/react-query";
+import type { Customer } from "@shared/schema";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { z } from "zod";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { AddressAutocomplete } from "@/components/AddressAutocomplete";
+
+const US_STATES = [
+  "AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "FL", "GA",
+  "HI", "ID", "IL", "IN", "IA", "KS", "KY", "LA", "ME", "MD",
+  "MA", "MI", "MN", "MS", "MO", "MT", "NE", "NV", "NH", "NJ",
+  "NM", "NY", "NC", "ND", "OH", "OK", "OR", "PA", "RI", "SC",
+  "SD", "TN", "TX", "UT", "VT", "VA", "WA", "WV", "WI", "WY"
+];
+
+const PROJECT_STATUSES = [
+  { value: "new", label: "New", color: "#3b82f6" },
+  { value: "bidding", label: "Bidding", color: "#6366f1" },
+  { value: "takeoff_done", label: "Takeoff Done", color: "#8b5cf6" },
+  { value: "proposal_sent", label: "Proposal Sent", color: "#06b6d4" },
+  { value: "active", label: "Active", color: "#f97316" },
+  { value: "completed", label: "Completed", color: "#22c55e" },
+  { value: "bid_lost", label: "Bid Lost", color: "#ef4444" },
+  { value: "archive", label: "Archive", color: "#6b7280" },
+];
+
+const editProjectSchema = z.object({
+  name: z.string().min(1, "Project name is required"),
+  streetAddress: z.string().min(1, "Street address is required"),
+  city: z.string().min(1, "City is required"),
+  state: z.string().min(1, "State is required"),
+  zip: z.string().optional(),
+  customerId: z.number({ required_error: "Customer is required" }),
+  status: z.string().min(1, "Status is required"),
+  notes: z.string().optional(),
+});
+
+type EditProjectFormData = z.infer<typeof editProjectSchema>;
 
 export default function ProjectDetails() {
   const { id } = useParams();
@@ -62,6 +104,7 @@ export default function ProjectDetails() {
   const { data: folders, isLoading: isFoldersLoading } = useProjectFolders(projectId);
   const deleteTaskMutation = useDeleteTask();
   const deleteProjectMutation = useDeleteProject();
+  const updateProjectMutation = useUpdateProject();
   const createTaskMutation = useCreateTask();
   const createFileMutation = useCreateFile(projectId);
   const deleteFileMutation = useDeleteFile(projectId);
@@ -69,7 +112,70 @@ export default function ProjectDetails() {
   const deleteFolderMutation = useDeleteFolder(projectId);
   const [isTaskOpen, setIsTaskOpen] = useState(false);
   const [isFolderOpen, setIsFolderOpen] = useState(false);
+  const [isEditOpen, setIsEditOpen] = useState(false);
   const [folderName, setFolderName] = useState("");
+  const [customerSearch, setCustomerSearch] = useState("");
+  const [customerPopoverOpen, setCustomerPopoverOpen] = useState(false);
+
+  const { data: customers = [] } = useQuery<Customer[]>({
+    queryKey: ["/api/customers"],
+  });
+
+  const getStatusColor = (status: string) => {
+    const statusObj = PROJECT_STATUSES.find(s => s.value === status);
+    return statusObj?.color || "#f97316";
+  };
+
+  const filteredCustomers = customers.filter(c => 
+    c.name.toLowerCase().includes(customerSearch.toLowerCase()) ||
+    (c.company && c.company.toLowerCase().includes(customerSearch.toLowerCase()))
+  );
+
+  const editForm = useForm<EditProjectFormData>({
+    resolver: zodResolver(editProjectSchema),
+    defaultValues: {
+      name: "",
+      streetAddress: "",
+      city: "",
+      state: "",
+      zip: "",
+      customerId: undefined,
+      status: "new",
+      notes: "",
+    },
+  });
+
+  useEffect(() => {
+    if (project && isEditOpen) {
+      editForm.reset({
+        name: project.name || "",
+        streetAddress: project.streetAddress || "",
+        city: project.city || "",
+        state: project.state || "",
+        zip: project.zip || "",
+        customerId: project.customerId || undefined,
+        status: project.status || "new",
+        notes: project.notes || "",
+      });
+    }
+  }, [project, isEditOpen]);
+
+  const handleEditSubmit = (data: EditProjectFormData) => {
+    const location = [data.streetAddress, data.city, data.state, data.zip].filter(Boolean).join(", ");
+    const color = getStatusColor(data.status);
+    updateProjectMutation.mutate(
+      { id: projectId, ...data, location, color },
+      {
+        onSuccess: () => {
+          setIsEditOpen(false);
+          toast({ title: "Project updated successfully" });
+        },
+        onError: () => {
+          toast({ title: "Failed to update project", variant: "destructive" });
+        },
+      }
+    );
+  };
   const [currentFolderId, setCurrentFolderId] = useState<number | null>(() => {
     // Initialize from URL query param if present
     const params = new URLSearchParams(window.location.search);
@@ -336,35 +442,275 @@ export default function ProjectDetails() {
               <div className={cn("px-3 py-1 rounded text-xs font-bold uppercase tracking-wider", statusColor(project.status))}>
                 {project.status.replace('_', ' ')}
               </div>
+              {project.projectNumber && (
+                <span className="text-sm font-mono text-muted-foreground">{project.projectNumber}</span>
+              )}
               <h1 className="text-3xl font-bold font-display">{project.name}</h1>
             </div>
             <p className="text-muted-foreground mb-4 max-w-2xl">{project.description}</p>
             
             <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
-              <div className="flex items-center gap-2 bg-muted/50 px-3 py-1.5 rounded-full">
-                <MapPin className="w-4 h-4 text-primary" />
-                {project.location}
-              </div>
-              <div className="flex items-center gap-2 bg-muted/50 px-3 py-1.5 rounded-full">
-                <Calendar className="w-4 h-4 text-primary" />
-                {formatDateRange(project.startDate, project.endDate)}
-              </div>
+              {project.location && (
+                <div className="flex items-center gap-2 bg-muted/50 px-3 py-1.5 rounded-full">
+                  <MapPin className="w-4 h-4 text-primary" />
+                  {project.location}
+                </div>
+              )}
+              {(project.startDate || project.endDate) && (
+                <div className="flex items-center gap-2 bg-muted/50 px-3 py-1.5 rounded-full">
+                  <Calendar className="w-4 h-4 text-primary" />
+                  {formatDateRange(project.startDate, project.endDate)}
+                </div>
+              )}
+              {project.createdAt && (
+                <div className="flex items-center gap-2 bg-muted/50 px-3 py-1.5 rounded-full">
+                  <Hash className="w-4 h-4 text-primary" />
+                  Created {format(new Date(project.createdAt), "MMM d, yyyy")}
+                </div>
+              )}
             </div>
           </div>
           
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="icon" data-testid="button-project-menu">
-                <MoreVertical className="w-4 h-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem className="text-destructive focus:text-destructive cursor-pointer" onClick={handleDeleteProject} data-testid="button-delete-project">
-                <Trash2 className="w-4 h-4 mr-2" /> Delete Project
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={() => setIsEditOpen(true)} data-testid="button-edit-project">
+              <Pencil className="w-4 h-4 mr-2" /> Edit
+            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="icon" data-testid="button-project-menu">
+                  <MoreVertical className="w-4 h-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="bg-white dark:bg-zinc-900">
+                <DropdownMenuItem className="text-destructive focus:text-destructive cursor-pointer" onClick={handleDeleteProject} data-testid="button-delete-project">
+                  <Trash2 className="w-4 h-4 mr-2" /> Delete Project
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </div>
+
+        {/* Edit Project Dialog */}
+        <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Edit Project</DialogTitle>
+            </DialogHeader>
+            <Form {...editForm}>
+              <form onSubmit={editForm.handleSubmit(handleEditSubmit)} className="space-y-4">
+                <FormField
+                  control={editForm.control}
+                  name="name"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Project Name *</FormLabel>
+                      <FormControl>
+                        <Input placeholder="e.g. Main Street Subdivision" {...field} data-testid="input-edit-project-name" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <div className="space-y-4">
+                  <h4 className="text-sm font-medium text-muted-foreground">Project Address *</h4>
+                  <FormItem>
+                    <FormLabel>Search Address</FormLabel>
+                    <AddressAutocomplete
+                      onAddressSelect={(address) => {
+                        editForm.setValue("streetAddress", address.streetAddress);
+                        editForm.setValue("city", address.city);
+                        if (address.state) {
+                          editForm.setValue("state", address.state);
+                        }
+                      }}
+                      placeholder="Start typing an address..."
+                    />
+                  </FormItem>
+                  <FormField
+                    control={editForm.control}
+                    name="streetAddress"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Street Address *</FormLabel>
+                        <FormControl>
+                          <Input placeholder="123 Main Street" {...field} data-testid="input-edit-project-street" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <div className="grid grid-cols-3 gap-4">
+                    <FormField
+                      control={editForm.control}
+                      name="city"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>City *</FormLabel>
+                          <FormControl>
+                            <Input placeholder="City" {...field} data-testid="input-edit-project-city" />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={editForm.control}
+                      name="state"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>State *</FormLabel>
+                          <Select onValueChange={field.onChange} value={field.value || ""}>
+                            <FormControl>
+                              <SelectTrigger className="bg-white dark:bg-zinc-900">
+                                <SelectValue placeholder="Select" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent className="bg-white dark:bg-zinc-900">
+                              {US_STATES.map((state) => (
+                                <SelectItem key={state} value={state}>
+                                  {state}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={editForm.control}
+                      name="zip"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Zip Code</FormLabel>
+                          <FormControl>
+                            <Input placeholder="12345" {...field} data-testid="input-edit-project-zip" />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                </div>
+
+                <FormField
+                  control={editForm.control}
+                  name="customerId"
+                  render={({ field }) => (
+                    <FormItem className="flex flex-col">
+                      <FormLabel>Customer *</FormLabel>
+                      <Popover open={customerPopoverOpen} onOpenChange={setCustomerPopoverOpen}>
+                        <PopoverTrigger asChild>
+                          <FormControl>
+                            <Button
+                              variant="outline"
+                              role="combobox"
+                              className={cn(
+                                "w-full justify-between bg-white dark:bg-zinc-900",
+                                !field.value && "text-muted-foreground"
+                              )}
+                            >
+                              {field.value
+                                ? customers.find((c) => c.id === field.value)?.name || "Select customer"
+                                : "Select customer"}
+                            </Button>
+                          </FormControl>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-full p-0 bg-white dark:bg-zinc-900" align="start">
+                          <Command className="bg-white dark:bg-zinc-900">
+                            <CommandInput 
+                              placeholder="Search customers..." 
+                              value={customerSearch}
+                              onValueChange={setCustomerSearch}
+                            />
+                            <CommandList>
+                              <CommandEmpty>No customer found.</CommandEmpty>
+                              <CommandGroup>
+                                {filteredCustomers.map((customer) => (
+                                  <CommandItem
+                                    key={customer.id}
+                                    value={customer.name}
+                                    onSelect={() => {
+                                      field.onChange(customer.id);
+                                      setCustomerPopoverOpen(false);
+                                    }}
+                                  >
+                                    <span>{customer.name}</span>
+                                    {customer.company && (
+                                      <span className="ml-2 text-muted-foreground text-sm">
+                                        ({customer.company})
+                                      </span>
+                                    )}
+                                  </CommandItem>
+                                ))}
+                              </CommandGroup>
+                            </CommandList>
+                          </Command>
+                        </PopoverContent>
+                      </Popover>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={editForm.control}
+                  name="status"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Status *</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl>
+                          <SelectTrigger className="bg-white dark:bg-zinc-900">
+                            <SelectValue placeholder="Select status" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent className="bg-white dark:bg-zinc-900">
+                          {PROJECT_STATUSES.map((status) => (
+                            <SelectItem key={status.value} value={status.value}>
+                              <div className="flex items-center gap-2">
+                                <div 
+                                  className="w-3 h-3 rounded-full" 
+                                  style={{ backgroundColor: status.color }}
+                                />
+                                {status.label}
+                              </div>
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={editForm.control}
+                  name="notes"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Notes</FormLabel>
+                      <FormControl>
+                        <Textarea placeholder="Additional project notes..." {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <DialogFooter>
+                  <Button type="button" variant="outline" onClick={() => setIsEditOpen(false)}>
+                    Cancel
+                  </Button>
+                  <Button type="submit" disabled={updateProjectMutation.isPending} data-testid="button-save-edit-project">
+                    {updateProjectMutation.isPending ? "Saving..." : "Save Changes"}
+                  </Button>
+                </DialogFooter>
+              </form>
+            </Form>
+          </DialogContent>
+        </Dialog>
       </div>
 
       {/* Tabs */}

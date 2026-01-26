@@ -34,6 +34,7 @@ export const projects = pgTable("projects", {
   streetAddress: text("street_address"),
   city: text("city"),
   state: text("state"),
+  zip: text("zip"),
   location: text("location"), // kept for backward compatibility
   startDate: date("start_date"),
   endDate: date("end_date"),
