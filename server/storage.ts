@@ -145,7 +145,6 @@ export class DatabaseStorage implements IStorage {
     await db.delete(allocations).where(eq(allocations.id, id));
   }
 
-  // Folders
   async getFolders(projectId: number): Promise<Folder[]> {
     return await db.select().from(folders).where(eq(folders.projectId, projectId));
   }

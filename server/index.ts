@@ -4,6 +4,8 @@ import { serveStatic } from "./static";
 import { createServer } from "http";
 
 const app = express();
+// Enable strict routing to handle path patterns correctly
+app.set('strict routing', true);
 const httpServer = createServer(app);
 
 declare module "http" {
