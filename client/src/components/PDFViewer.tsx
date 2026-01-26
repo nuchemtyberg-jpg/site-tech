@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { 
   ZoomIn, 
@@ -84,6 +84,7 @@ export function PDFViewer({ url, fileName, onClose, onShare }: PDFViewerProps) {
   const [numPages, setNumPages] = useState<number>(0);
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [containerWidth, setContainerWidth] = useState<number>(800);
+  const [pdfData, setPdfData] = useState<ArrayBuffer | null>(null);
   const [scale, setScale] = useState(1);
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [activeTool, setActiveTool] = useState<MarkupTool>("none");
@@ -688,6 +689,44 @@ export function PDFViewer({ url, fileName, onClose, onShare }: PDFViewerProps) {
     ctx.restore();
   }, [paths, shapes, textAnnotations, currentPath, currentShape, scale, position, activeTool, selectedColor, selectedThickness]);
 
+  // Pre-fetch PDF as ArrayBuffer to avoid re-fetching issues
+  useEffect(() => {
+    let cancelled = false;
+    
+    const fetchPdf = async () => {
+      try {
+        setIsLoading(true);
+        setLoadError(null);
+        setPdfData(null);
+        
+        const response = await fetch(url, { credentials: "include" });
+        if (!response.ok) {
+          throw new Error(`Failed to load PDF: ${response.statusText}`);
+        }
+        const data = await response.arrayBuffer();
+        if (cancelled) return;
+        
+        setPdfData(data);
+      } catch (err) {
+        if (cancelled) return;
+        setLoadError(err instanceof Error ? err.message : "Failed to load PDF");
+        setIsLoading(false);
+      }
+    };
+    
+    fetchPdf();
+    
+    return () => {
+      cancelled = true;
+    };
+  }, [url]);
+
+  // Memoize the file prop to prevent unnecessary re-renders
+  const fileData = useMemo(() => {
+    if (!pdfData) return null;
+    return { data: pdfData };
+  }, [pdfData]);
+
   // Handle PDF document load success
   const onDocumentLoadSuccess = ({ numPages }: { numPages: number }) => {
     setNumPages(numPages);
@@ -840,21 +879,23 @@ export function PDFViewer({ url, fileName, onClose, onShare }: PDFViewerProps) {
           className="flex flex-col items-center overflow-auto"
         >
           {/* Use react-pdf for reliable cross-browser PDF rendering */}
-          <Document
-            file={{ url, withCredentials: true }}
-            onLoadSuccess={onDocumentLoadSuccess}
-            onLoadError={onDocumentLoadError}
-            loading={null}
-            error={null}
-            className="pointer-events-none"
-          >
-            <Page 
-              pageNumber={currentPage} 
-              width={containerWidth * scale}
-              renderTextLayer={false}
-              renderAnnotationLayer={false}
-            />
-          </Document>
+          {fileData && (
+            <Document
+              file={fileData}
+              onLoadSuccess={onDocumentLoadSuccess}
+              onLoadError={onDocumentLoadError}
+              loading={null}
+              error={null}
+              className="pointer-events-none"
+            >
+              <Page 
+                pageNumber={currentPage} 
+                width={containerWidth * scale}
+                renderTextLayer={false}
+                renderAnnotationLayer={false}
+              />
+            </Document>
+          )}
         </div>
         
         {/* Page navigation */}
