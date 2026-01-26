@@ -453,7 +453,7 @@ export default function ProjectDetails() {
             </Dialog>
 
             <ObjectUploader
-              maxNumberOfFiles={10}
+              maxNumberOfFiles={50}
               maxFileSize={52428800}
               buttonClassName="w-full sm:w-auto"
               onGetUploadParameters={async (file) => {
