@@ -1,6 +1,6 @@
 import { useParams, Link, useLocation } from "wouter";
 import { useProject, useDeleteProject, useUpdateProject } from "@/hooks/use-projects";
-import { useProjectTasks, useCreateTask, useDeleteTask, useUpdateTask } from "@/hooks/use-tasks";
+import { useProjectTasks, useCreateTask, useDeleteTask, useUpdateTask, useTaskStatusHistory } from "@/hooks/use-tasks";
 import { useProjectFiles, useProjectFolders, useCreateFile, useDeleteFile, useCreateFolder, useDeleteFolder } from "@/hooks/use-files";
 import { Button } from "@/components/ui/button";
 import { 
@@ -30,7 +30,8 @@ import {
   StickyNote,
   Building2,
   Check,
-  ChevronsUpDown
+  ChevronsUpDown,
+  Clock
 } from "lucide-react";
 import { 
   DropdownMenu, 
@@ -182,6 +183,9 @@ export default function ProjectDetails() {
   const [editTaskStatus, setEditTaskStatus] = useState("pending");
   const [editTaskPriority, setEditTaskPriority] = useState("medium");
   const [editTaskPercentComplete, setEditTaskPercentComplete] = useState(0);
+  
+  // Task status history
+  const { data: taskStatusHistory = [], isLoading: isHistoryLoading } = useTaskStatusHistory(editingTask?.id || null);
 
   const getStatusColor = (status: string) => {
     const statusObj = PROJECT_STATUSES.find(s => s.value === status);
@@ -1624,6 +1628,43 @@ export default function ProjectDetails() {
               <p className="text-xs text-muted-foreground">
                 Status automatically updates: 1-99% = In Progress, 100% = Completed
               </p>
+            </div>
+
+            {/* Status History Section */}
+            <div className="grid gap-2 border-t pt-4">
+              <Label className="flex items-center gap-2">
+                <Clock className="h-4 w-4" />
+                Status History
+              </Label>
+              <div className="max-h-40 overflow-y-auto space-y-2">
+                {isHistoryLoading ? (
+                  <p className="text-xs text-muted-foreground">Loading history...</p>
+                ) : taskStatusHistory.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">No status changes recorded</p>
+                ) : (
+                  taskStatusHistory.map((entry) => (
+                    <div key={entry.id} className="text-xs bg-muted/50 p-2 rounded-md" data-testid={`history-entry-${entry.id}`}>
+                      <div className="flex justify-between items-start gap-2">
+                        <span className="font-medium">{entry.changedByName}</span>
+                        <span className="text-muted-foreground whitespace-nowrap">
+                          {new Date(entry.changedAt).toLocaleDateString()} {new Date(entry.changedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      </div>
+                      <div className="mt-1">
+                        {entry.previousStatus !== null && entry.newStatus !== null && (
+                          <span>Status: {entry.previousStatus} → {entry.newStatus}</span>
+                        )}
+                        {entry.previousStatus !== null && entry.newStatus !== null && entry.previousPercentComplete !== null && entry.newPercentComplete !== null && (
+                          <span className="mx-1">|</span>
+                        )}
+                        {entry.previousPercentComplete !== null && entry.newPercentComplete !== null && (
+                          <span>Progress: {entry.previousPercentComplete}% → {entry.newPercentComplete}%</span>
+                        )}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
             </div>
           </div>
           <DialogFooter className="mt-4">

@@ -1,9 +1,9 @@
 import {
-  projects, tasks, equipment, allocations, folders, files, users, customers, dailyReports, maintenanceLogs, communications,
+  projects, tasks, equipment, allocations, folders, files, users, customers, dailyReports, maintenanceLogs, communications, taskStatusHistory,
   type InsertProject, type InsertTask, type InsertEquipment, type InsertAllocation, type InsertFolder, type InsertFileMetadata,
-  type InsertCustomer, type InsertDailyReport, type InsertMaintenanceLog, type InsertCommunication,
+  type InsertCustomer, type InsertDailyReport, type InsertMaintenanceLog, type InsertCommunication, type InsertTaskStatusHistory,
   type Project, type Task, type Equipment, type Allocation, type Folder, type FileMetadata,
-  type Customer, type DailyReport, type MaintenanceLog, type Communication,
+  type Customer, type DailyReport, type MaintenanceLog, type Communication, type TaskStatusHistory,
   type User, type UpsertUser
 } from "@shared/schema";
 import { db } from "./db";
@@ -36,6 +36,10 @@ export interface IStorage {
   createTask(task: InsertTask): Promise<Task>;
   updateTask(id: number, task: Partial<InsertTask>): Promise<Task>;
   deleteTask(id: number): Promise<void>;
+
+  // Task Status History
+  getTaskStatusHistory(taskId: number): Promise<TaskStatusHistory[]>;
+  createTaskStatusHistory(history: InsertTaskStatusHistory): Promise<TaskStatusHistory>;
 
   // Equipment
   getEquipmentList(): Promise<Equipment[]>;
@@ -233,6 +237,15 @@ export class DatabaseStorage implements IStorage {
   }
   async deleteTask(id: number): Promise<void> {
     await db.delete(tasks).where(eq(tasks.id, id));
+  }
+
+  // Task Status History
+  async getTaskStatusHistory(taskId: number): Promise<TaskStatusHistory[]> {
+    return db.select().from(taskStatusHistory).where(eq(taskStatusHistory.taskId, taskId)).orderBy(desc(taskStatusHistory.changedAt));
+  }
+  async createTaskStatusHistory(history: InsertTaskStatusHistory): Promise<TaskStatusHistory> {
+    const [record] = await db.insert(taskStatusHistory).values(history).returning();
+    return record;
   }
 
   // Equipment

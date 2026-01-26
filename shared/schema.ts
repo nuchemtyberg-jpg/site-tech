@@ -74,6 +74,23 @@ export const insertTaskSchema = createInsertSchema(tasks).omit({ id: true, creat
 export type Task = typeof tasks.$inferSelect;
 export type InsertTask = z.infer<typeof insertTaskSchema>;
 
+// Task Status History - tracks changes to task status and percent complete
+export const taskStatusHistory = pgTable("task_status_history", {
+  id: serial("id").primaryKey(),
+  taskId: integer("task_id").notNull(),
+  previousStatus: text("previous_status"),
+  newStatus: text("new_status"),
+  previousPercentComplete: integer("previous_percent_complete"),
+  newPercentComplete: integer("new_percent_complete"),
+  changedByUserId: text("changed_by_user_id").notNull(),
+  changedByName: text("changed_by_name").notNull(),
+  changedAt: timestamp("changed_at").defaultNow(),
+});
+
+export const insertTaskStatusHistorySchema = createInsertSchema(taskStatusHistory).omit({ id: true, changedAt: true });
+export type TaskStatusHistory = typeof taskStatusHistory.$inferSelect;
+export type InsertTaskStatusHistory = z.infer<typeof insertTaskStatusHistorySchema>;
+
 // Equipment
 export const equipment = pgTable("equipment", {
   id: serial("id").primaryKey(),

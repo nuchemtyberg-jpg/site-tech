@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, buildUrl } from "@shared/routes";
-import type { InsertTask } from "@shared/schema";
+import type { InsertTask, TaskStatusHistory } from "@shared/schema";
 
 export function useProjectTasks(projectId: number) {
   return useQuery({
@@ -84,5 +84,17 @@ export function useDeleteTask() {
       queryClient.invalidateQueries({ queryKey: [api.tasks.getAll.path] });
       queryClient.refetchQueries({ queryKey: [api.tasks.list.path] }); 
     },
+  });
+}
+
+export function useTaskStatusHistory(taskId: number | null) {
+  return useQuery<TaskStatusHistory[]>({
+    queryKey: ["/api/tasks", taskId, "history"],
+    queryFn: async () => {
+      const res = await fetch(`/api/tasks/${taskId}/history`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch task history");
+      return res.json();
+    },
+    enabled: !!taskId,
   });
 }

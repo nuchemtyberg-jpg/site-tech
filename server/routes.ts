@@ -5,6 +5,7 @@ import { api } from "@shared/routes";
 import { z } from "zod";
 import { setupAuth, registerAuthRoutes } from "./replit_integrations/auth";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
+import type { User } from "@shared/schema";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -136,11 +137,46 @@ export async function registerRoutes(
   app.put(api.tasks.update.path, async (req, res) => {
     try {
       const input = api.tasks.update.input.parse(req.body);
-      const task = await storage.updateTask(Number(req.params.id), input);
+      const taskId = Number(req.params.id);
+      
+      // Get the current task to compare status/percent changes
+      const currentTask = await storage.getTask(taskId);
+      if (!currentTask) {
+        return res.status(404).json({ message: "Task not found" });
+      }
+      
+      // Check if status or percentComplete changed
+      const statusChanged = input.status !== undefined && input.status !== currentTask.status;
+      const percentChanged = input.percentComplete !== undefined && input.percentComplete !== currentTask.percentComplete;
+      
+      // Update the task
+      const task = await storage.updateTask(taskId, input);
+      
+      // Log status/percent changes if there were any
+      if ((statusChanged || percentChanged) && req.user) {
+        const user = req.user as User;
+        const userName = [user.firstName, user.lastName].filter(Boolean).join(' ') || user.email || 'Unknown User';
+        await storage.createTaskStatusHistory({
+          taskId,
+          previousStatus: statusChanged ? currentTask.status : null,
+          newStatus: statusChanged ? input.status! : null,
+          previousPercentComplete: percentChanged ? currentTask.percentComplete : null,
+          newPercentComplete: percentChanged ? input.percentComplete! : null,
+          changedByUserId: user.id,
+          changedByName: userName,
+        });
+      }
+      
       res.json(task);
     } catch (err) {
       return res.status(404).json({ message: "Task not found" });
     }
+  });
+
+  // Task Status History
+  app.get("/api/tasks/:id/history", async (req, res) => {
+    const history = await storage.getTaskStatusHistory(Number(req.params.id));
+    res.json(history);
   });
 
   app.delete(api.tasks.delete.path, async (req, res) => {
