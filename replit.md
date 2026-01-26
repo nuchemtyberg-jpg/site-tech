@@ -43,10 +43,19 @@ Authentication is handled through `server/replit_integrations/auth/` with Passpo
 
 ### Data Models
 Four main entities defined in `shared/schema.ts`:
-- **Projects**: Core entity with name, location, dates, status, and color
+- **Projects**: Core entity with projectNumber (auto-generated S-1000+), name, streetAddress, city, state, customerId, status, notes, and color
+  - Status options: new, bidding, takeoff_done, proposal_sent, active, completed, bid_lost, archive
 - **Tasks**: Belong to projects with title, description, dates, status, and priority
 - **Equipment**: Inventory items with type, status, and notes
 - **Allocations**: Link equipment to projects for scheduling
+- **Customers**: Customer information with name, company, contact details
+
+### Address Autocomplete
+The project creation form includes address autocomplete using OpenStreetMap's Nominatim API:
+- Component: `client/src/components/AddressAutocomplete.tsx`
+- No API key required (free service)
+- Debounced search with AbortController for race condition handling
+- Parses addresses into streetAddress, city, and state (with full state name to abbreviation conversion)
 
 ### Build System
 - **Development**: Vite dev server with HMR proxied through Express
