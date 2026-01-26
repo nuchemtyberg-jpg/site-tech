@@ -4,6 +4,7 @@ import { Link } from "wouter";
 import { Plus, Search, MapPin, Calendar, ArrowRight, DollarSign, UserPlus, Hash } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { AddressAutocomplete } from "@/components/AddressAutocomplete";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
@@ -193,9 +194,25 @@ export default function Projects() {
                   )}
                 />
 
-                {/* Address Fields */}
+                {/* Address Fields with Autocomplete */}
                 <div className="space-y-4">
                   <h4 className="text-sm font-medium text-muted-foreground">Project Address</h4>
+                  <FormItem>
+                    <FormLabel>Search Address</FormLabel>
+                    <AddressAutocomplete
+                      onAddressSelect={(address) => {
+                        form.setValue("streetAddress", address.streetAddress);
+                        form.setValue("city", address.city);
+                        if (address.state) {
+                          form.setValue("state", address.state);
+                        }
+                      }}
+                      placeholder="Start typing an address..."
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Type to search, or fill in the fields below manually
+                    </p>
+                  </FormItem>
                   <FormField
                     control={form.control}
                     name="streetAddress"
