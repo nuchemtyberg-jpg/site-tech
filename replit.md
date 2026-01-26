@@ -1,10 +1,15 @@
-# ConstructOS - Construction Project Management
+# SiteTech - Sitework Management Platform
 
 ## Overview
 
-ConstructOS is a full-stack construction project management application built with React, Express, and PostgreSQL. It provides tools for managing construction projects, tasks, equipment allocation, and scheduling with a modern dark-themed UI designed for construction industry workflows.
+SiteTech is a comprehensive web-based sitework management platform for construction companies, built with React, Express, and PostgreSQL. It provides tools for managing construction projects through their full lifecycle (from bidding to completion), customer relationships, equipment inventory, and scheduling.
 
-The application features a dashboard for project analytics, project management with task tracking, equipment inventory management, and a weekly scheduling calendar view.
+Core features include:
+- **Projects**: Full lifecycle management from bidding to completion with customer linking
+- **Customers**: Database with contact info and communication history
+- **Dashboard**: Operational metrics and analytics charts
+- **Scheduling**: Calendar view with task scheduling and equipment/manpower allocation
+- **Equipment**: Inventory with location tracking, maintenance schedules, and repair logs
 
 ## User Preferences
 
