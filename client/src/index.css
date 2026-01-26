@@ -80,3 +80,33 @@
   from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: translateY(0); }
 }
+
+/* Uppy Modal - Center content on mobile */
+.uppy-Dashboard-overlay {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+.uppy-Dashboard-inner {
+  position: relative !important;
+  top: auto !important;
+  left: auto !important;
+  transform: none !important;
+  margin: auto !important;
+}
+
+@media (max-width: 640px) {
+  .uppy-Dashboard-inner {
+    width: 95vw !important;
+    max-height: 70vh !important;
+  }
+  
+  .uppy-Dashboard-AddFiles {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+    min-height: 250px !important;
+  }
+}
