@@ -17,6 +17,7 @@ import Schedule from "@/pages/Schedule";
 import Equipment from "@/pages/Equipment";
 import EquipmentDetails from "@/pages/EquipmentDetails";
 import AuthPage from "@/pages/AuthPage";
+import PDFViewerPage from "@/pages/PDFViewerPage";
 import NotFound from "@/pages/not-found";
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
@@ -41,12 +42,31 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
   );
 }
 
+function ProtectedFullScreenRoute({ component: Component }: { component: React.ComponentType }) {
+  const { user, isLoading } = useAuth();
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-gray-900">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <AuthPage />;
+  }
+
+  return <Component />;
+}
+
 function Router() {
   return (
     <Switch>
       <Route path="/" component={() => <ProtectedRoute component={Dashboard} />} />
       <Route path="/projects" component={() => <ProtectedRoute component={Projects} />} />
       <Route path="/projects/:id" component={() => <ProtectedRoute component={ProjectDetails} />} />
+      <Route path="/projects/:projectId/pdf/:fileId" component={() => <ProtectedFullScreenRoute component={PDFViewerPage} />} />
       <Route path="/customers" component={() => <ProtectedRoute component={Customers} />} />
       <Route path="/customers/:id" component={() => <ProtectedRoute component={CustomerDetails} />} />
       <Route path="/schedule" component={() => <ProtectedRoute component={Schedule} />} />

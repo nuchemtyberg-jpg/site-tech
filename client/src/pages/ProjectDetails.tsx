@@ -1,4 +1,4 @@
-import { useParams, Link } from "wouter";
+import { useParams, Link, useLocation } from "wouter";
 import { useProject, useDeleteProject } from "@/hooks/use-projects";
 import { useProjectTasks, useCreateTask, useDeleteTask } from "@/hooks/use-tasks";
 import { useProjectFiles, useProjectFolders, useCreateFile, useDeleteFile, useCreateFolder, useDeleteFolder } from "@/hooks/use-files";
@@ -52,6 +52,7 @@ import { PDFViewer } from "@/components/PDFViewer";
 export default function ProjectDetails() {
   const { id } = useParams();
   const projectId = Number(id);
+  const [, setLocation] = useLocation();
   const { data: project, isLoading: isProjectLoading } = useProject(projectId);
   const { data: tasks, isLoading: isTasksLoading } = useProjectTasks(projectId);
   const { data: files, isLoading: isFilesLoading } = useProjectFiles(projectId);
@@ -74,6 +75,18 @@ export default function ProjectDetails() {
   // Keep ref in sync with state for use in callbacks
   currentFolderIdRef.current = currentFolderId;
   const { toast } = useToast();
+
+  const handleFileClick = (file: FileMetadata) => {
+    if (isPdfFile(file.contentType)) {
+      const params = new URLSearchParams({
+        name: file.name,
+        path: file.objectPath
+      });
+      setLocation(`/projects/${projectId}/pdf/${file.id}?${params.toString()}`);
+    } else {
+      setViewingFile(file);
+    }
+  };
 
   const handleShareFile = async (file: FileMetadata) => {
     try {
@@ -616,7 +629,7 @@ export default function ProjectDetails() {
                   {otherFiles.map(file => (
                     <div key={file.id} className="group bg-card border border-border rounded-lg p-3 hover:border-primary/50 transition-all flex items-center justify-between" data-testid={`file-item-${file.id}`}>
                       <button 
-                        onClick={() => setViewingFile(file)}
+                        onClick={() => handleFileClick(file)}
                         className="flex items-center gap-3 flex-1 text-left hover:text-primary transition-colors"
                         data-testid={`button-view-file-${file.id}`}
                       >
