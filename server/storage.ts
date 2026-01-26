@@ -173,7 +173,8 @@ export class DatabaseStorage implements IStorage {
     
     await db.insert(folders).values([
       { projectId, name: "Takeoffs", parentId: officeFolder.id },
-      { projectId, name: "Proposals", parentId: officeFolder.id }
+      { projectId, name: "Proposals", parentId: officeFolder.id },
+      { projectId, name: "Supplier Quotes", parentId: officeFolder.id }
     ]);
     
     // Billing subfolder under Office
