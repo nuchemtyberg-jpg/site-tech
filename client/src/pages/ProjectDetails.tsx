@@ -35,7 +35,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { insertTaskSchema, type InsertTask } from "@shared/schema";
@@ -60,7 +60,7 @@ export default function ProjectDetails() {
   const [isTaskOpen, setIsTaskOpen] = useState(false);
   const [isFolderOpen, setIsFolderOpen] = useState(false);
   const [folderName, setFolderName] = useState("");
-  const [uploadedFilePaths, setUploadedFilePaths] = useState<Map<string, string>>(new Map());
+  const uploadedFilePathsRef = useRef<Map<string, string>>(new Map());
   const { toast } = useToast();
 
   const form = useForm<InsertTask>({
@@ -119,7 +119,7 @@ export default function ProjectDetails() {
     let successCount = 0;
     
     for (const file of successfulUploads) {
-      const objectPath = uploadedFilePaths.get(file.id) || file.meta?.objectPath || "";
+      const objectPath = uploadedFilePathsRef.current.get(file.id) || file.meta?.objectPath || "";
       
       if (!objectPath) {
         console.error("Missing objectPath for file:", file.name);
@@ -140,7 +140,7 @@ export default function ProjectDetails() {
       }
     }
     
-    setUploadedFilePaths(new Map());
+    uploadedFilePathsRef.current = new Map();
     
     if (successCount > 0) {
       toast({ title: "Upload Complete", description: `${successCount} file(s) uploaded successfully.` });
@@ -394,11 +394,7 @@ export default function ProjectDetails() {
                 });
                 const { uploadURL, objectPath } = await res.json();
                 
-                setUploadedFilePaths(prev => {
-                  const newMap = new Map(prev);
-                  newMap.set(file.id, objectPath);
-                  return newMap;
-                });
+                uploadedFilePathsRef.current.set(file.id, objectPath);
                 
                 return {
                   method: "PUT",
