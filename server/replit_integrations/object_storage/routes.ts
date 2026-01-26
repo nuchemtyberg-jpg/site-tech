@@ -36,12 +36,10 @@ export function registerObjectStorageRoutes(app: Express): void {
 
   /**
    * Serve uploaded objects.
+   * Using a named parameter with a simpler regex or none to see if it fixes the PathError.
    */
-  app.get("/objects/*", (req, res) => {
-    // In express 4.x, the asterisk is captured in req.params[0]
-    // We use req.params[0] which is standard for catch-all routes
-    const objectPath = req.params[0];
-    const fullPath = `/objects/${objectPath}`;
+  app.get("/objects/:path", (req, res) => {
+    const fullPath = req.path;
     
     objectStorageService.getObjectEntityFile(fullPath)
       .then(objectFile => objectStorageService.downloadObject(objectFile, res))
