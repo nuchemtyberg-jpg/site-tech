@@ -873,28 +873,13 @@ export function PDFViewer({ url, fileName, onClose, onShare }: PDFViewerProps) {
             visibility: isLoading || loadError ? "hidden" : "visible"
           }}
         >
-          {/* Use object tag for iOS compatibility, iframe for others */}
-          {isIOS() ? (
-            <object
-              data={pdfBlobUrl || ""}
-              type="application/pdf"
-              className="w-full h-full bg-white border-0 pointer-events-none"
-              aria-label={fileName}
-            >
-              <embed
-                src={pdfBlobUrl || ""}
-                type="application/pdf"
-                className="w-full h-full"
-              />
-            </object>
-          ) : (
-            <iframe
-              ref={iframeRef}
-              src={pdfBlobUrl || ""}
-              title={fileName}
-              className="w-full h-full bg-white border-0 pointer-events-none"
-            />
-          )}
+          {/* Use embed for all platforms for better PDF compatibility */}
+          <embed
+            src={pdfBlobUrl ? `${pdfBlobUrl}#view=FitH` : ""}
+            type="application/pdf"
+            className="w-full h-full bg-white border-0 pointer-events-none"
+            title={fileName}
+          />
         </div>
         <canvas
           ref={canvasRef}
