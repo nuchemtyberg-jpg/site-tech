@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { 
   ZoomIn, 
@@ -22,6 +22,12 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { PDFDocument, rgb } from "pdf-lib";
+
+// Detect if running on iOS
+const isIOS = () => {
+  return /iPad|iPhone|iPod/.test(navigator.userAgent) || 
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+};
 
 interface PDFViewerProps {
   url: string;
@@ -686,7 +692,7 @@ export function PDFViewer({ url, fileName, onClose, onShare }: PDFViewerProps) {
     let cancelled = false;
     
     // Clean up previous blob URL if exists
-    if (blobUrlRef.current) {
+    if (blobUrlRef.current && !blobUrlRef.current.startsWith("data:")) {
       URL.revokeObjectURL(blobUrlRef.current);
       blobUrlRef.current = null;
     }
@@ -704,10 +710,28 @@ export function PDFViewer({ url, fileName, onClose, onShare }: PDFViewerProps) {
         const blob = await response.blob();
         if (cancelled) return;
         
-        const blobUrl = URL.createObjectURL(blob);
-        blobUrlRef.current = blobUrl;
-        setPdfBlobUrl(blobUrl);
-        setIsLoading(false);
+        // On iOS, use data URL instead of blob URL for better compatibility
+        if (isIOS()) {
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            if (cancelled) return;
+            const dataUrl = reader.result as string;
+            blobUrlRef.current = dataUrl;
+            setPdfBlobUrl(dataUrl);
+            setIsLoading(false);
+          };
+          reader.onerror = () => {
+            if (cancelled) return;
+            setLoadError("Failed to read PDF file");
+            setIsLoading(false);
+          };
+          reader.readAsDataURL(blob);
+        } else {
+          const blobUrl = URL.createObjectURL(blob);
+          blobUrlRef.current = blobUrl;
+          setPdfBlobUrl(blobUrl);
+          setIsLoading(false);
+        }
       } catch (err) {
         if (cancelled) return;
         setLoadError(err instanceof Error ? err.message : "Failed to load PDF");
@@ -719,10 +743,11 @@ export function PDFViewer({ url, fileName, onClose, onShare }: PDFViewerProps) {
     
     return () => {
       cancelled = true;
-      if (blobUrlRef.current) {
+      // Only revoke blob URLs, not data URLs
+      if (blobUrlRef.current && !blobUrlRef.current.startsWith("data:")) {
         URL.revokeObjectURL(blobUrlRef.current);
-        blobUrlRef.current = null;
       }
+      blobUrlRef.current = null;
     };
   }, [url]);
 
@@ -848,12 +873,28 @@ export function PDFViewer({ url, fileName, onClose, onShare }: PDFViewerProps) {
             visibility: isLoading || loadError ? "hidden" : "visible"
           }}
         >
-          <iframe
-            ref={iframeRef}
-            src={pdfBlobUrl || ""}
-            title={fileName}
-            className="w-full h-full bg-white border-0 pointer-events-none"
-          />
+          {/* Use object tag for iOS compatibility, iframe for others */}
+          {isIOS() ? (
+            <object
+              data={pdfBlobUrl || ""}
+              type="application/pdf"
+              className="w-full h-full bg-white border-0 pointer-events-none"
+              aria-label={fileName}
+            >
+              <embed
+                src={pdfBlobUrl || ""}
+                type="application/pdf"
+                className="w-full h-full"
+              />
+            </object>
+          ) : (
+            <iframe
+              ref={iframeRef}
+              src={pdfBlobUrl || ""}
+              title={fileName}
+              className="w-full h-full bg-white border-0 pointer-events-none"
+            />
+          )}
         </div>
         <canvas
           ref={canvasRef}
