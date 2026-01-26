@@ -120,6 +120,28 @@ export default function ProjectDetails() {
   const currentFolders = folders?.filter(f => f.parentId === currentFolderId) || [];
   const currentFiles = files?.filter(f => f.folderId === currentFolderId) || [];
   
+  // Separate image files from other files
+  const imageFiles = currentFiles.filter(f => isImageFile(f.contentType));
+  const otherFiles = currentFiles.filter(f => !isImageFile(f.contentType));
+  
+  // Group images by date (month and day)
+  const groupedImages = imageFiles.reduce((groups, file) => {
+    const date = file.createdAt ? new Date(file.createdAt) : new Date();
+    const dateKey = format(date, "MMMM d, yyyy");
+    if (!groups[dateKey]) {
+      groups[dateKey] = [];
+    }
+    groups[dateKey].push(file);
+    return groups;
+  }, {} as Record<string, typeof imageFiles>);
+  
+  // Sort date groups by date (newest first)
+  const sortedDateGroups = Object.entries(groupedImages).sort((a, b) => {
+    const dateA = new Date(a[0]);
+    const dateB = new Date(b[0]);
+    return dateB.getTime() - dateA.getTime();
+  });
+  
   const currentFolder = folders?.find(f => f.id === currentFolderId);
   
   const getBreadcrumbs = () => {
@@ -541,11 +563,57 @@ export default function ProjectDetails() {
                 </div>
               )}
 
-              {/* Files */}
-              {currentFiles.length > 0 && (
+              {/* Photos - Thumbnails grouped by date */}
+              {sortedDateGroups.length > 0 && (
+                <div className="space-y-6">
+                  <h3 className="text-sm font-medium text-muted-foreground">Photos</h3>
+                  {sortedDateGroups.map(([dateGroup, photos]) => (
+                    <div key={dateGroup} className="space-y-3">
+                      <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{dateGroup}</h4>
+                      <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2">
+                        {photos.map(photo => (
+                          <div 
+                            key={photo.id} 
+                            className="group relative aspect-square bg-card border border-border rounded-lg overflow-hidden hover:border-primary/50 transition-all cursor-pointer"
+                            data-testid={`photo-item-${photo.id}`}
+                          >
+                            <button 
+                              onClick={() => setViewingFile(photo)}
+                              className="w-full h-full"
+                              data-testid={`button-view-photo-${photo.id}`}
+                            >
+                              <img 
+                                src={photo.objectPath} 
+                                alt={photo.name}
+                                className="w-full h-full object-cover"
+                                loading="lazy"
+                              />
+                            </button>
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className="absolute top-1 right-1 h-6 w-6 opacity-0 group-hover:opacity-100 bg-black/50 hover:bg-black/70 text-white"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                deleteFileMutation.mutate(photo.id);
+                              }}
+                              data-testid={`button-delete-photo-${photo.id}`}
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Other Files (PDFs, documents, etc.) */}
+              {otherFiles.length > 0 && (
                 <div className="grid gap-2">
                   <h3 className="text-sm font-medium text-muted-foreground mb-2">Files</h3>
-                  {currentFiles.map(file => (
+                  {otherFiles.map(file => (
                     <div key={file.id} className="group bg-card border border-border rounded-lg p-3 hover:border-primary/50 transition-all flex items-center justify-between" data-testid={`file-item-${file.id}`}>
                       <button 
                         onClick={() => setViewingFile(file)}

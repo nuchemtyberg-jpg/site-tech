@@ -101,3 +101,18 @@ The PDF viewer (`client/src/components/PDFViewer.tsx`) provides professional mar
 ### Limitations
 - Annotations currently limited to first page only (multi-page support not implemented)
 - Text annotations use native browser prompt for input
+
+## Document Management
+
+### Photo Display
+- Photos in document folders are displayed as thumbnails in a responsive grid
+- Grid layout: 3 columns on mobile, scaling up to 6 columns on large screens
+- Photos are grouped by upload date (format: "Month Day, Year")
+- Date groups are sorted with newest first
+- Clicking a thumbnail opens the full image viewer
+- Delete button appears on hover (top-right corner of thumbnail)
+
+### File Types
+- **Images**: Displayed as thumbnail grid grouped by date
+- **PDFs**: Displayed in list format, opens PDF viewer with annotation tools
+- **Other files**: Displayed in list format with download capability
