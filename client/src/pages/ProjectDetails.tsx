@@ -1387,20 +1387,87 @@ export default function ProjectDetails() {
         <TabsContent value="photos" className="space-y-4">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-semibold">Project Photos</h3>
-            <Button data-testid="button-upload-photo">
-              <Upload className="w-4 h-4 mr-2" /> Upload Photos
-            </Button>
+            <ObjectUploader
+              maxNumberOfFiles={50}
+              maxFileSize={52428800}
+              buttonClassName="w-full sm:w-auto"
+              allowedFileTypes={["image/*"]}
+              onGetUploadParameters={async (file) => {
+                const res = await fetch("/api/uploads/request-url", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    name: file.name,
+                    size: file.size,
+                    contentType: file.type,
+                  }),
+                });
+                const { uploadURL, objectPath } = await res.json();
+                
+                uploadedFilePathsRef.current.set(file.id, objectPath);
+                
+                return {
+                  method: "PUT",
+                  url: uploadURL,
+                  headers: { "Content-Type": file.type || "application/octet-stream" },
+                };
+              }}
+              onComplete={handleUploadComplete}
+            >
+              <Camera className="w-4 h-4 mr-2" /> Upload Photos
+            </ObjectUploader>
           </div>
           
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-            <div className="flex items-center justify-center h-40 border-2 border-dashed border-muted-foreground/25 rounded-lg bg-muted/50">
-              <div className="text-center text-muted-foreground">
-                <Camera className="w-8 h-8 mx-auto mb-2" />
-                <p className="text-sm">No photos yet</p>
-                <p className="text-xs">Upload photos to get started</p>
+          {/* Photo Grid */}
+          {(() => {
+            const photoFiles = files?.filter(f => isImageFile(f.contentType)) || [];
+            if (photoFiles.length === 0) {
+              return (
+                <div className="flex items-center justify-center h-40 border-2 border-dashed border-muted-foreground/25 rounded-lg bg-muted/50">
+                  <div className="text-center text-muted-foreground">
+                    <Camera className="w-8 h-8 mx-auto mb-2" />
+                    <p className="text-sm">No photos yet</p>
+                    <p className="text-xs">Upload photos to get started</p>
+                  </div>
+                </div>
+              );
+            }
+            return (
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                {photoFiles.map((photo) => (
+                  <div 
+                    key={photo.id} 
+                    className="relative group cursor-pointer rounded-lg overflow-hidden border bg-muted/50 aspect-square"
+                    onClick={() => setViewingFile(photo)}
+                    data-testid={`photo-card-${photo.id}`}
+                  >
+                    <img 
+                      src={photo.objectPath} 
+                      alt={photo.name}
+                      className="w-full h-full object-cover"
+                    />
+                    <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="text-white hover:bg-white/20"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setDeleteFileId(photo.id);
+                        }}
+                        data-testid={`button-delete-photo-${photo.id}`}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
+                    <div className="absolute bottom-0 left-0 right-0 bg-black/60 p-2">
+                      <p className="text-white text-xs truncate">{photo.name}</p>
+                    </div>
+                  </div>
+                ))}
               </div>
-            </div>
-          </div>
+            );
+          })()}
         </TabsContent>
       </Tabs>
 
