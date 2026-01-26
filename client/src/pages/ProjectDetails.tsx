@@ -1646,7 +1646,7 @@ export default function ProjectDetails() {
                     <div key={entry.id} className="text-xs bg-muted/50 p-2 rounded-md" data-testid={`history-entry-${entry.id}`}>
                       <div className="flex justify-between items-start gap-2">
                         <span className="font-medium">{entry.changedByName}</span>
-                        <span className="text-muted-foreground whitespace-nowrap">
+                        <span className="text-black dark:text-white whitespace-nowrap">
                           {new Date(entry.changedAt).toLocaleDateString()} {new Date(entry.changedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                         </span>
                       </div>
