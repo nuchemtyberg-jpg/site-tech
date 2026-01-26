@@ -505,7 +505,7 @@ export default function ProjectDetails() {
                     <FormItem>
                       <FormLabel>Project Name *</FormLabel>
                       <FormControl>
-                        <Input placeholder="e.g. Main Street Subdivision" {...field} data-testid="input-edit-project-name" />
+                        <Input placeholder="e.g. Main Street Subdivision" {...field} data-testid="input-edit-project-name" className="bg-white dark:bg-zinc-900 text-black dark:text-white" />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -534,7 +534,7 @@ export default function ProjectDetails() {
                       <FormItem>
                         <FormLabel>Street Address *</FormLabel>
                         <FormControl>
-                          <Input placeholder="123 Main Street" {...field} data-testid="input-edit-project-street" />
+                          <Input placeholder="123 Main Street" {...field} data-testid="input-edit-project-street" className="bg-white dark:bg-zinc-900 text-black dark:text-white" />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -548,7 +548,7 @@ export default function ProjectDetails() {
                         <FormItem>
                           <FormLabel>City *</FormLabel>
                           <FormControl>
-                            <Input placeholder="City" {...field} data-testid="input-edit-project-city" />
+                            <Input placeholder="City" {...field} data-testid="input-edit-project-city" className="bg-white dark:bg-zinc-900 text-black dark:text-white" />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -562,7 +562,7 @@ export default function ProjectDetails() {
                           <FormLabel>State *</FormLabel>
                           <Select onValueChange={field.onChange} value={field.value || ""}>
                             <FormControl>
-                              <SelectTrigger className="bg-white dark:bg-zinc-900" data-testid="select-edit-project-state">
+                              <SelectTrigger className="bg-white dark:bg-zinc-900 text-black dark:text-white" data-testid="select-edit-project-state">
                                 <SelectValue placeholder="Select" />
                               </SelectTrigger>
                             </FormControl>
@@ -585,7 +585,7 @@ export default function ProjectDetails() {
                         <FormItem>
                           <FormLabel>Zip Code</FormLabel>
                           <FormControl>
-                            <Input placeholder="12345" {...field} data-testid="input-edit-project-zip" />
+                            <Input placeholder="12345" {...field} data-testid="input-edit-project-zip" className="bg-white dark:bg-zinc-900 text-black dark:text-white" />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -664,7 +664,7 @@ export default function ProjectDetails() {
                       <FormLabel>Status *</FormLabel>
                       <Select onValueChange={field.onChange} value={field.value}>
                         <FormControl>
-                          <SelectTrigger className="bg-white dark:bg-zinc-900" data-testid="select-edit-project-status">
+                          <SelectTrigger className="bg-white dark:bg-zinc-900 text-black dark:text-white" data-testid="select-edit-project-status">
                             <SelectValue placeholder="Select status" />
                           </SelectTrigger>
                         </FormControl>
@@ -694,7 +694,7 @@ export default function ProjectDetails() {
                     <FormItem>
                       <FormLabel>Notes</FormLabel>
                       <FormControl>
-                        <Textarea placeholder="Additional project notes..." {...field} />
+                        <Textarea placeholder="Additional project notes..." {...field} className="bg-white dark:bg-zinc-900 text-black dark:text-white" />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -736,23 +736,23 @@ export default function ProjectDetails() {
               <form onSubmit={form.handleSubmit(onSubmitTask)} className="space-y-4 mt-4">
                 <div className="grid gap-2">
                   <Label htmlFor="title">Task Title</Label>
-                  <Input id="title" {...form.register("title")} placeholder="e.g. Foundation Pour" data-testid="input-task-title" />
+                  <Input id="title" {...form.register("title")} placeholder="e.g. Foundation Pour" data-testid="input-task-title" className="bg-white dark:bg-zinc-900 text-black dark:text-white" />
                   {form.formState.errors.title && <p className="text-red-500 text-xs">{form.formState.errors.title.message}</p>}
                 </div>
                 
                 <div className="grid gap-2">
                   <Label htmlFor="description">Description</Label>
-                  <Input id="description" {...form.register("description")} placeholder="Details..." data-testid="input-task-description" />
+                  <Input id="description" {...form.register("description")} placeholder="Details..." data-testid="input-task-description" className="bg-white dark:bg-zinc-900 text-black dark:text-white" />
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
                   <div className="grid gap-2">
                     <Label htmlFor="scheduledDate">Scheduled Date</Label>
-                    <Input id="scheduledDate" type="date" {...form.register("scheduledDate")} data-testid="input-task-scheduled" />
+                    <Input id="scheduledDate" type="date" {...form.register("scheduledDate")} data-testid="input-task-scheduled" className="bg-white dark:bg-zinc-900 text-black dark:text-white" />
                   </div>
                   <div className="grid gap-2">
                     <Label htmlFor="dueDate">Due Date</Label>
-                    <Input id="dueDate" type="date" {...form.register("dueDate")} data-testid="input-task-due" />
+                    <Input id="dueDate" type="date" {...form.register("dueDate")} data-testid="input-task-due" className="bg-white dark:bg-zinc-900 text-black dark:text-white" />
                   </div>
                 </div>
 
@@ -760,10 +760,10 @@ export default function ProjectDetails() {
                   <div className="grid gap-2">
                     <Label htmlFor="status">Status</Label>
                     <Select onValueChange={(val) => form.setValue("status", val)} defaultValue="pending">
-                      <SelectTrigger data-testid="select-task-status">
+                      <SelectTrigger data-testid="select-task-status" className="bg-white dark:bg-zinc-900 text-black dark:text-white">
                         <SelectValue placeholder="Status" />
                       </SelectTrigger>
-                      <SelectContent>
+                      <SelectContent className="bg-white dark:bg-zinc-900 text-black dark:text-white">
                         <SelectItem value="pending">Pending</SelectItem>
                         <SelectItem value="in_progress">In Progress</SelectItem>
                         <SelectItem value="completed">Completed</SelectItem>
@@ -774,10 +774,10 @@ export default function ProjectDetails() {
                   <div className="grid gap-2">
                     <Label htmlFor="priority">Priority</Label>
                     <Select onValueChange={(val) => form.setValue("priority", val)} defaultValue="medium">
-                      <SelectTrigger data-testid="select-task-priority">
+                      <SelectTrigger data-testid="select-task-priority" className="bg-white dark:bg-zinc-900 text-black dark:text-white">
                         <SelectValue placeholder="Priority" />
                       </SelectTrigger>
-                      <SelectContent>
+                      <SelectContent className="bg-white dark:bg-zinc-900 text-black dark:text-white">
                         <SelectItem value="low">Low</SelectItem>
                         <SelectItem value="medium">Medium</SelectItem>
                         <SelectItem value="high">High</SelectItem>
@@ -889,6 +889,7 @@ export default function ProjectDetails() {
                       onChange={(e) => setFolderName(e.target.value)} 
                       placeholder="e.g. Site Photos"
                       data-testid="input-folder-name"
+                      className="bg-white dark:bg-zinc-900 text-black dark:text-white"
                     />
                   </div>
                   <DialogFooter>

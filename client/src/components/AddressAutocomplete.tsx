@@ -262,7 +262,7 @@ export function AddressAutocomplete({
           onKeyDown={handleKeyDown}
           onFocus={() => results.length > 0 && setIsOpen(true)}
           placeholder={placeholder}
-          className="pl-10 pr-10"
+          className="pl-10 pr-10 bg-white dark:bg-zinc-900 text-black dark:text-white"
           data-testid="input-address-autocomplete"
         />
         {isLoading && (
@@ -271,7 +271,7 @@ export function AddressAutocomplete({
       </div>
 
       {isOpen && results.length > 0 && (
-        <div className="absolute z-50 mt-1 w-full rounded-md border border-border bg-popover shadow-lg">
+        <div className="absolute z-50 mt-1 w-full rounded-md border border-border bg-white dark:bg-zinc-900 text-black dark:text-white shadow-lg">
           <ul className="max-h-60 overflow-auto py-1">
             {results.map((result, index) => (
               <li

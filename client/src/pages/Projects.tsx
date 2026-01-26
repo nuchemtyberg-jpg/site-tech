@@ -259,7 +259,7 @@ export default function Projects() {
                     <FormItem>
                       <FormLabel>Project Name *</FormLabel>
                       <FormControl>
-                        <Input placeholder="e.g. Main Street Subdivision" {...field} data-testid="input-project-name" />
+                        <Input placeholder="e.g. Main Street Subdivision" {...field} data-testid="input-project-name" className="bg-white dark:bg-zinc-900 text-black dark:text-white" />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -291,7 +291,7 @@ export default function Projects() {
                       <FormItem>
                         <FormLabel>Street Address *</FormLabel>
                         <FormControl>
-                          <Input placeholder="123 Main Street" {...field} data-testid="input-project-street" />
+                          <Input placeholder="123 Main Street" {...field} data-testid="input-project-street" className="bg-white dark:bg-zinc-900 text-black dark:text-white" />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -305,7 +305,7 @@ export default function Projects() {
                         <FormItem>
                           <FormLabel>City *</FormLabel>
                           <FormControl>
-                            <Input placeholder="City" {...field} data-testid="input-project-city" />
+                            <Input placeholder="City" {...field} data-testid="input-project-city" className="bg-white dark:bg-zinc-900 text-black dark:text-white" />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -319,7 +319,7 @@ export default function Projects() {
                           <FormLabel>State *</FormLabel>
                           <Select onValueChange={field.onChange} value={field.value || ""}>
                             <FormControl>
-                              <SelectTrigger data-testid="select-project-state" className="bg-white dark:bg-zinc-900">
+                              <SelectTrigger data-testid="select-project-state" className="bg-white dark:bg-zinc-900 text-black dark:text-white">
                                 <SelectValue placeholder="Select" />
                               </SelectTrigger>
                             </FormControl>
@@ -342,7 +342,7 @@ export default function Projects() {
                         <FormItem>
                           <FormLabel>Zip Code</FormLabel>
                           <FormControl>
-                            <Input placeholder="12345" {...field} data-testid="input-project-zip" />
+                            <Input placeholder="12345" {...field} data-testid="input-project-zip" className="bg-white dark:bg-zinc-900 text-black dark:text-white" />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -447,7 +447,7 @@ export default function Projects() {
                       <FormLabel>Status *</FormLabel>
                       <Select onValueChange={field.onChange} value={field.value}>
                         <FormControl>
-                          <SelectTrigger data-testid="select-project-status" className="bg-white dark:bg-zinc-900">
+                          <SelectTrigger data-testid="select-project-status" className="bg-white dark:bg-zinc-900 text-black dark:text-white">
                             <SelectValue placeholder="Select status" />
                           </SelectTrigger>
                         </FormControl>
@@ -480,7 +480,8 @@ export default function Projects() {
                         <Textarea 
                           placeholder="Additional project notes..." 
                           {...field} 
-                          data-testid="input-project-notes" 
+                          data-testid="input-project-notes"
+                          className="bg-white dark:bg-zinc-900 text-black dark:text-white"
                         />
                       </FormControl>
                       <FormMessage />
@@ -516,7 +517,7 @@ export default function Projects() {
                     <FormItem>
                       <FormLabel>Customer Name *</FormLabel>
                       <FormControl>
-                        <Input placeholder="John Smith" {...field} data-testid="input-customer-name" />
+                        <Input placeholder="John Smith" {...field} data-testid="input-customer-name" className="bg-white dark:bg-zinc-900 text-black dark:text-white" />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -529,7 +530,7 @@ export default function Projects() {
                     <FormItem>
                       <FormLabel>Company</FormLabel>
                       <FormControl>
-                        <Input placeholder="ABC Construction" {...field} data-testid="input-customer-company" />
+                        <Input placeholder="ABC Construction" {...field} data-testid="input-customer-company" className="bg-white dark:bg-zinc-900 text-black dark:text-white" />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -542,7 +543,7 @@ export default function Projects() {
                     <FormItem>
                       <FormLabel>Email</FormLabel>
                       <FormControl>
-                        <Input type="email" placeholder="john@example.com" {...field} data-testid="input-customer-email" />
+                        <Input type="email" placeholder="john@example.com" {...field} data-testid="input-customer-email" className="bg-white dark:bg-zinc-900 text-black dark:text-white" />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -555,7 +556,7 @@ export default function Projects() {
                     <FormItem>
                       <FormLabel>Phone</FormLabel>
                       <FormControl>
-                        <Input placeholder="(555) 123-4567" {...field} data-testid="input-customer-phone" />
+                        <Input placeholder="(555) 123-4567" {...field} data-testid="input-customer-phone" className="bg-white dark:bg-zinc-900 text-black dark:text-white" />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -580,7 +581,7 @@ export default function Projects() {
           <Search className="w-5 h-5 text-muted-foreground ml-2" />
           <Input
             placeholder="Search projects..."
-            className="border-0 bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0"
+            className="border-0 bg-white dark:bg-zinc-900 text-black dark:text-white focus-visible:ring-0 focus-visible:ring-offset-0"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             data-testid="input-search-projects"
