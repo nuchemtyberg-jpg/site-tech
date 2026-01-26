@@ -76,6 +76,7 @@ export function PDFViewer({ url, fileName, onClose, onShare }: PDFViewerProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [pdfBlobUrl, setPdfBlobUrl] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const blobUrlRef = useRef<string | null>(null);
   const [scale, setScale] = useState(1);
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [activeTool, setActiveTool] = useState<MarkupTool>("none");
@@ -683,17 +684,28 @@ export function PDFViewer({ url, fileName, onClose, onShare }: PDFViewerProps) {
   // Preload PDF as blob for faster display
   useEffect(() => {
     let cancelled = false;
+    
+    // Clean up previous blob URL if exists
+    if (blobUrlRef.current) {
+      URL.revokeObjectURL(blobUrlRef.current);
+      blobUrlRef.current = null;
+    }
+    
     const loadPdf = async () => {
       try {
         setIsLoading(true);
         setLoadError(null);
-        const response = await fetch(url);
+        setPdfBlobUrl(null);
+        
+        const response = await fetch(url, { credentials: "include" });
         if (!response.ok) {
           throw new Error(`Failed to load PDF: ${response.statusText}`);
         }
         const blob = await response.blob();
         if (cancelled) return;
+        
         const blobUrl = URL.createObjectURL(blob);
+        blobUrlRef.current = blobUrl;
         setPdfBlobUrl(blobUrl);
         setIsLoading(false);
       } catch (err) {
@@ -702,11 +714,14 @@ export function PDFViewer({ url, fileName, onClose, onShare }: PDFViewerProps) {
         setIsLoading(false);
       }
     };
+    
     loadPdf();
+    
     return () => {
       cancelled = true;
-      if (pdfBlobUrl) {
-        URL.revokeObjectURL(pdfBlobUrl);
+      if (blobUrlRef.current) {
+        URL.revokeObjectURL(blobUrlRef.current);
+        blobUrlRef.current = null;
       }
     };
   }, [url]);
@@ -845,7 +860,8 @@ export function PDFViewer({ url, fileName, onClose, onShare }: PDFViewerProps) {
           className={cn(
             "absolute top-0 left-0 w-full h-full",
             activeTool === "none" || activeTool === "select" ? "cursor-grab" : "cursor-crosshair",
-            isPanning && "cursor-grabbing"
+            isPanning && "cursor-grabbing",
+            (isLoading || loadError) && "invisible"
           )}
           onMouseDown={handleMouseDown}
           onMouseMove={handleMouseMove}
