@@ -873,7 +873,7 @@ export default function ProjectDetails() {
                                     setTaskTitlePopoverOpen(false);
                                     setTaskTitleSearch("");
                                   }}
-                                  className="cursor-pointer"
+                                  className="cursor-pointer text-black dark:text-white"
                                 >
                                   <Check
                                     className={cn(
@@ -892,7 +892,7 @@ export default function ProjectDetails() {
                                   setIsCustomTitleOpen(true);
                                   setTaskTitleSearch("");
                                 }}
-                                className="cursor-pointer text-primary font-medium border-t"
+                                className="cursor-pointer text-black dark:text-white font-medium border-t"
                               >
                                 <Plus className="mr-2 h-4 w-4" />
                                 Add New Title...
