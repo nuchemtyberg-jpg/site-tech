@@ -852,7 +852,7 @@ export default function ProjectDetails() {
                 </DialogHeader>
                 <form onSubmit={form.handleSubmit(onSubmitTask)} className="space-y-4 mt-4">
                   <div className="grid gap-2">
-                    <Label htmlFor="title">Task Title</Label>
+                    <Label htmlFor="title"><span className="text-red-500">*</span> Task Title</Label>
                     <Popover open={taskTitlePopoverOpen} onOpenChange={setTaskTitlePopoverOpen}>
                       <PopoverTrigger asChild>
                         <Button

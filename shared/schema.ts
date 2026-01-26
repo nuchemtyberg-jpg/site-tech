@@ -65,6 +65,7 @@ export const tasks = pgTable("tasks", {
 });
 
 export const insertTaskSchema = createInsertSchema(tasks).omit({ id: true, createdAt: true }).extend({
+  title: z.string().min(1, "Task title is required"),
   dueDate: z.string().optional().nullable(),
   scheduledDate: z.string().optional().nullable(),
   description: z.string().optional().nullable(),
