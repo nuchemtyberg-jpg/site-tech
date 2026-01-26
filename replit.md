@@ -151,3 +151,39 @@ Documents can be displayed in two view modes (toggle available in Documents tab)
 - **Images**: Displayed with actual image thumbnail in grid view, green image icon in list view
 - **PDFs**: Opens in browser's native PDF viewer in new tab
 - **Other files**: Download prompt with file info
+
+## Photos Tab
+
+The Photos tab provides a dedicated photo management experience for project photos with the following features:
+
+### Photo Albums
+- Create and delete albums to organize photos
+- Album selector dropdown to filter photos by album
+- Delete album confirmation dialog (photos are preserved, only album association removed)
+- API endpoints: GET/POST `/api/projects/:projectId/albums`, PUT/DELETE `/api/albums/:id`
+
+### View Options
+- **Tile Size Toggle**: Three size options (small/medium/large) with grid icons
+  - Small: 8 columns on large screens
+  - Medium: 5 columns on large screens
+  - Large: 3 columns on large screens
+
+### Multi-Select Mode
+- Toggle select mode with "Select" button
+- Click photos to select/deselect (checkbox overlay appears)
+- Selection actions bar appears when photos are selected:
+  - Download: Downloads all selected photos
+  - Share: Copies photo URLs to clipboard
+  - Delete: Batch delete with confirmation dialog
+
+### Date-Based Organization
+- Photos sorted by date descending (newest first)
+- Grouped by month with sticky month headers
+- Grouped by day within each month
+- Vertical date slider for quick month navigation (uses actual Date objects for locale-safe formatting)
+
+### Photo Viewer
+- Fullscreen viewer with dark overlay
+- Previous/Next navigation buttons (ChevronLeft/ChevronRight)
+- Photo counter showing "X of Y"
+- Share, download, and close actions in bottom toolbar
