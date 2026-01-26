@@ -871,7 +871,7 @@ export function PDFViewer({ url, fileName, onClose, onShare }: PDFViewerProps) {
         )}
         <div 
           style={{ 
-            transform: `translate(${position.x}px, ${position.y}px) scale(${scale})`,
+            transform: `translate(${position.x}px, ${position.y}px)`,
             transformOrigin: "0 0",
             width: "100%",
             height: "100%",
@@ -890,7 +890,8 @@ export function PDFViewer({ url, fileName, onClose, onShare }: PDFViewerProps) {
             >
               <Page 
                 pageNumber={currentPage} 
-                width={containerWidth * scale}
+                width={containerWidth}
+                scale={scale * Math.max(1, window.devicePixelRatio || 1)}
                 renderTextLayer={false}
                 renderAnnotationLayer={false}
               />

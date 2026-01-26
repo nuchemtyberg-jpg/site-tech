@@ -67,7 +67,12 @@ export default function ProjectDetails() {
   const [isTaskOpen, setIsTaskOpen] = useState(false);
   const [isFolderOpen, setIsFolderOpen] = useState(false);
   const [folderName, setFolderName] = useState("");
-  const [currentFolderId, setCurrentFolderId] = useState<number | null>(null);
+  const [currentFolderId, setCurrentFolderId] = useState<number | null>(() => {
+    // Initialize from URL query param if present
+    const params = new URLSearchParams(window.location.search);
+    const folderId = params.get("folder");
+    return folderId ? parseInt(folderId, 10) : null;
+  });
   const [viewingFile, setViewingFile] = useState<FileMetadata | null>(null);
   const currentFolderIdRef = useRef<number | null>(null);
   const uploadedFilePathsRef = useRef<Map<string, string>>(new Map());
@@ -80,7 +85,8 @@ export default function ProjectDetails() {
     if (isPdfFile(file.contentType)) {
       const params = new URLSearchParams({
         name: file.name,
-        path: file.objectPath
+        path: file.objectPath,
+        folderId: file.folderId?.toString() || ""
       });
       setLocation(`/projects/${projectId}/pdf/${file.id}?${params.toString()}`);
     } else {

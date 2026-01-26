@@ -8,11 +8,17 @@ export default function PDFViewerPage() {
   const searchParams = new URLSearchParams(window.location.search);
   const fileName = searchParams.get("name") || "Document.pdf";
   const objectPath = searchParams.get("path") || "";
+  const folderId = searchParams.get("folderId") || "";
   
   const fileUrl = objectPath || "";
 
   const handleClose = () => {
-    setLocation(`/projects/${params.projectId}`);
+    // Navigate back to the project with the folder selected
+    if (folderId) {
+      setLocation(`/projects/${params.projectId}?folder=${folderId}`);
+    } else {
+      setLocation(`/projects/${params.projectId}`);
+    }
   };
 
   const handleShare = async () => {
