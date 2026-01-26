@@ -370,10 +370,10 @@ export default function ProjectDetails() {
         </TabsContent>
 
         <TabsContent value="documents" className="space-y-4">
-          <div className="flex items-center gap-2 justify-end flex-wrap">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:justify-end relative z-10">
             <Dialog open={isFolderOpen} onOpenChange={setIsFolderOpen}>
               <DialogTrigger asChild>
-                <Button variant="outline" data-testid="button-new-folder">
+                <Button variant="outline" className="w-full sm:w-auto" data-testid="button-new-folder">
                   <FolderPlus className="w-4 h-4 mr-2" /> New Folder
                 </Button>
               </DialogTrigger>
@@ -404,7 +404,7 @@ export default function ProjectDetails() {
             <ObjectUploader
               maxNumberOfFiles={10}
               maxFileSize={52428800}
-              buttonClassName="data-testid-upload-files"
+              buttonClassName="w-full sm:w-auto"
               onGetUploadParameters={async (file) => {
                 const res = await fetch("/api/uploads/request-url", {
                   method: "POST",
