@@ -1608,10 +1608,10 @@ export default function ProjectDetails() {
                 variant="outline" 
                 size="sm"
                 onClick={() => {
-                  const selectedFiles = files?.filter(f => selectedPhotos.has(f.id)) || [];
-                  const urls = selectedFiles.map(f => window.location.origin + f.objectPath).join('\n');
-                  navigator.clipboard.writeText(urls);
-                  toast({ title: "Links copied to clipboard" });
+                  const selectedIds = Array.from(selectedPhotos).join(',');
+                  const shareUrl = `${window.location.origin}/project/${projectId}/photos?ids=${selectedIds}`;
+                  navigator.clipboard.writeText(shareUrl);
+                  toast({ title: "Share link copied to clipboard" });
                 }}
                 data-testid="button-share-selected"
               >
