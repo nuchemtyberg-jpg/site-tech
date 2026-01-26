@@ -64,7 +64,11 @@ export const tasks = pgTable("tasks", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-export const insertTaskSchema = createInsertSchema(tasks).omit({ id: true, createdAt: true });
+export const insertTaskSchema = createInsertSchema(tasks).omit({ id: true, createdAt: true }).extend({
+  dueDate: z.string().optional().nullable(),
+  scheduledDate: z.string().optional().nullable(),
+  description: z.string().optional().nullable(),
+});
 export type Task = typeof tasks.$inferSelect;
 export type InsertTask = z.infer<typeof insertTaskSchema>;
 
