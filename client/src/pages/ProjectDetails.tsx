@@ -85,10 +85,10 @@ export default function ProjectDetails() {
     if (isPdfFile(file.contentType)) {
       const params = new URLSearchParams({
         name: file.name,
-        path: file.objectPath,
-        folderId: file.folderId?.toString() || ""
+        path: file.objectPath
       });
-      setLocation(`/projects/${projectId}/pdf/${file.id}?${params.toString()}`);
+      // Open PDF in a new browser tab for a cleaner experience
+      window.open(`/projects/${projectId}/pdf/${file.id}?${params.toString()}`, '_blank');
     } else {
       setViewingFile(file);
     }

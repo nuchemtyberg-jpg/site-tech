@@ -8,17 +8,17 @@ export default function PDFViewerPage() {
   const searchParams = new URLSearchParams(window.location.search);
   const fileName = searchParams.get("name") || "Document.pdf";
   const objectPath = searchParams.get("path") || "";
-  const folderId = searchParams.get("folderId") || "";
   
   const fileUrl = objectPath || "";
 
   const handleClose = () => {
-    // Navigate back to the project with the folder selected
-    if (folderId) {
-      setLocation(`/projects/${params.projectId}?folder=${folderId}`);
-    } else {
+    // Try to close the browser tab (works when opened via window.open)
+    // Fall back to navigation if the tab can't be closed (e.g., direct URL access)
+    window.close();
+    // If we're still here after a short delay, navigate back
+    setTimeout(() => {
       setLocation(`/projects/${params.projectId}`);
-    }
+    }, 100);
   };
 
   const handleShare = async () => {
