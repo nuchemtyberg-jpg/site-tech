@@ -595,7 +595,7 @@ export default function ProjectDetails() {
               <iframe
                 src={viewingFile.objectPath}
                 title={viewingFile.name}
-                className="w-full h-[70vh] rounded-lg bg-white"
+                className="absolute inset-0 w-full h-full bg-white"
                 onClick={(e) => e.stopPropagation()}
               />
             ) : (
