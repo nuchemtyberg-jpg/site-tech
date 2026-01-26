@@ -76,20 +76,36 @@ export default function ProjectDetails() {
   const { toast } = useToast();
 
   const handleShareFile = async (file: FileMetadata) => {
-    const shareUrl = `${window.location.origin}${file.objectPath}`;
     try {
-      if (navigator.share) {
+      // Try to share the actual file
+      const response = await fetch(file.objectPath);
+      const blob = await response.blob();
+      const fileToShare = new window.File([blob], file.name, { type: file.contentType || 'application/octet-stream' });
+      
+      if (navigator.canShare && navigator.canShare({ files: [fileToShare] })) {
+        await navigator.share({
+          files: [fileToShare],
+          title: file.name,
+        });
+      } else if (navigator.share) {
+        // Fall back to sharing link if file sharing not supported
         await navigator.share({
           title: file.name,
-          url: shareUrl,
+          url: `${window.location.origin}${file.objectPath}`,
         });
       } else {
-        await navigator.clipboard.writeText(shareUrl);
+        // Fall back to copying link
+        await navigator.clipboard.writeText(`${window.location.origin}${file.objectPath}`);
         toast({ title: "Link Copied", description: "File link copied to clipboard." });
       }
     } catch (err) {
-      await navigator.clipboard.writeText(shareUrl);
-      toast({ title: "Link Copied", description: "File link copied to clipboard." });
+      // Final fallback
+      try {
+        await navigator.clipboard.writeText(`${window.location.origin}${file.objectPath}`);
+        toast({ title: "Link Copied", description: "File link copied to clipboard." });
+      } catch {
+        toast({ title: "Share Failed", description: "Unable to share this file.", variant: "destructive" });
+      }
     }
   };
 
@@ -566,51 +582,9 @@ export default function ProjectDetails() {
 
       {/* Document Viewer Modal */}
       {viewingFile && (
-        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4" data-testid="document-viewer-modal">
-          {/* Header */}
-          <div className="absolute top-0 left-0 right-0 flex items-center justify-between p-4 bg-gradient-to-b from-black/50 to-transparent">
-            <h3 className="text-white font-medium truncate max-w-[60%]">{viewingFile.name}</h3>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="ghost"
-                size="icon"
-                className="text-white hover:bg-white/20"
-                onClick={() => handleShareFile(viewingFile)}
-                data-testid="button-share-file"
-              >
-                <Share2 className="w-5 h-5" />
-              </Button>
-              <a
-                href={viewingFile.objectPath}
-                download={viewingFile.name}
-                className="inline-flex items-center justify-center h-9 w-9 rounded-md text-white hover:bg-white/20"
-                data-testid="button-download-file"
-              >
-                <Download className="w-5 h-5" />
-              </a>
-              <a
-                href={viewingFile.objectPath}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center justify-center h-9 w-9 rounded-md text-white hover:bg-white/20"
-                data-testid="button-open-external"
-              >
-                <ExternalLink className="w-5 h-5" />
-              </a>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="text-white hover:bg-white/20"
-                onClick={() => setViewingFile(null)}
-                data-testid="button-close-viewer"
-              >
-                <X className="w-6 h-6" />
-              </Button>
-            </div>
-          </div>
-
-          {/* Content */}
-          <div className="max-w-4xl max-h-[80vh] w-full overflow-auto" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 z-50 bg-black/90 flex flex-col" data-testid="document-viewer-modal">
+          {/* Content - centered */}
+          <div className="flex-1 flex items-center justify-center p-4 overflow-auto" onClick={() => setViewingFile(null)}>
             {isImageFile(viewingFile.contentType) ? (
               <img 
                 src={viewingFile.objectPath} 
@@ -621,10 +595,11 @@ export default function ProjectDetails() {
               <iframe
                 src={viewingFile.objectPath}
                 title={viewingFile.name}
-                className="w-full h-[80vh] rounded-lg bg-white"
+                className="w-full h-[70vh] rounded-lg bg-white"
+                onClick={(e) => e.stopPropagation()}
               />
             ) : (
-              <div className="bg-card p-8 rounded-lg text-center">
+              <div className="bg-card p-8 rounded-lg text-center" onClick={(e) => e.stopPropagation()}>
                 <File className="w-16 h-16 mx-auto text-muted-foreground mb-4" />
                 <p className="text-lg font-medium mb-2">{viewingFile.name}</p>
                 <p className="text-muted-foreground mb-4">This file type cannot be previewed.</p>
@@ -639,11 +614,40 @@ export default function ProjectDetails() {
             )}
           </div>
 
-          {/* Click outside to close */}
-          <div 
-            className="absolute inset-0 -z-10" 
-            onClick={() => setViewingFile(null)}
-          />
+          {/* Bottom toolbar - closer to content on mobile */}
+          <div className="bg-black/80 backdrop-blur-sm border-t border-white/10 p-3 safe-area-bottom">
+            <div className="flex items-center justify-between max-w-lg mx-auto">
+              <p className="text-white text-sm font-medium truncate flex-1 mr-4">{viewingFile.name}</p>
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="text-white hover:bg-white/20"
+                  onClick={() => handleShareFile(viewingFile)}
+                  data-testid="button-share-file"
+                >
+                  <Share2 className="w-5 h-5" />
+                </Button>
+                <a
+                  href={viewingFile.objectPath}
+                  download={viewingFile.name}
+                  className="inline-flex items-center justify-center h-9 w-9 rounded-md text-white hover:bg-white/20"
+                  data-testid="button-download-file"
+                >
+                  <Download className="w-5 h-5" />
+                </a>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="text-white hover:bg-white/20"
+                  onClick={() => setViewingFile(null)}
+                  data-testid="button-close-viewer"
+                >
+                  <X className="w-5 h-5" />
+                </Button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>
