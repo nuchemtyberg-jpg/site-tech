@@ -27,13 +27,12 @@ export async function registerRoutes(
 
   app.post(api.projects.create.path, async (req, res) => {
     try {
-      const input = api.projects.create.input.parse(req.body);
-      // Ensure dates are dates
-      const project = await storage.createProject({
-        ...input,
-        startDate: new Date(input.startDate),
-        endDate: new Date(input.endDate),
+      const bodySchema = api.projects.create.input.extend({
+        startDate: z.coerce.date(),
+        endDate: z.coerce.date(),
       });
+      const input = bodySchema.parse(req.body);
+      const project = await storage.createProject(input);
       res.status(201).json(project);
     } catch (err) {
       if (err instanceof z.ZodError) {
@@ -45,12 +44,12 @@ export async function registerRoutes(
 
   app.put(api.projects.update.path, async (req, res) => {
     try {
-      const input = api.projects.update.input.parse(req.body);
-      const updates: any = { ...input };
-      if (input.startDate) updates.startDate = new Date(input.startDate);
-      if (input.endDate) updates.endDate = new Date(input.endDate);
-      
-      const project = await storage.updateProject(Number(req.params.id), updates);
+      const bodySchema = api.projects.update.input.extend({
+        startDate: z.coerce.date().optional(),
+        endDate: z.coerce.date().optional(),
+      });
+      const input = bodySchema.parse(req.body);
+      const project = await storage.updateProject(Number(req.params.id), input);
       res.json(project);
     } catch (err) {
        if (err instanceof z.ZodError) {
@@ -78,12 +77,13 @@ export async function registerRoutes(
 
   app.post(api.tasks.create.path, async (req, res) => {
     try {
-      const input = api.tasks.create.input.parse(req.body);
-      const task = await storage.createTask({
-        ...input,
-        startDate: new Date(input.startDate),
-        endDate: new Date(input.endDate),
+      const bodySchema = api.tasks.create.input.extend({
+        startDate: z.coerce.date(),
+        endDate: z.coerce.date(),
+        projectId: z.coerce.number(),
       });
+      const input = bodySchema.parse(req.body);
+      const task = await storage.createTask(input);
       res.status(201).json(task);
     } catch (err) {
       if (err instanceof z.ZodError) {
@@ -95,12 +95,13 @@ export async function registerRoutes(
 
   app.put(api.tasks.update.path, async (req, res) => {
     try {
-      const input = api.tasks.update.input.parse(req.body);
-      const updates: any = { ...input };
-      if (input.startDate) updates.startDate = new Date(input.startDate);
-      if (input.endDate) updates.endDate = new Date(input.endDate);
-
-      const task = await storage.updateTask(Number(req.params.id), updates);
+      const bodySchema = api.tasks.update.input.extend({
+        startDate: z.coerce.date().optional(),
+        endDate: z.coerce.date().optional(),
+        projectId: z.coerce.number().optional(),
+      });
+      const input = bodySchema.parse(req.body);
+      const task = await storage.updateTask(Number(req.params.id), input);
       res.json(task);
     } catch (err) {
       return res.status(404).json({ message: "Task not found" });
