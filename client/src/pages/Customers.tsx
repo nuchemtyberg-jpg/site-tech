@@ -55,10 +55,7 @@ export default function Customers() {
 
   const createMutation = useMutation({
     mutationFn: async (data: CustomerFormData) => {
-      return apiRequest("/api/customers", {
-        method: "POST",
-        body: JSON.stringify(data),
-      });
+      return apiRequest("POST", "/api/customers", data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/customers"] });

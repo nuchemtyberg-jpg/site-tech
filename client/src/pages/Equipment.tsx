@@ -56,12 +56,9 @@ export default function EquipmentPage() {
 
   const createMutation = useMutation({
     mutationFn: async (data: EquipmentFormData) => {
-      return apiRequest("/api/equipment", {
-        method: "POST",
-        body: JSON.stringify({
-          ...data,
-          year: data.year ? parseInt(data.year) : null,
-        }),
+      return apiRequest("POST", "/api/equipment", {
+        ...data,
+        year: data.year ? parseInt(data.year) : null,
       });
     },
     onSuccess: () => {

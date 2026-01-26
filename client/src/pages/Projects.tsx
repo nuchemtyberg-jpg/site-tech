@@ -61,14 +61,11 @@ export default function Projects() {
 
   const createMutation = useMutation({
     mutationFn: async (data: ProjectFormData) => {
-      return apiRequest("/api/projects", {
-        method: "POST",
-        body: JSON.stringify({
-          ...data,
-          estimatedValue: data.estimatedValue ? parseInt(data.estimatedValue) : null,
-          startDate: data.startDate || null,
-          endDate: data.endDate || null,
-        }),
+      return apiRequest("POST", "/api/projects", {
+        ...data,
+        estimatedValue: data.estimatedValue ? parseInt(data.estimatedValue) : null,
+        startDate: data.startDate || null,
+        endDate: data.endDate || null,
       });
     },
     onSuccess: () => {
