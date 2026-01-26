@@ -20,7 +20,9 @@ import {
   X,
   Share2,
   Download,
-  ExternalLink
+  ExternalLink,
+  ZoomIn,
+  ZoomOut
 } from "lucide-react";
 import { 
   DropdownMenu, 
@@ -68,6 +70,7 @@ export default function ProjectDetails() {
   const [folderName, setFolderName] = useState("");
   const [currentFolderId, setCurrentFolderId] = useState<number | null>(null);
   const [viewingFile, setViewingFile] = useState<FileMetadata | null>(null);
+  const [pdfZoom, setPdfZoom] = useState(100);
   const currentFolderIdRef = useRef<number | null>(null);
   const uploadedFilePathsRef = useRef<Map<string, string>>(new Map());
   
@@ -592,12 +595,25 @@ export default function ProjectDetails() {
                 className="w-full h-auto object-contain rounded-lg"
               />
             ) : isPdfFile(viewingFile.contentType) ? (
-              <iframe
-                src={viewingFile.objectPath}
-                title={viewingFile.name}
-                className="absolute inset-0 w-full h-full bg-white"
+              <div 
+                className="absolute inset-0 w-full h-full overflow-auto bg-gray-200"
                 onClick={(e) => e.stopPropagation()}
-              />
+              >
+                <div 
+                  style={{ 
+                    transform: `scale(${pdfZoom / 100})`, 
+                    transformOrigin: 'top left',
+                    width: `${10000 / pdfZoom}%`,
+                    height: `${10000 / pdfZoom}%`
+                  }}
+                >
+                  <iframe
+                    src={viewingFile.objectPath}
+                    title={viewingFile.name}
+                    className="w-full h-full bg-white border-0"
+                  />
+                </div>
+              </div>
             ) : (
               <div className="bg-card p-8 rounded-lg text-center" onClick={(e) => e.stopPropagation()}>
                 <File className="w-16 h-16 mx-auto text-muted-foreground mb-4" />
@@ -616,9 +632,32 @@ export default function ProjectDetails() {
 
           {/* Bottom toolbar - closer to content on mobile */}
           <div className="bg-black/80 backdrop-blur-sm border-t border-white/10 p-3 safe-area-bottom">
-            <div className="flex items-center justify-between max-w-lg mx-auto">
-              <p className="text-white text-sm font-medium truncate flex-1 mr-4">{viewingFile.name}</p>
+            <div className="flex items-center justify-between max-w-lg mx-auto gap-2">
+              <p className="text-white text-sm font-medium truncate flex-1">{viewingFile.name}</p>
               <div className="flex items-center gap-1">
+                {isPdfFile(viewingFile.contentType) && (
+                  <>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="text-white hover:bg-white/20"
+                      onClick={() => setPdfZoom(z => Math.max(50, z - 25))}
+                      data-testid="button-zoom-out"
+                    >
+                      <ZoomOut className="w-5 h-5" />
+                    </Button>
+                    <span className="text-white text-xs min-w-[3rem] text-center">{pdfZoom}%</span>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="text-white hover:bg-white/20"
+                      onClick={() => setPdfZoom(z => Math.min(200, z + 25))}
+                      data-testid="button-zoom-in"
+                    >
+                      <ZoomIn className="w-5 h-5" />
+                    </Button>
+                  </>
+                )}
                 <Button
                   variant="ghost"
                   size="icon"
@@ -640,7 +679,7 @@ export default function ProjectDetails() {
                   variant="ghost"
                   size="icon"
                   className="text-white hover:bg-white/20"
-                  onClick={() => setViewingFile(null)}
+                  onClick={() => { setViewingFile(null); setPdfZoom(100); }}
                   data-testid="button-close-viewer"
                 >
                   <X className="w-5 h-5" />
