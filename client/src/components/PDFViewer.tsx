@@ -26,8 +26,8 @@ import { cn } from "@/lib/utils";
 import { PDFDocument, rgb } from "pdf-lib";
 import { Document, Page, pdfjs } from "react-pdf";
 
-// Configure PDF.js worker - use CDN with matching version
-pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
+// Configure PDF.js worker - use jsdelivr with exact matching version
+pdfjs.GlobalWorkerOptions.workerSrc = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
 
 interface PDFViewerProps {
   url: string;
