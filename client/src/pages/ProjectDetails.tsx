@@ -74,6 +74,34 @@ const US_STATES = [
   "SD", "TN", "TX", "UT", "VT", "VA", "WA", "WV", "WI", "WY"
 ];
 
+const PREDEFINED_TASK_TITLES = [
+  "Backfilling",
+  "Change Order",
+  "C Inlet",
+  "Concrete Work",
+  "Demo & Removal",
+  "Drywell System",
+  "Electrical Conduit",
+  "Excavation of Foundation",
+  "Excavation & Trucking for Foundation",
+  "Final Grading",
+  "Poly Conduit & Poly Water Line",
+  "Recharge System",
+  "Roof Leader Drain",
+  "Septic System",
+  "Sewer Connection",
+  "Sewer Tap",
+  "Sewer & Water Connection",
+  "Silt Fence Installation",
+  "Site Prep",
+  "Tank Removal",
+  "Tie in Leaders to Recharge System",
+  "Tree Removal",
+  "Trench Drain",
+  "Trenching",
+  "Trucking of Soil",
+];
+
 const PROJECT_STATUSES = [
   { value: "new", label: "New", color: "#3b82f6" },
   { value: "bidding", label: "Bidding", color: "#6366f1" },
@@ -121,6 +149,9 @@ export default function ProjectDetails() {
   const [folderName, setFolderName] = useState("");
   const [customerSearch, setCustomerSearch] = useState("");
   const [customerPopoverOpen, setCustomerPopoverOpen] = useState(false);
+  const [customTaskTitles, setCustomTaskTitles] = useState<string[]>([]);
+  const [isCustomTitleOpen, setIsCustomTitleOpen] = useState(false);
+  const [newCustomTitle, setNewCustomTitle] = useState("");
 
   const getStatusColor = (status: string) => {
     const statusObj = PROJECT_STATUSES.find(s => s.value === status);
@@ -804,7 +835,30 @@ export default function ProjectDetails() {
                 <form onSubmit={form.handleSubmit(onSubmitTask)} className="space-y-4 mt-4">
                   <div className="grid gap-2">
                     <Label htmlFor="title">Task Title</Label>
-                    <Input id="title" {...form.register("title")} placeholder="e.g. Foundation Pour" data-testid="input-task-title" className="bg-white dark:bg-zinc-900 text-black dark:text-white" />
+                    <Select 
+                      onValueChange={(val) => {
+                        if (val === "__add_new__") {
+                          setIsCustomTitleOpen(true);
+                        } else {
+                          form.setValue("title", val);
+                        }
+                      }} 
+                      value={form.watch("title")}
+                    >
+                      <SelectTrigger data-testid="select-task-title" className="bg-white dark:bg-zinc-900 text-black dark:text-white">
+                        <SelectValue placeholder="Select a task title" />
+                      </SelectTrigger>
+                      <SelectContent className="bg-white dark:bg-zinc-900 text-black dark:text-white max-h-60">
+                        {[...PREDEFINED_TASK_TITLES, ...customTaskTitles].sort().map((title) => (
+                          <SelectItem key={title} value={title}>{title}</SelectItem>
+                        ))}
+                        <SelectItem value="__add_new__" className="text-primary font-medium border-t mt-1 pt-2">
+                          <span className="flex items-center gap-2">
+                            <Plus className="w-4 h-4" /> Add New Title...
+                          </span>
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
                     {form.formState.errors.title && <p className="text-red-500 text-xs">{form.formState.errors.title.message}</p>}
                   </div>
                   
@@ -860,6 +914,53 @@ export default function ProjectDetails() {
                     </Button>
                   </DialogFooter>
                 </form>
+              </DialogContent>
+            </Dialog>
+
+            {/* Custom Task Title Dialog */}
+            <Dialog open={isCustomTitleOpen} onOpenChange={setIsCustomTitleOpen}>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Add New Task Title</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4 mt-4">
+                  <div className="grid gap-2">
+                    <Label htmlFor="customTitle">New Title</Label>
+                    <Input 
+                      id="customTitle" 
+                      value={newCustomTitle}
+                      onChange={(e) => setNewCustomTitle(e.target.value)}
+                      placeholder="Enter new task title" 
+                      data-testid="input-custom-task-title"
+                      className="bg-white dark:bg-zinc-900 text-black dark:text-white" 
+                    />
+                  </div>
+                  <DialogFooter>
+                    <Button 
+                      variant="outline" 
+                      onClick={() => {
+                        setNewCustomTitle("");
+                        setIsCustomTitleOpen(false);
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                    <Button 
+                      onClick={() => {
+                        if (newCustomTitle.trim()) {
+                          setCustomTaskTitles(prev => [...prev, newCustomTitle.trim()]);
+                          form.setValue("title", newCustomTitle.trim());
+                          setNewCustomTitle("");
+                          setIsCustomTitleOpen(false);
+                        }
+                      }}
+                      disabled={!newCustomTitle.trim()}
+                      data-testid="button-add-custom-title"
+                    >
+                      Add Title
+                    </Button>
+                  </DialogFooter>
+                </div>
               </DialogContent>
             </Dialog>
           </div>
