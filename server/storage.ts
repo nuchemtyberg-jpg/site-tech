@@ -143,7 +143,7 @@ export class DatabaseStorage implements IStorage {
       return "S-1000"; // Starting number
     }
     
-    const lastNumber = result[0].projectNumber;
+    const lastNumber = result[0].projectNumber || "S-999";
     const numPart = parseInt(lastNumber.replace("S-", ""), 10);
     return `S-${numPart + 1}`;
   }
