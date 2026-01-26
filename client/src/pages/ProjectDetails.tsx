@@ -910,15 +910,9 @@ export default function ProjectDetails() {
                     <Input id="description" {...form.register("description")} placeholder="Details..." data-testid="input-task-description" className="bg-white dark:bg-zinc-900 text-black dark:text-white" />
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="grid gap-2">
-                      <Label htmlFor="scheduledDate">Scheduled Date</Label>
-                      <Input id="scheduledDate" type="date" {...form.register("scheduledDate")} data-testid="input-task-scheduled" className="bg-white dark:bg-zinc-900 text-black dark:text-white" />
-                    </div>
-                    <div className="grid gap-2">
-                      <Label htmlFor="dueDate">Due Date</Label>
-                      <Input id="dueDate" type="date" {...form.register("dueDate")} data-testid="input-task-due" className="bg-white dark:bg-zinc-900 text-black dark:text-white" />
-                    </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="dueDate">Due Date</Label>
+                    <Input id="dueDate" type="date" {...form.register("dueDate")} data-testid="input-task-due" className="bg-white dark:bg-zinc-900 text-black dark:text-white" />
                   </div>
 
                   <div className="grid grid-cols-2 gap-4">
