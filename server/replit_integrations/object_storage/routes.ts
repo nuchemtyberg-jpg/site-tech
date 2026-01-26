@@ -36,10 +36,10 @@ export function registerObjectStorageRoutes(app: Express): void {
 
   /**
    * Serve uploaded objects.
-   * Using a named parameter with a simpler regex or none to see if it fixes the PathError.
+   * Matches /objects/uploads/:id
    */
-  app.get("/objects/:path", (req, res) => {
-    const fullPath = req.path;
+  app.get("/objects/uploads/:id", (req, res) => {
+    const fullPath = `/objects/uploads/${req.params.id}`;
     
     objectStorageService.getObjectEntityFile(fullPath)
       .then(objectFile => objectStorageService.downloadObject(objectFile, res))

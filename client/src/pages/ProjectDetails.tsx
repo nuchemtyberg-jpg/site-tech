@@ -63,7 +63,11 @@ export default function ProjectDetails() {
   const [isFolderOpen, setIsFolderOpen] = useState(false);
   const [folderName, setFolderName] = useState("");
   const [currentFolderId, setCurrentFolderId] = useState<number | null>(null);
+  const currentFolderIdRef = useRef<number | null>(null);
   const uploadedFilePathsRef = useRef<Map<string, string>>(new Map());
+  
+  // Keep ref in sync with state for use in callbacks
+  currentFolderIdRef.current = currentFolderId;
   const { toast } = useToast();
 
   const currentFolders = folders?.filter(f => f.parentId === currentFolderId) || [];
@@ -154,7 +158,7 @@ export default function ProjectDetails() {
           objectPath: objectPath,
           contentType: file.type,
           size: file.size,
-          folderId: currentFolderId,
+          folderId: currentFolderIdRef.current,
         });
         successCount++;
       } catch (err) {
