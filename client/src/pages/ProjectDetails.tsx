@@ -16,6 +16,7 @@ import {
   File,
   Folder,
   ChevronRight,
+  ChevronLeft,
   Home,
   X,
   Share2,
@@ -32,7 +33,13 @@ import {
   Check,
   ChevronsUpDown,
   Clock,
-  Camera
+  Camera,
+  FolderOpen,
+  Grid3X3,
+  Grid2X2,
+  Square,
+  CheckSquare,
+  Maximize2
 } from "lucide-react";
 import { 
   DropdownMenu, 
@@ -73,7 +80,8 @@ import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { ObjectUploader } from "@/components/ObjectUploader";
 import { PDFViewer } from "@/components/PDFViewer";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { Customer } from "@shared/schema";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { z } from "zod";
@@ -159,6 +167,47 @@ export default function ProjectDetails() {
   const deleteFileMutation = useDeleteFile(projectId);
   const createFolderMutation = useCreateFolder(projectId);
   const deleteFolderMutation = useDeleteFolder(projectId);
+
+  // Photo Albums
+  const { data: albums = [] } = useQuery<{ id: number; projectId: number; name: string; createdAt: string }[]>({
+    queryKey: ['/api/projects', projectId, 'albums'],
+    queryFn: async () => {
+      const res = await fetch(`/api/projects/${projectId}/albums`);
+      return res.json();
+    },
+    enabled: !!projectId,
+  });
+
+  const createAlbumMutation = useMutation({
+    mutationFn: async (name: string) => {
+      return apiRequest('POST', `/api/projects/${projectId}/albums`, { name });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/projects', projectId, 'albums'] });
+    },
+  });
+
+  const deleteAlbumMutation = useMutation({
+    mutationFn: async (albumId: number) => {
+      return apiRequest('DELETE', `/api/albums/${albumId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/projects', projectId, 'albums'] });
+      if (currentAlbumId === deleteAlbumId) {
+        setCurrentAlbumId(null);
+      }
+    },
+  });
+
+  const updateFileMutation = useMutation({
+    mutationFn: async ({ fileId, albumId }: { fileId: number; albumId: number | null }) => {
+      return apiRequest('PUT', `/api/files/${fileId}`, { albumId });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/projects', projectId, 'files'] });
+    },
+  });
+
   const [isTaskOpen, setIsTaskOpen] = useState(false);
   const [isFolderOpen, setIsFolderOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
@@ -253,6 +302,16 @@ export default function ProjectDetails() {
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const currentFolderIdRef = useRef<number | null>(null);
   const uploadedFilePathsRef = useRef<Map<string, string>>(new Map());
+  
+  // Photo tool state
+  const [photoTileSize, setPhotoTileSize] = useState<'small' | 'medium' | 'large'>('medium');
+  const [selectedPhotos, setSelectedPhotos] = useState<Set<number>>(new Set());
+  const [isPhotoSelectMode, setIsPhotoSelectMode] = useState(false);
+  const [currentAlbumId, setCurrentAlbumId] = useState<number | null>(null);
+  const [isCreateAlbumOpen, setIsCreateAlbumOpen] = useState(false);
+  const [newAlbumName, setNewAlbumName] = useState("");
+  const [deleteAlbumId, setDeleteAlbumId] = useState<number | null>(null);
+  const [showBatchDeleteConfirm, setShowBatchDeleteConfirm] = useState(false);
   
   // Keep ref in sync with state for use in callbacks
   currentFolderIdRef.current = currentFolderId;
@@ -1385,13 +1444,119 @@ export default function ProjectDetails() {
         </TabsContent>
 
         <TabsContent value="photos" className="space-y-4">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold">Project Photos</h3>
+          {/* Photo Controls Toolbar */}
+          <div className="flex flex-wrap items-center gap-2 mb-4">
+            {/* Album Selector */}
+            <div className="flex items-center gap-2">
+              <Select value={currentAlbumId?.toString() || "all"} onValueChange={(v) => setCurrentAlbumId(v === "all" ? null : Number(v))}>
+                <SelectTrigger className="w-40 bg-white dark:bg-zinc-900" data-testid="select-album">
+                  <FolderOpen className="w-4 h-4 mr-2" />
+                  <SelectValue placeholder="All Photos" />
+                </SelectTrigger>
+                <SelectContent className="bg-white dark:bg-zinc-900">
+                  <SelectItem value="all">All Photos</SelectItem>
+                  {albums.map((album) => (
+                    <SelectItem key={album.id} value={album.id.toString()}>{album.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Dialog open={isCreateAlbumOpen} onOpenChange={setIsCreateAlbumOpen}>
+                <DialogTrigger asChild>
+                  <Button variant="outline" size="icon" data-testid="button-create-album">
+                    <Plus className="w-4 h-4" />
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="bg-white dark:bg-zinc-900">
+                  <DialogHeader>
+                    <DialogTitle>Create Album</DialogTitle>
+                  </DialogHeader>
+                  <div className="grid gap-4 py-4">
+                    <div className="grid gap-2">
+                      <Label htmlFor="album-name"><span className="text-red-500">*</span> Album Name</Label>
+                      <Input 
+                        id="album-name" 
+                        value={newAlbumName} 
+                        onChange={(e) => setNewAlbumName(e.target.value)}
+                        className="bg-white dark:bg-zinc-900"
+                        placeholder="Enter album name"
+                        data-testid="input-album-name"
+                      />
+                    </div>
+                  </div>
+                  <DialogFooter>
+                    <Button variant="outline" onClick={() => setIsCreateAlbumOpen(false)}>Cancel</Button>
+                    <Button 
+                      onClick={() => {
+                        if (newAlbumName.trim()) {
+                          createAlbumMutation.mutate(newAlbumName.trim());
+                          setNewAlbumName("");
+                          setIsCreateAlbumOpen(false);
+                        }
+                      }}
+                      disabled={!newAlbumName.trim()}
+                      data-testid="button-save-album"
+                    >
+                      Create
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+              {currentAlbumId && (
+                <Button variant="ghost" size="icon" onClick={() => setDeleteAlbumId(currentAlbumId)} data-testid="button-delete-album">
+                  <Trash2 className="w-4 h-4" />
+                </Button>
+              )}
+            </div>
+
+            <div className="flex-1" />
+
+            {/* Tile Size Toggle */}
+            <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
+              <Button 
+                variant={photoTileSize === 'small' ? 'default' : 'ghost'} 
+                size="sm"
+                onClick={() => setPhotoTileSize('small')}
+                data-testid="button-tile-small"
+              >
+                <Grid3X3 className="w-4 h-4" />
+              </Button>
+              <Button 
+                variant={photoTileSize === 'medium' ? 'default' : 'ghost'} 
+                size="sm"
+                onClick={() => setPhotoTileSize('medium')}
+                data-testid="button-tile-medium"
+              >
+                <Grid2X2 className="w-4 h-4" />
+              </Button>
+              <Button 
+                variant={photoTileSize === 'large' ? 'default' : 'ghost'} 
+                size="sm"
+                onClick={() => setPhotoTileSize('large')}
+                data-testid="button-tile-large"
+              >
+                <Square className="w-4 h-4" />
+              </Button>
+            </div>
+
+            {/* Select Mode Toggle */}
+            <Button 
+              variant={isPhotoSelectMode ? 'default' : 'outline'} 
+              size="sm"
+              onClick={() => {
+                setIsPhotoSelectMode(!isPhotoSelectMode);
+                setSelectedPhotos(new Set());
+              }}
+              data-testid="button-select-mode"
+            >
+              <CheckSquare className="w-4 h-4 mr-2" />
+              Select
+            </Button>
+
+            {/* Upload Button */}
             <ObjectUploader
               maxNumberOfFiles={50}
               maxFileSize={52428800}
               buttonClassName="w-full sm:w-auto"
-              allowedFileTypes={["image/*"]}
               onGetUploadParameters={async (file) => {
                 const res = await fetch("/api/uploads/request-url", {
                   method: "POST",
@@ -1403,9 +1568,7 @@ export default function ProjectDetails() {
                   }),
                 });
                 const { uploadURL, objectPath } = await res.json();
-                
                 uploadedFilePathsRef.current.set(file.id, objectPath);
-                
                 return {
                   method: "PUT",
                   url: uploadURL,
@@ -1414,13 +1577,64 @@ export default function ProjectDetails() {
               }}
               onComplete={handleUploadComplete}
             >
-              <Camera className="w-4 h-4 mr-2" /> Upload Photos
+              <Camera className="w-4 h-4 mr-2" /> Upload
             </ObjectUploader>
           </div>
-          
-          {/* Photo Grid */}
+
+          {/* Selection Actions Bar */}
+          {isPhotoSelectMode && selectedPhotos.size > 0 && (
+            <div className="flex items-center gap-2 p-3 bg-muted rounded-lg">
+              <span className="text-sm font-medium">{selectedPhotos.size} selected</span>
+              <div className="flex-1" />
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={() => {
+                  selectedPhotos.forEach(id => {
+                    const photo = files?.find(f => f.id === id);
+                    if (photo) {
+                      const link = document.createElement('a');
+                      link.href = photo.objectPath;
+                      link.download = photo.name;
+                      link.click();
+                    }
+                  });
+                }}
+                data-testid="button-download-selected"
+              >
+                <Download className="w-4 h-4 mr-2" /> Download
+              </Button>
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={() => {
+                  const selectedFiles = files?.filter(f => selectedPhotos.has(f.id)) || [];
+                  const urls = selectedFiles.map(f => window.location.origin + f.objectPath).join('\n');
+                  navigator.clipboard.writeText(urls);
+                  toast({ title: "Links copied to clipboard" });
+                }}
+                data-testid="button-share-selected"
+              >
+                <Share2 className="w-4 h-4 mr-2" /> Share
+              </Button>
+              <Button 
+                variant="destructive" 
+                size="sm"
+                onClick={() => setShowBatchDeleteConfirm(true)}
+                data-testid="button-delete-selected"
+              >
+                <Trash2 className="w-4 h-4 mr-2" /> Delete
+              </Button>
+            </div>
+          )}
+
+          {/* Photo Grid with Date Headers */}
           {(() => {
-            const photoFiles = files?.filter(f => isImageFile(f.contentType)) || [];
+            const allPhotos = files?.filter(f => isImageFile(f.contentType)) || [];
+            const photoFiles = currentAlbumId 
+              ? allPhotos.filter(f => f.albumId === currentAlbumId)
+              : allPhotos;
+            
             if (photoFiles.length === 0) {
               return (
                 <div className="flex items-center justify-center h-40 border-2 border-dashed border-muted-foreground/25 rounded-lg bg-muted/50">
@@ -1432,39 +1646,140 @@ export default function ProjectDetails() {
                 </div>
               );
             }
+
+            // Sort by date descending and group by date
+            const sortedPhotos = [...photoFiles].sort((a, b) => 
+              new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+            );
+
+            // Group by month - store actual Date for proper formatting
+            const monthDataMap: Map<string, { monthDate: Date; days: { date: string; photos: FileMetadata[] }[] }> = new Map();
+            
+            sortedPhotos.forEach(photo => {
+              const date = new Date(photo.createdAt || 0);
+              const monthKey = format(date, "MMMM yyyy");
+              const dateKey = format(date, "EEEE, MMMM d, yyyy");
+              
+              if (!monthDataMap.has(monthKey)) {
+                monthDataMap.set(monthKey, { monthDate: date, days: [] });
+              }
+              
+              const monthData = monthDataMap.get(monthKey)!;
+              let dateGroup = monthData.days.find(g => g.date === dateKey);
+              if (!dateGroup) {
+                dateGroup = { date: dateKey, photos: [] };
+                monthData.days.push(dateGroup);
+              }
+              dateGroup.photos.push(photo);
+            });
+
+            const gridCols = photoTileSize === 'small' 
+              ? 'grid-cols-4 md:grid-cols-6 lg:grid-cols-8' 
+              : photoTileSize === 'medium'
+              ? 'grid-cols-2 md:grid-cols-4 lg:grid-cols-5'
+              : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3';
+
+            const monthEntries = Array.from(monthDataMap.entries());
+
             return (
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                {photoFiles.map((photo) => (
-                  <div 
-                    key={photo.id} 
-                    className="relative group cursor-pointer rounded-lg overflow-hidden border bg-muted/50 aspect-square"
-                    onClick={() => setViewingFile(photo)}
-                    data-testid={`photo-card-${photo.id}`}
-                  >
-                    <img 
-                      src={photo.objectPath} 
-                      alt={photo.name}
-                      className="w-full h-full object-cover"
-                    />
-                    <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        className="text-white hover:bg-white/20"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setDeleteFileId(photo.id);
-                        }}
-                        data-testid={`button-delete-photo-${photo.id}`}
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
+              <div className="flex gap-4">
+                {/* Main Photo Grid */}
+                <div className="flex-1 space-y-6">
+                  {monthEntries.map(([monthKey, monthData]) => (
+                    <div key={monthKey} id={`month-${monthKey.replace(/\s/g, '-')}`}>
+                      <h3 className="text-lg font-semibold mb-3 sticky top-0 bg-background py-2 z-10">{monthKey}</h3>
+                      {monthData.days.map(dayGroup => (
+                        <div key={dayGroup.date} className="mb-4">
+                          <h4 className="text-sm text-muted-foreground mb-2">{dayGroup.date}</h4>
+                          <div className={cn("grid gap-2", gridCols)}>
+                            {dayGroup.photos.map((photo) => (
+                              <div 
+                                key={photo.id} 
+                                className={cn(
+                                  "relative group cursor-pointer rounded-lg overflow-hidden border bg-muted/50 aspect-square",
+                                  isPhotoSelectMode && selectedPhotos.has(photo.id) && "ring-2 ring-primary"
+                                )}
+                                onClick={() => {
+                                  if (isPhotoSelectMode) {
+                                    setSelectedPhotos(prev => {
+                                      const newSet = new Set(prev);
+                                      if (newSet.has(photo.id)) {
+                                        newSet.delete(photo.id);
+                                      } else {
+                                        newSet.add(photo.id);
+                                      }
+                                      return newSet;
+                                    });
+                                  } else {
+                                    setViewingFile(photo);
+                                  }
+                                }}
+                                data-testid={`photo-card-${photo.id}`}
+                              >
+                                <img 
+                                  src={photo.objectPath} 
+                                  alt={photo.name}
+                                  className="w-full h-full object-cover"
+                                />
+                                {isPhotoSelectMode && (
+                                  <div className={cn(
+                                    "absolute top-2 left-2 w-5 h-5 rounded border-2 flex items-center justify-center",
+                                    selectedPhotos.has(photo.id) 
+                                      ? "bg-primary border-primary" 
+                                      : "bg-white/80 border-gray-400"
+                                  )}>
+                                    {selectedPhotos.has(photo.id) && <Check className="w-3 h-3 text-white" />}
+                                  </div>
+                                )}
+                                {!isPhotoSelectMode && (
+                                  <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                                    <Button
+                                      size="icon"
+                                      variant="ghost"
+                                      className="text-white hover:bg-white/20"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setDeleteFileId(photo.id);
+                                      }}
+                                      data-testid={`button-delete-photo-${photo.id}`}
+                                    >
+                                      <Trash2 className="w-4 h-4" />
+                                    </Button>
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
                     </div>
-                    <div className="absolute bottom-0 left-0 right-0 bg-black/60 p-2">
-                      <p className="text-white text-xs truncate">{photo.name}</p>
-                    </div>
+                  ))}
+                </div>
+
+                {/* Date Slider */}
+                {monthEntries.length > 1 && (
+                  <div className="w-16 flex flex-col items-center gap-1 sticky top-0 h-fit">
+                    <span className="text-xs text-muted-foreground mb-2">Jump to</span>
+                    {monthEntries.map(([monthKey, monthData]) => {
+                      const shortMonth = format(monthData.monthDate, "MMM ''yy");
+                      return (
+                        <Button
+                          key={monthKey}
+                          variant="ghost"
+                          size="sm"
+                          className="text-xs h-6 px-2 w-full"
+                          onClick={() => {
+                            const el = document.getElementById(`month-${monthKey.replace(/\s/g, '-')}`);
+                            el?.scrollIntoView({ behavior: 'smooth' });
+                          }}
+                          data-testid={`button-jump-${monthKey.replace(/\s/g, '-')}`}
+                        >
+                          {shortMonth}
+                        </Button>
+                      );
+                    })}
                   </div>
-                ))}
+                )}
               </div>
             );
           })()}
@@ -1481,52 +1796,90 @@ export default function ProjectDetails() {
         />
       )}
 
-      {/* Image Viewer Modal */}
-      {viewingFile && isImageFile(viewingFile.contentType) && (
-        <div className="fixed inset-0 z-50 bg-black/90 flex flex-col" data-testid="document-viewer-modal">
-          <div className="flex-1 flex items-center justify-center p-4 overflow-auto" onClick={() => setViewingFile(null)}>
-            <img 
-              src={viewingFile.objectPath} 
-              alt={viewingFile.name}
-              className="max-w-full max-h-full object-contain rounded-lg"
-              onClick={(e) => e.stopPropagation()}
-            />
-          </div>
-          <div className="bg-black/80 backdrop-blur-sm border-t border-white/10 p-3 safe-area-bottom">
-            <div className="flex items-center justify-between max-w-lg mx-auto gap-2">
-              <p className="text-white text-sm font-medium truncate flex-1">{viewingFile.name}</p>
-              <div className="flex items-center gap-1">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="text-white hover:bg-white/20"
-                  onClick={() => handleShareFile(viewingFile)}
-                  data-testid="button-share-file"
-                >
-                  <Share2 className="w-5 h-5" />
-                </Button>
-                <a
-                  href={viewingFile.objectPath}
-                  download={viewingFile.name}
-                  className="inline-flex items-center justify-center h-9 w-9 rounded-md text-white hover:bg-white/20"
-                  data-testid="button-download-file"
-                >
-                  <Download className="w-5 h-5" />
-                </a>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="text-white hover:bg-white/20"
-                  onClick={() => setViewingFile(null)}
-                  data-testid="button-close-viewer"
-                >
-                  <X className="w-5 h-5" />
-                </Button>
+      {/* Image Viewer Modal with Prev/Next */}
+      {viewingFile && isImageFile(viewingFile.contentType) && (() => {
+        const allPhotos = files?.filter(f => isImageFile(f.contentType)).sort((a, b) => 
+          new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+        ) || [];
+        const currentIndex = allPhotos.findIndex(p => p.id === viewingFile.id);
+        const hasPrev = currentIndex > 0;
+        const hasNext = currentIndex < allPhotos.length - 1;
+
+        return (
+          <div className="fixed inset-0 z-50 bg-black/90 flex flex-col" data-testid="document-viewer-modal">
+            {/* Previous Button */}
+            {hasPrev && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="absolute left-4 top-1/2 -translate-y-1/2 text-white hover:bg-white/20 h-12 w-12 z-10"
+                onClick={() => setViewingFile(allPhotos[currentIndex - 1])}
+                data-testid="button-prev-photo"
+              >
+                <ChevronLeft className="w-8 h-8" />
+              </Button>
+            )}
+            
+            {/* Next Button */}
+            {hasNext && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="absolute right-4 top-1/2 -translate-y-1/2 text-white hover:bg-white/20 h-12 w-12 z-10"
+                onClick={() => setViewingFile(allPhotos[currentIndex + 1])}
+                data-testid="button-next-photo"
+              >
+                <ChevronRight className="w-8 h-8" />
+              </Button>
+            )}
+
+            <div className="flex-1 flex items-center justify-center p-4 overflow-auto" onClick={() => setViewingFile(null)}>
+              <img 
+                src={viewingFile.objectPath} 
+                alt={viewingFile.name}
+                className="max-w-full max-h-full object-contain rounded-lg"
+                onClick={(e) => e.stopPropagation()}
+              />
+            </div>
+            <div className="bg-black/80 backdrop-blur-sm border-t border-white/10 p-3 safe-area-bottom">
+              <div className="flex items-center justify-between max-w-lg mx-auto gap-2">
+                <p className="text-white text-sm font-medium truncate flex-1">
+                  {viewingFile.name}
+                  <span className="text-white/60 ml-2">({currentIndex + 1} of {allPhotos.length})</span>
+                </p>
+                <div className="flex items-center gap-1">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="text-white hover:bg-white/20"
+                    onClick={() => handleShareFile(viewingFile)}
+                    data-testid="button-share-file"
+                  >
+                    <Share2 className="w-5 h-5" />
+                  </Button>
+                  <a
+                    href={viewingFile.objectPath}
+                    download={viewingFile.name}
+                    className="inline-flex items-center justify-center h-9 w-9 rounded-md text-white hover:bg-white/20"
+                    data-testid="button-download-file"
+                  >
+                    <Download className="w-5 h-5" />
+                  </a>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="text-white hover:bg-white/20"
+                    onClick={() => setViewingFile(null)}
+                    data-testid="button-close-viewer"
+                  >
+                    <X className="w-5 h-5" />
+                  </Button>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Other file types - download prompt */}
       {viewingFile && !isPdfFile(viewingFile.contentType) && !isImageFile(viewingFile.contentType) && (
@@ -1649,6 +2002,62 @@ export default function ProjectDetails() {
         </AlertDialogContent>
       </AlertDialog>
 
+      {/* Delete Album Confirmation */}
+      <AlertDialog open={deleteAlbumId !== null} onOpenChange={(open) => !open && setDeleteAlbumId(null)}>
+        <AlertDialogContent className="bg-white dark:bg-zinc-900 text-black dark:text-white">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Album</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this album? Photos in this album will not be deleted, but they will no longer be organized in this album.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-cancel-delete-album">Cancel</AlertDialogCancel>
+            <AlertDialogAction 
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => {
+                if (deleteAlbumId) {
+                  deleteAlbumMutation.mutate(deleteAlbumId);
+                  if (currentAlbumId === deleteAlbumId) {
+                    setCurrentAlbumId(null);
+                  }
+                }
+                setDeleteAlbumId(null);
+              }}
+              data-testid="button-confirm-delete-album"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Batch Delete Photos Confirmation */}
+      <AlertDialog open={showBatchDeleteConfirm} onOpenChange={setShowBatchDeleteConfirm}>
+        <AlertDialogContent className="bg-white dark:bg-zinc-900 text-black dark:text-white">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Selected Photos</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete {selectedPhotos.size} photo{selectedPhotos.size !== 1 ? 's' : ''}? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-cancel-batch-delete">Cancel</AlertDialogCancel>
+            <AlertDialogAction 
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => {
+                selectedPhotos.forEach(id => deleteFileMutation.mutate(id));
+                setSelectedPhotos(new Set());
+                setShowBatchDeleteConfirm(false);
+              }}
+              data-testid="button-confirm-batch-delete"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       {/* Edit Task Dialog */}
       <Dialog open={editingTask !== null} onOpenChange={(open) => !open && setEditingTask(null)}>
         <DialogContent className="bg-white dark:bg-zinc-900 text-black dark:text-white max-w-md">
@@ -1749,7 +2158,7 @@ export default function ProjectDetails() {
                       <div className="flex justify-between items-start gap-2">
                         <span className="font-medium">{entry.changedByName}</span>
                         <span className="text-black dark:text-white whitespace-nowrap">
-                          {new Date(entry.changedAt).toLocaleDateString()} {new Date(entry.changedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          {entry.changedAt && new Date(entry.changedAt).toLocaleDateString()} {entry.changedAt && new Date(entry.changedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                         </span>
                       </div>
                       <div className="mt-1">
