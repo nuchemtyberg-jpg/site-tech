@@ -62,6 +62,11 @@ export async function registerRoutes(
     const projects = await storage.getProjects();
     res.json(projects);
   });
+  
+  app.get("/api/projects/next-number", async (req, res) => {
+    const nextNumber = await storage.getNextProjectNumber();
+    res.json({ projectNumber: nextNumber });
+  });
 
   app.get(api.projects.get.path, async (req, res) => {
     const project = await storage.getProject(Number(req.params.id));

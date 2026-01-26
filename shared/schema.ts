@@ -27,19 +27,24 @@ export type InsertCustomer = z.infer<typeof insertCustomerSchema>;
 // Projects
 export const projects = pgTable("projects", {
   id: serial("id").primaryKey(),
+  projectNumber: text("project_number"),
   customerId: integer("customer_id"),
   name: text("name").notNull(),
   description: text("description"),
-  location: text("location"),
+  streetAddress: text("street_address"),
+  city: text("city"),
+  state: text("state"),
+  location: text("location"), // kept for backward compatibility
   startDate: date("start_date"),
   endDate: date("end_date"),
-  status: text("status").notNull().default("bidding"), // bidding, awarded, in_progress, completed, on_hold, cancelled
+  status: text("status").notNull().default("new"), // new, bidding, takeoff_done, proposal_sent, active, completed, bid_lost, archive
   estimatedValue: integer("estimated_value"),
-  color: text("color").notNull().default("#3b82f6"),
+  notes: text("notes"),
+  color: text("color").notNull().default("#f97316"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-export const insertProjectSchema = createInsertSchema(projects).omit({ id: true, createdAt: true });
+export const insertProjectSchema = createInsertSchema(projects).omit({ id: true, projectNumber: true, createdAt: true });
 export type Project = typeof projects.$inferSelect;
 export type InsertProject = z.infer<typeof insertProjectSchema>;
 

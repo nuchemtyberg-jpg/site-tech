@@ -25,6 +25,7 @@ export interface IStorage {
   getProjects(): Promise<Project[]>;
   getProject(id: number): Promise<Project | undefined>;
   getProjectsByCustomer(customerId: number): Promise<Project[]>;
+  getNextProjectNumber(): Promise<string>;
   createProject(project: InsertProject): Promise<Project>;
   updateProject(id: number, project: Partial<InsertProject>): Promise<Project>;
   deleteProject(id: number): Promise<void>;
@@ -130,8 +131,31 @@ export class DatabaseStorage implements IStorage {
   async getProjectsByCustomer(customerId: number): Promise<Project[]> {
     return await db.select().from(projects).where(eq(projects.customerId, customerId));
   }
+  
+  async getNextProjectNumber(): Promise<string> {
+    // Get the highest project number and increment
+    const result = await db.select({ projectNumber: projects.projectNumber })
+      .from(projects)
+      .orderBy(desc(projects.projectNumber))
+      .limit(1);
+    
+    if (result.length === 0) {
+      return "S-1000"; // Starting number
+    }
+    
+    const lastNumber = result[0].projectNumber;
+    const numPart = parseInt(lastNumber.replace("S-", ""), 10);
+    return `S-${numPart + 1}`;
+  }
+  
   async createProject(insertProject: InsertProject): Promise<Project> {
-    const [project] = await db.insert(projects).values(insertProject).returning();
+    // Auto-generate project number
+    const projectNumber = await this.getNextProjectNumber();
+    
+    const [project] = await db.insert(projects).values({
+      ...insertProject,
+      projectNumber
+    }).returning();
     
     // Create default folder structure for new projects
     await this.createDefaultFolders(project.id);
