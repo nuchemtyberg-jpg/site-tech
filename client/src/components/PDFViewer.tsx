@@ -710,28 +710,24 @@ export function PDFViewer({ url, fileName, onClose, onShare }: PDFViewerProps) {
         const blob = await response.blob();
         if (cancelled) return;
         
-        // On iOS, use data URL instead of blob URL for better compatibility
-        if (isIOS()) {
-          const reader = new FileReader();
-          reader.onloadend = () => {
-            if (cancelled) return;
-            const dataUrl = reader.result as string;
-            blobUrlRef.current = dataUrl;
-            setPdfBlobUrl(dataUrl);
-            setIsLoading(false);
-          };
-          reader.onerror = () => {
-            if (cancelled) return;
-            setLoadError("Failed to read PDF file");
-            setIsLoading(false);
-          };
-          reader.readAsDataURL(blob);
-        } else {
-          const blobUrl = URL.createObjectURL(blob);
-          blobUrlRef.current = blobUrl;
-          setPdfBlobUrl(blobUrl);
+        // Ensure the blob has the correct PDF MIME type
+        const pdfBlob = new Blob([blob], { type: 'application/pdf' });
+        
+        // Use data URL for better cross-browser compatibility
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          if (cancelled) return;
+          const dataUrl = reader.result as string;
+          blobUrlRef.current = dataUrl;
+          setPdfBlobUrl(dataUrl);
           setIsLoading(false);
-        }
+        };
+        reader.onerror = () => {
+          if (cancelled) return;
+          setLoadError("Failed to read PDF file");
+          setIsLoading(false);
+        };
+        reader.readAsDataURL(pdfBlob);
       } catch (err) {
         if (cancelled) return;
         setLoadError(err instanceof Error ? err.message : "Failed to load PDF");
@@ -873,13 +869,19 @@ export function PDFViewer({ url, fileName, onClose, onShare }: PDFViewerProps) {
             visibility: isLoading || loadError ? "hidden" : "visible"
           }}
         >
-          {/* Use embed for all platforms for better PDF compatibility */}
-          <embed
-            src={pdfBlobUrl ? `${pdfBlobUrl}#view=FitH` : ""}
+          {/* Use object with iframe fallback for best cross-browser compatibility */}
+          <object
+            data={pdfBlobUrl || ""}
             type="application/pdf"
             className="w-full h-full bg-white border-0 pointer-events-none"
-            title={fileName}
-          />
+            aria-label={fileName}
+          >
+            <iframe
+              src={pdfBlobUrl || ""}
+              title={fileName}
+              className="w-full h-full bg-white border-0"
+            />
+          </object>
         </div>
         <canvas
           ref={canvasRef}
