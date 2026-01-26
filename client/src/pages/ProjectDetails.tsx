@@ -478,9 +478,15 @@ export default function ProjectDetails() {
                   <MapPin className="w-4 h-4 text-primary mt-0.5 shrink-0" />
                   <div>
                     <span className="text-muted-foreground block text-xs uppercase tracking-wide">Address</span>
-                    <span className="text-foreground">
+                    <a 
+                      href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([project.streetAddress, project.city, project.state, project.zip].filter(Boolean).join(", "))}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-primary hover:underline"
+                      data-testid="link-project-address"
+                    >
                       {[project.streetAddress, project.city, project.state, project.zip].filter(Boolean).join(", ")}
-                    </span>
+                    </a>
                   </div>
                 </div>
               )}

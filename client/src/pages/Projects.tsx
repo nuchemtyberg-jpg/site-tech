@@ -761,7 +761,16 @@ export default function Projects() {
                     {project.location && (
                       <div className="flex items-center text-xs text-muted-foreground mt-2">
                         <MapPin className="w-3 h-3 mr-1 text-primary shrink-0" />
-                        <span className="line-clamp-1">{project.location}</span>
+                        <a 
+                          href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(project.location)}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="line-clamp-1 text-primary hover:underline"
+                          onClick={(e) => e.stopPropagation()}
+                          data-testid={`link-project-address-${project.id}`}
+                        >
+                          {project.location}
+                        </a>
                       </div>
                     )}
 
@@ -815,10 +824,17 @@ export default function Projects() {
                             </span>
                           )}
                           {project.location && (
-                            <span className="flex items-center gap-1 truncate">
+                            <a 
+                              href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(project.location)}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex items-center gap-1 truncate text-primary hover:underline"
+                              onClick={(e) => e.stopPropagation()}
+                              data-testid={`link-project-address-list-${project.id}`}
+                            >
                               <MapPin className="w-3 h-3" />
                               {project.location}
-                            </span>
+                            </a>
                           )}
                         </div>
                       </div>
