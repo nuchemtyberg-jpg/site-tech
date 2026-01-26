@@ -523,6 +523,9 @@ export default function ProjectDetails() {
                         if (address.state) {
                           editForm.setValue("state", address.state);
                         }
+                        if (address.zipCode) {
+                          editForm.setValue("zip", address.zipCode);
+                        }
                       }}
                       placeholder="Start typing an address..."
                     />
@@ -717,86 +720,85 @@ export default function ProjectDetails() {
 
       {/* Tabs */}
       <Tabs defaultValue="tasks" className="w-full">
-        <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-          <TabsList>
-            <TabsTrigger value="tasks" data-testid="tab-tasks">Tasks</TabsTrigger>
-            <TabsTrigger value="documents" data-testid="tab-documents">Documents</TabsTrigger>
-          </TabsList>
-          
-          <Dialog open={isTaskOpen} onOpenChange={setIsTaskOpen}>
-            <DialogTrigger asChild>
-              <Button data-testid="button-add-task">
-                <Plus className="w-4 h-4 mr-2" /> Add Task
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Add New Task</DialogTitle>
-              </DialogHeader>
-              <form onSubmit={form.handleSubmit(onSubmitTask)} className="space-y-4 mt-4">
-                <div className="grid gap-2">
-                  <Label htmlFor="title">Task Title</Label>
-                  <Input id="title" {...form.register("title")} placeholder="e.g. Foundation Pour" data-testid="input-task-title" className="bg-white dark:bg-zinc-900 text-black dark:text-white" />
-                  {form.formState.errors.title && <p className="text-red-500 text-xs">{form.formState.errors.title.message}</p>}
-                </div>
-                
-                <div className="grid gap-2">
-                  <Label htmlFor="description">Description</Label>
-                  <Input id="description" {...form.register("description")} placeholder="Details..." data-testid="input-task-description" className="bg-white dark:bg-zinc-900 text-black dark:text-white" />
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="grid gap-2">
-                    <Label htmlFor="scheduledDate">Scheduled Date</Label>
-                    <Input id="scheduledDate" type="date" {...form.register("scheduledDate")} data-testid="input-task-scheduled" className="bg-white dark:bg-zinc-900 text-black dark:text-white" />
-                  </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor="dueDate">Due Date</Label>
-                    <Input id="dueDate" type="date" {...form.register("dueDate")} data-testid="input-task-due" className="bg-white dark:bg-zinc-900 text-black dark:text-white" />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="grid gap-2">
-                    <Label htmlFor="status">Status</Label>
-                    <Select onValueChange={(val) => form.setValue("status", val)} defaultValue="pending">
-                      <SelectTrigger data-testid="select-task-status" className="bg-white dark:bg-zinc-900 text-black dark:text-white">
-                        <SelectValue placeholder="Status" />
-                      </SelectTrigger>
-                      <SelectContent className="bg-white dark:bg-zinc-900 text-black dark:text-white">
-                        <SelectItem value="pending">Pending</SelectItem>
-                        <SelectItem value="in_progress">In Progress</SelectItem>
-                        <SelectItem value="completed">Completed</SelectItem>
-                        <SelectItem value="blocked">Blocked</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor="priority">Priority</Label>
-                    <Select onValueChange={(val) => form.setValue("priority", val)} defaultValue="medium">
-                      <SelectTrigger data-testid="select-task-priority" className="bg-white dark:bg-zinc-900 text-black dark:text-white">
-                        <SelectValue placeholder="Priority" />
-                      </SelectTrigger>
-                      <SelectContent className="bg-white dark:bg-zinc-900 text-black dark:text-white">
-                        <SelectItem value="low">Low</SelectItem>
-                        <SelectItem value="medium">Medium</SelectItem>
-                        <SelectItem value="high">High</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-
-                <DialogFooter>
-                  <Button type="submit" disabled={createTaskMutation.isPending} data-testid="button-submit-task">
-                    {createTaskMutation.isPending ? "Adding..." : "Add Task"}
-                  </Button>
-                </DialogFooter>
-              </form>
-            </DialogContent>
-          </Dialog>
-        </div>
+        <TabsList className="mb-4">
+          <TabsTrigger value="tasks" data-testid="tab-tasks">Tasks</TabsTrigger>
+          <TabsTrigger value="documents" data-testid="tab-documents">Documents</TabsTrigger>
+        </TabsList>
 
         <TabsContent value="tasks" className="space-y-4">
+          <div className="flex items-center justify-end mb-4">
+            <Dialog open={isTaskOpen} onOpenChange={setIsTaskOpen}>
+              <DialogTrigger asChild>
+                <Button data-testid="button-add-task">
+                  <Plus className="w-4 h-4 mr-2" /> Add Task
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Add New Task</DialogTitle>
+                </DialogHeader>
+                <form onSubmit={form.handleSubmit(onSubmitTask)} className="space-y-4 mt-4">
+                  <div className="grid gap-2">
+                    <Label htmlFor="title">Task Title</Label>
+                    <Input id="title" {...form.register("title")} placeholder="e.g. Foundation Pour" data-testid="input-task-title" className="bg-white dark:bg-zinc-900 text-black dark:text-white" />
+                    {form.formState.errors.title && <p className="text-red-500 text-xs">{form.formState.errors.title.message}</p>}
+                  </div>
+                  
+                  <div className="grid gap-2">
+                    <Label htmlFor="description">Description</Label>
+                    <Input id="description" {...form.register("description")} placeholder="Details..." data-testid="input-task-description" className="bg-white dark:bg-zinc-900 text-black dark:text-white" />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="grid gap-2">
+                      <Label htmlFor="scheduledDate">Scheduled Date</Label>
+                      <Input id="scheduledDate" type="date" {...form.register("scheduledDate")} data-testid="input-task-scheduled" className="bg-white dark:bg-zinc-900 text-black dark:text-white" />
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="dueDate">Due Date</Label>
+                      <Input id="dueDate" type="date" {...form.register("dueDate")} data-testid="input-task-due" className="bg-white dark:bg-zinc-900 text-black dark:text-white" />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="grid gap-2">
+                      <Label htmlFor="status">Status</Label>
+                      <Select onValueChange={(val) => form.setValue("status", val)} defaultValue="pending">
+                        <SelectTrigger data-testid="select-task-status" className="bg-white dark:bg-zinc-900 text-black dark:text-white">
+                          <SelectValue placeholder="Status" />
+                        </SelectTrigger>
+                        <SelectContent className="bg-white dark:bg-zinc-900 text-black dark:text-white">
+                          <SelectItem value="pending">Pending</SelectItem>
+                          <SelectItem value="in_progress">In Progress</SelectItem>
+                          <SelectItem value="completed">Completed</SelectItem>
+                          <SelectItem value="blocked">Blocked</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="priority">Priority</Label>
+                      <Select onValueChange={(val) => form.setValue("priority", val)} defaultValue="medium">
+                        <SelectTrigger data-testid="select-task-priority" className="bg-white dark:bg-zinc-900 text-black dark:text-white">
+                          <SelectValue placeholder="Priority" />
+                        </SelectTrigger>
+                        <SelectContent className="bg-white dark:bg-zinc-900 text-black dark:text-white">
+                          <SelectItem value="low">Low</SelectItem>
+                          <SelectItem value="medium">Medium</SelectItem>
+                          <SelectItem value="high">High</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  <DialogFooter>
+                    <Button type="submit" disabled={createTaskMutation.isPending} data-testid="button-submit-task">
+                      {createTaskMutation.isPending ? "Adding..." : "Add Task"}
+                    </Button>
+                  </DialogFooter>
+                </form>
+              </DialogContent>
+            </Dialog>
+          </div>
           {isTasksLoading ? (
             <div className="py-10 text-center text-muted-foreground">Loading tasks...</div>
           ) : tasks?.length === 0 ? (

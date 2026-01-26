@@ -28,7 +28,7 @@ const projectFormSchema = z.object({
   streetAddress: z.string().min(1, "Street address is required"),
   city: z.string().min(1, "City is required"),
   state: z.string().min(1, "State is required"),
-  zip: z.string().optional(),
+  zip: z.string().min(1, "Zip code is required"),
   customerId: z.number({ required_error: "Customer is required" }),
   status: z.string().min(1, "Status is required"),
   notes: z.string().optional(),
@@ -277,6 +277,9 @@ export default function Projects() {
                         if (address.state) {
                           form.setValue("state", address.state);
                         }
+                        if (address.zipCode) {
+                          form.setValue("zip", address.zipCode);
+                        }
                       }}
                       placeholder="Start typing an address..."
                     />
@@ -340,7 +343,7 @@ export default function Projects() {
                       name="zip"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Zip Code</FormLabel>
+                          <FormLabel>Zip Code *</FormLabel>
                           <FormControl>
                             <Input placeholder="12345" {...field} data-testid="input-project-zip" className="bg-white dark:bg-zinc-900 text-black dark:text-white" />
                           </FormControl>
@@ -365,7 +368,7 @@ export default function Projects() {
                               role="combobox"
                               className={cn(
                                 "w-full justify-between bg-white dark:bg-zinc-900",
-                                !field.value && "text-muted-foreground"
+                                field.value ? "text-black dark:text-white" : "text-muted-foreground"
                               )}
                               data-testid="select-project-customer"
                             >
@@ -382,6 +385,7 @@ export default function Projects() {
                               placeholder="Search customers..." 
                               value={customerSearch}
                               onValueChange={setCustomerSearch}
+                              className="text-black dark:text-white"
                             />
                             <CommandList>
                               <CommandEmpty>
@@ -407,7 +411,7 @@ export default function Projects() {
                                     setCustomerPopoverOpen(false);
                                     setCustomerDialogOpen(true);
                                   }}
-                                  className="text-primary"
+                                  className="text-black dark:text-white"
                                 >
                                   <UserPlus className="w-4 h-4 mr-2" />
                                   Add New Customer
@@ -420,10 +424,11 @@ export default function Projects() {
                                       field.onChange(customer.id);
                                       setCustomerPopoverOpen(false);
                                     }}
+                                    className="text-black dark:text-white"
                                   >
-                                    <span>{customer.name}</span>
+                                    <span className="text-black dark:text-white">{customer.name}</span>
                                     {customer.company && (
-                                      <span className="ml-2 text-muted-foreground text-sm">
+                                      <span className="ml-2 text-gray-600 dark:text-gray-400 text-sm">
                                         ({customer.company})
                                       </span>
                                     )}

@@ -25,6 +25,7 @@ interface ParsedAddress {
   streetAddress: string;
   city: string;
   state: string;
+  zipCode: string;
 }
 
 interface AddressAutocompleteProps {
@@ -209,8 +210,10 @@ export function AddressAutocomplete({
     const city = addr.city || addr.town || addr.village || addr.municipality || "";
 
     const stateAbbr = getStateAbbreviation(addr.state || "");
+    
+    const zipCode = addr.postcode || "";
 
-    return { streetAddress, city, state: stateAbbr };
+    return { streetAddress, city, state: stateAbbr, zipCode };
   };
 
   const handleSelectAddress = (result: AddressResult) => {
