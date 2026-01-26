@@ -9,7 +9,7 @@ export default function PDFViewerPage() {
   const fileName = searchParams.get("name") || "Document.pdf";
   const objectPath = searchParams.get("path") || "";
   
-  const fileUrl = objectPath ? `/api/files/download${objectPath}` : "";
+  const fileUrl = objectPath || "";
 
   const handleClose = () => {
     setLocation(`/projects/${params.projectId}`);
