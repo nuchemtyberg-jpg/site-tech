@@ -1,12 +1,17 @@
-import { db } from "./db";
 import {
-  projects, tasks, equipment, allocations,
-  type InsertProject, type InsertTask, type InsertEquipment, type InsertAllocation,
-  type Project, type Task, type Equipment, type Allocation
+  projects, tasks, equipment, allocations, folders, files, users, sessions,
+  type InsertProject, type InsertTask, type InsertEquipment, type InsertAllocation, type InsertFolder, type InsertFileMetadata,
+  type Project, type Task, type Equipment, type Allocation, type Folder, type FileMetadata,
+  type User, type UpsertUser
 } from "@shared/schema";
-import { eq, desc } from "drizzle-orm";
+import { db } from "./db";
+import { eq, desc, and } from "drizzle-orm";
 
 export interface IStorage {
+  // Auth (from Replit Auth integration)
+  getUser(id: string): Promise<User | undefined>;
+  upsertUser(user: UpsertUser): Promise<User>;
+
   // Projects
   getProjects(): Promise<Project[]>;
   getProject(id: number): Promise<Project | undefined>;
@@ -32,9 +37,39 @@ export interface IStorage {
   getAllocations(): Promise<Allocation[]>;
   createAllocation(allocation: InsertAllocation): Promise<Allocation>;
   deleteAllocation(id: number): Promise<void>;
+
+  // Folders & Files
+  getFolders(projectId: number): Promise<Folder[]>;
+  createFolder(folder: InsertFolder): Promise<Folder>;
+  deleteFolder(id: number): Promise<void>;
+
+  getFiles(projectId: number): Promise<FileMetadata[]>;
+  createFile(file: InsertFileMetadata): Promise<FileMetadata>;
+  deleteFile(id: number): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
+  // Auth
+  async getUser(id: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.id, id));
+    return user;
+  }
+
+  async upsertUser(userData: UpsertUser): Promise<User> {
+    const [user] = await db
+      .insert(users)
+      .values(userData)
+      .onConflictDoUpdate({
+        target: users.id,
+        set: {
+          ...userData,
+          updatedAt: new Date(),
+        },
+      })
+      .returning();
+    return user;
+  }
+
   // Projects
   async getProjects(): Promise<Project[]> {
     return await db.select().from(projects).orderBy(desc(projects.startDate));
@@ -109,6 +144,31 @@ export class DatabaseStorage implements IStorage {
   async deleteAllocation(id: number): Promise<void> {
     await db.delete(allocations).where(eq(allocations.id, id));
   }
+
+  // Folders
+  async getFolders(projectId: number): Promise<Folder[]> {
+    return await db.select().from(folders).where(eq(folders.projectId, projectId));
+  }
+  async createFolder(insertFolder: InsertFolder): Promise<Folder> {
+    const [folder] = await db.insert(folders).values(insertFolder).returning();
+    return folder;
+  }
+  async deleteFolder(id: number): Promise<void> {
+    await db.delete(folders).where(eq(folders.id, id));
+  }
+
+  // Files
+  async getFiles(projectId: number): Promise<FileMetadata[]> {
+    return await db.select().from(files).where(eq(files.projectId, projectId));
+  }
+  async createFile(insertFile: InsertFileMetadata): Promise<FileMetadata> {
+    const [file] = await db.insert(files).values(insertFile).returning();
+    return file;
+  }
+  async deleteFile(id: number): Promise<void> {
+    await db.delete(files).where(eq(files.id, id));
+  }
 }
 
 export const storage = new DatabaseStorage();
+export const authStorage = storage; // Alias for Replit Auth

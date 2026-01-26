@@ -164,6 +164,63 @@ export const api = {
       },
     },
   },
+  files: {
+    list: {
+      method: 'GET' as const,
+      path: '/api/projects/:projectId/files',
+      responses: {
+        200: z.array(z.custom<any>()), // Simplified for now
+      },
+    },
+    create: {
+      method: 'POST' as const,
+      path: '/api/projects/:projectId/files',
+      input: z.object({
+        name: z.string(),
+        folderId: z.number().nullable().optional(),
+        objectPath: z.string(),
+        contentType: z.string().optional(),
+        size: z.number().optional(),
+      }),
+      responses: {
+        201: z.custom<any>(),
+      },
+    },
+    delete: {
+      method: 'DELETE' as const,
+      path: '/api/files/:id',
+      responses: {
+        204: z.void(),
+      },
+    },
+  },
+  folders: {
+    list: {
+      method: 'GET' as const,
+      path: '/api/projects/:projectId/folders',
+      responses: {
+        200: z.array(z.custom<any>()),
+      },
+    },
+    create: {
+      method: 'POST' as const,
+      path: '/api/projects/:projectId/folders',
+      input: z.object({
+        name: z.string(),
+        parentId: z.number().nullable().optional(),
+      }),
+      responses: {
+        201: z.custom<any>(),
+      },
+    },
+    delete: {
+      method: 'DELETE' as const,
+      path: '/api/folders/:id',
+      responses: {
+        204: z.void(),
+      },
+    },
+  },
 };
 
 export function buildUrl(path: string, params?: Record<string, string | number>): string {

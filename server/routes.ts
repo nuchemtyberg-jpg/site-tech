@@ -4,6 +4,7 @@ import { storage } from "./storage";
 import { api } from "@shared/routes";
 import { z } from "zod";
 import { setupAuth, registerAuthRoutes } from "./replit_integrations/auth";
+import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -12,6 +13,9 @@ export async function registerRoutes(
   // Auth Setup
   await setupAuth(app);
   registerAuthRoutes(app);
+  
+  // Object Storage Setup
+  registerObjectStorageRoutes(app);
 
   // Projects
   app.get(api.projects.list.path, async (req, res) => {
@@ -172,6 +176,45 @@ export async function registerRoutes(
 
   app.delete(api.allocations.delete.path, async (req, res) => {
     await storage.deleteAllocation(Number(req.params.id));
+    res.status(204).send();
+  });
+
+  // Folders & Files
+  app.get(api.folders.list.path, async (req, res) => {
+    const list = await storage.getFolders(Number(req.params.projectId));
+    res.json(list);
+  });
+
+  app.post(api.folders.create.path, async (req, res) => {
+    const input = api.folders.create.input.parse(req.body);
+    const folder = await storage.createFolder({
+      ...input,
+      projectId: Number(req.params.projectId),
+    });
+    res.status(201).json(folder);
+  });
+
+  app.delete(api.folders.delete.path, async (req, res) => {
+    await storage.deleteFolder(Number(req.params.id));
+    res.status(204).send();
+  });
+
+  app.get(api.files.list.path, async (req, res) => {
+    const list = await storage.getFiles(Number(req.params.projectId));
+    res.json(list);
+  });
+
+  app.post(api.files.create.path, async (req, res) => {
+    const input = api.files.create.input.parse(req.body);
+    const file = await storage.createFile({
+      ...input,
+      projectId: Number(req.params.projectId),
+    });
+    res.status(201).json(file);
+  });
+
+  app.delete(api.files.delete.path, async (req, res) => {
+    await storage.deleteFile(Number(req.params.id));
     res.status(204).send();
   });
 

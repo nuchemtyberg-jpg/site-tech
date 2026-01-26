@@ -63,3 +63,32 @@ export const allocations = pgTable("allocations", {
 export const insertAllocationSchema = createInsertSchema(allocations).omit({ id: true });
 export type Allocation = typeof allocations.$inferSelect;
 export type InsertAllocation = z.infer<typeof insertAllocationSchema>;
+
+// Folders
+export const folders = pgTable("folders", {
+  id: serial("id").primaryKey(),
+  projectId: integer("project_id").notNull(),
+  parentId: integer("parent_id"), // Self-reference for subfolders
+  name: text("name").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertFolderSchema = createInsertSchema(folders).omit({ id: true, createdAt: true });
+export type Folder = typeof folders.$inferSelect;
+export type InsertFolder = z.infer<typeof insertFolderSchema>;
+
+// Files
+export const files = pgTable("files", {
+  id: serial("id").primaryKey(),
+  projectId: integer("project_id").notNull(),
+  folderId: integer("folder_id"),
+  name: text("name").notNull(),
+  objectPath: text("object_path").notNull(), // Path in storage
+  contentType: text("content_type"),
+  size: integer("size"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertFileSchema = createInsertSchema(files).omit({ id: true, createdAt: true });
+export type FileMetadata = typeof files.$inferSelect;
+export type InsertFileMetadata = z.infer<typeof insertFileSchema>;
