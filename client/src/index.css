@@ -80,34 +80,3 @@
   from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: translateY(0); }
 }
-
-/* Uppy Dashboard Modal - Mobile Fixes */
-.uppy-Dashboard--modal {
-  z-index: 9999 !important;
-}
-
-.uppy-Dashboard-inner {
-  max-height: 85vh !important;
-  max-width: 95vw !important;
-}
-
-@media (max-width: 640px) {
-  .uppy-Dashboard-inner {
-    width: 100% !important;
-    height: auto !important;
-    min-height: 400px !important;
-  }
-  
-  .uppy-Dashboard-AddFiles {
-    padding: 16px !important;
-  }
-  
-  .uppy-Dashboard-AddFiles-title {
-    font-size: 16px !important;
-  }
-  
-  .uppy-Dashboard-browse {
-    font-size: 16px !important;
-    padding: 12px 24px !important;
-  }
-}

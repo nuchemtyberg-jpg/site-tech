@@ -96,6 +96,8 @@ export function ObjectUploader({
         open={showModal}
         onRequestClose={() => setShowModal(false)}
         proudlyDisplayPoweredByUppy={false}
+        disablePageScrollWhenModalOpen={false}
+        browserBackButtonClose={true}
       />
     </div>
   );
