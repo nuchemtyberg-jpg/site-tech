@@ -31,7 +31,8 @@ import {
   Building2,
   Check,
   ChevronsUpDown,
-  Clock
+  Clock,
+  Camera
 } from "lucide-react";
 import { 
   DropdownMenu, 
@@ -912,6 +913,10 @@ export default function ProjectDetails() {
         <TabsList className="mb-4">
           <TabsTrigger value="tasks" data-testid="tab-tasks">Tasks</TabsTrigger>
           <TabsTrigger value="documents" data-testid="tab-documents">Documents</TabsTrigger>
+          <TabsTrigger value="photos" data-testid="tab-photos">
+            <Camera className="w-4 h-4 mr-2" />
+            Photos
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="tasks" className="space-y-4">
@@ -1377,6 +1382,25 @@ export default function ProjectDetails() {
               )}
             </div>
           )}
+        </TabsContent>
+
+        <TabsContent value="photos" className="space-y-4">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold">Project Photos</h3>
+            <Button data-testid="button-upload-photo">
+              <Upload className="w-4 h-4 mr-2" /> Upload Photos
+            </Button>
+          </div>
+          
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+            <div className="flex items-center justify-center h-40 border-2 border-dashed border-muted-foreground/25 rounded-lg bg-muted/50">
+              <div className="text-center text-muted-foreground">
+                <Camera className="w-8 h-8 mx-auto mb-2" />
+                <p className="text-sm">No photos yet</p>
+                <p className="text-xs">Upload photos to get started</p>
+              </div>
+            </div>
+          </div>
         </TabsContent>
       </Tabs>
 
