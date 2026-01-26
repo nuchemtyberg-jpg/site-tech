@@ -1687,10 +1687,10 @@ export default function ProjectDetails() {
                 <div className="flex-1 space-y-6">
                   {monthEntries.map(([monthKey, monthData]) => (
                     <div key={monthKey} id={`month-${monthKey.replace(/\s/g, '-')}`}>
-                      <h3 className="text-lg font-semibold mb-3 sticky top-0 bg-background py-2 z-10 text-black dark:text-black">{monthKey}</h3>
+                      <h3 className="text-lg font-semibold mb-3 sticky top-0 bg-background py-2 z-10">{monthKey}</h3>
                       {monthData.days.map(dayGroup => (
                         <div key={dayGroup.date} className="mb-4">
-                          <h4 className="text-sm mb-2 text-black dark:text-black">{dayGroup.date}</h4>
+                          <h4 className="text-sm text-muted-foreground mb-2">{dayGroup.date}</h4>
                           <div className={cn("grid gap-2", gridCols)}>
                             {dayGroup.photos.map((photo) => (
                               <div 
