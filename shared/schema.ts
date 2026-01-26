@@ -203,11 +203,24 @@ export const insertFolderSchema = createInsertSchema(folders).omit({ id: true, c
 export type Folder = typeof folders.$inferSelect;
 export type InsertFolder = z.infer<typeof insertFolderSchema>;
 
+// Photo Albums
+export const photoAlbums = pgTable("photo_albums", {
+  id: serial("id").primaryKey(),
+  projectId: integer("project_id").notNull(),
+  name: text("name").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertPhotoAlbumSchema = createInsertSchema(photoAlbums).omit({ id: true, createdAt: true });
+export type PhotoAlbum = typeof photoAlbums.$inferSelect;
+export type InsertPhotoAlbum = z.infer<typeof insertPhotoAlbumSchema>;
+
 // Files
 export const files = pgTable("files", {
   id: serial("id").primaryKey(),
   projectId: integer("project_id").notNull(),
   folderId: integer("folder_id"),
+  albumId: integer("album_id"),
   name: text("name").notNull(),
   objectPath: text("object_path").notNull(),
   contentType: text("content_type"),

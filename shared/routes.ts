@@ -2,7 +2,8 @@ import { z } from 'zod';
 import { 
   insertProjectSchema, insertTaskSchema, insertEquipmentSchema, insertAllocationSchema,
   insertCustomerSchema, insertDailyReportSchema, insertMaintenanceLogSchema, insertCommunicationSchema,
-  projects, tasks, equipment, allocations, customers, dailyReports, maintenanceLogs, communications
+  insertPhotoAlbumSchema,
+  projects, tasks, equipment, allocations, customers, dailyReports, maintenanceLogs, communications, photoAlbums
 } from './schema';
 
 export const errorSchemas = {
@@ -395,6 +396,44 @@ export const api = {
       path: '/api/folders/:id',
       responses: {
         204: z.void(),
+      },
+    },
+  },
+
+  // Photo Albums
+  photoAlbums: {
+    list: {
+      method: 'GET' as const,
+      path: '/api/projects/:projectId/albums',
+      responses: {
+        200: z.array(z.custom<typeof photoAlbums.$inferSelect>()),
+      },
+    },
+    create: {
+      method: 'POST' as const,
+      path: '/api/projects/:projectId/albums',
+      input: insertPhotoAlbumSchema.omit({ projectId: true }),
+      responses: {
+        201: z.custom<typeof photoAlbums.$inferSelect>(),
+        400: errorSchemas.validation,
+      },
+    },
+    update: {
+      method: 'PUT' as const,
+      path: '/api/albums/:id',
+      input: insertPhotoAlbumSchema.partial(),
+      responses: {
+        200: z.custom<typeof photoAlbums.$inferSelect>(),
+        400: errorSchemas.validation,
+        404: errorSchemas.notFound,
+      },
+    },
+    delete: {
+      method: 'DELETE' as const,
+      path: '/api/albums/:id',
+      responses: {
+        204: z.void(),
+        404: errorSchemas.notFound,
       },
     },
   },

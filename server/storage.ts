@@ -1,9 +1,9 @@
 import {
-  projects, tasks, equipment, allocations, folders, files, users, customers, dailyReports, maintenanceLogs, communications, taskStatusHistory,
+  projects, tasks, equipment, allocations, folders, files, users, customers, dailyReports, maintenanceLogs, communications, taskStatusHistory, photoAlbums,
   type InsertProject, type InsertTask, type InsertEquipment, type InsertAllocation, type InsertFolder, type InsertFileMetadata,
-  type InsertCustomer, type InsertDailyReport, type InsertMaintenanceLog, type InsertCommunication, type InsertTaskStatusHistory,
+  type InsertCustomer, type InsertDailyReport, type InsertMaintenanceLog, type InsertCommunication, type InsertTaskStatusHistory, type InsertPhotoAlbum,
   type Project, type Task, type Equipment, type Allocation, type Folder, type FileMetadata,
-  type Customer, type DailyReport, type MaintenanceLog, type Communication, type TaskStatusHistory,
+  type Customer, type DailyReport, type MaintenanceLog, type Communication, type TaskStatusHistory, type PhotoAlbum,
   type User, type UpsertUser
 } from "@shared/schema";
 import { db } from "./db";
@@ -79,7 +79,15 @@ export interface IStorage {
   getFiles(projectId: number): Promise<FileMetadata[]>;
   getFile(id: number): Promise<FileMetadata | undefined>;
   createFile(file: InsertFileMetadata): Promise<FileMetadata>;
+  updateFile(id: number, file: Partial<InsertFileMetadata>): Promise<FileMetadata>;
   deleteFile(id: number): Promise<void>;
+
+  // Photo Albums
+  getPhotoAlbums(projectId: number): Promise<PhotoAlbum[]>;
+  getPhotoAlbum(id: number): Promise<PhotoAlbum | undefined>;
+  createPhotoAlbum(album: InsertPhotoAlbum): Promise<PhotoAlbum>;
+  updatePhotoAlbum(id: number, album: Partial<InsertPhotoAlbum>): Promise<PhotoAlbum>;
+  deletePhotoAlbum(id: number): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -352,8 +360,32 @@ export class DatabaseStorage implements IStorage {
     const [file] = await db.insert(files).values(insertFile).returning();
     return file;
   }
+  async updateFile(id: number, updates: Partial<InsertFileMetadata>): Promise<FileMetadata> {
+    const [file] = await db.update(files).set(updates).where(eq(files.id, id)).returning();
+    return file;
+  }
   async deleteFile(id: number): Promise<void> {
     await db.delete(files).where(eq(files.id, id));
+  }
+
+  // Photo Albums
+  async getPhotoAlbums(projectId: number): Promise<PhotoAlbum[]> {
+    return await db.select().from(photoAlbums).where(eq(photoAlbums.projectId, projectId)).orderBy(desc(photoAlbums.createdAt));
+  }
+  async getPhotoAlbum(id: number): Promise<PhotoAlbum | undefined> {
+    const [album] = await db.select().from(photoAlbums).where(eq(photoAlbums.id, id));
+    return album;
+  }
+  async createPhotoAlbum(insertAlbum: InsertPhotoAlbum): Promise<PhotoAlbum> {
+    const [album] = await db.insert(photoAlbums).values(insertAlbum).returning();
+    return album;
+  }
+  async updatePhotoAlbum(id: number, updates: Partial<InsertPhotoAlbum>): Promise<PhotoAlbum> {
+    const [album] = await db.update(photoAlbums).set(updates).where(eq(photoAlbums.id, id)).returning();
+    return album;
+  }
+  async deletePhotoAlbum(id: number): Promise<void> {
+    await db.delete(photoAlbums).where(eq(photoAlbums.id, id));
   }
 }
 

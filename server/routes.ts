@@ -435,5 +435,55 @@ export async function registerRoutes(
     res.status(204).send();
   });
 
+  // Photo Albums
+  app.get(api.photoAlbums.list.path, async (req, res) => {
+    const albums = await storage.getPhotoAlbums(Number(req.params.projectId));
+    res.json(albums);
+  });
+
+  app.post(api.photoAlbums.create.path, async (req, res) => {
+    try {
+      const input = api.photoAlbums.create.input.parse(req.body);
+      const album = await storage.createPhotoAlbum({
+        ...input,
+        projectId: Number(req.params.projectId),
+      });
+      res.status(201).json(album);
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0].message });
+      }
+      throw err;
+    }
+  });
+
+  app.put(api.photoAlbums.update.path, async (req, res) => {
+    try {
+      const input = api.photoAlbums.update.input.parse(req.body);
+      const album = await storage.updatePhotoAlbum(Number(req.params.id), input);
+      res.json(album);
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0].message });
+      }
+      throw err;
+    }
+  });
+
+  app.delete(api.photoAlbums.delete.path, async (req, res) => {
+    await storage.deletePhotoAlbum(Number(req.params.id));
+    res.status(204).send();
+  });
+
+  // Update file to assign to album
+  app.put('/api/files/:id', async (req, res) => {
+    try {
+      const file = await storage.updateFile(Number(req.params.id), req.body);
+      res.json(file);
+    } catch (err) {
+      throw err;
+    }
+  });
+
   return httpServer;
 }
