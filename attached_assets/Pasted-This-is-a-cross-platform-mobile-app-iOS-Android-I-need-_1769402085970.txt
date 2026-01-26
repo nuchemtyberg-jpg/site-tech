@@ -1,0 +1,73 @@
+This is a cross-platform mobile app (iOS + Android). I need a native-feeling PDF viewer with professional markup, like Apple’s PDF viewer / Adobe Acrobat.
+
+Platform + constraints
+	•	Target: iOS + Android
+	•	Must support smooth 60fps gestures (pinch zoom + pan)
+	•	Must support real annotation tools and export annotated PDF
+	•	Prefer libraries that are stable and widely used
+
+Core viewer requirements
+	1.	Open PDF full screen in a dedicated viewer screen.
+	2.	Always-visible top bar:
+	•	Left: Close
+	•	Right: Share, Download
+	3.	Gestures:
+	•	Pinch-to-zoom (min 1x, max ~6x)
+	•	Pan by touch when zoomed
+	•	Double-tap zoom in/out
+	•	Smooth page scroll when not zoomed
+	4.	Performance:
+	•	No janky re-renders on pinch
+	•	Large PDFs should not freeze the UI
+
+Markup requirements
+
+Provide a markup mode with a bottom toolbar:
+	•	Tools:
+	•	Pen (variable thickness + colors)
+	•	Highlighter (opacity + thickness + colors)
+	•	Shapes: rectangle, arrow, line
+	•	Construction shapes: clouding and callout boxes
+	•	Text note tool
+	•	Eraser
+	•	Undo / Redo
+	•	Users can select/move/resize shapes after placing.
+	•	Annotations must persist per page and reload perfectly aligned.
+
+Saving + export requirements
+	•	Save PDFs in app storage or remote storage (configurable).
+	•	Save annotations in a structured format per document:
+	•	documentId, pageNumber, type, color, thickness, points/geometry, createdAt
+	•	Store coordinates relative to page size (normalized 0–1) so zoom/resolution doesn’t break alignment.
+	•	Download options:
+	•	Download original PDF
+	•	Download annotated PDF (preferred)
+	•	Export annotated PDF:
+	•	Preferred: write true PDF annotations (Acrobat-compatible)
+	•	Acceptable fallback: flatten annotations into a new PDF on export
+
+Implementation approach (recommend and build)
+
+Use React Native components, not a webview.
+	•	PDF rendering: use react-native-pdf (or another well-supported RN native PDF renderer)
+	•	Markup overlay:
+	•	Use @shopify/react-native-skia (preferred for performance) for drawing paths + shapes
+	•	Manage zoom/pan transforms so annotations stay aligned with the PDF
+	•	Share:
+	•	Use native share sheet (expo-sharing or react-native-share)
+	•	Download/save:
+	•	Use filesystem (expo-file-system or react-native-fs)
+	•	Export annotated PDF:
+	•	Either:
+	•	Generate a new PDF by compositing page render + Skia overlay per page, OR
+	•	Convert annotation model into real PDF annotations using a native module / PDF library (platform specific)
+
+Deliverables
+	1.	PdfViewerScreen with full-screen PDF + top toolbar
+	2.	Gesture support (pinch zoom, pan, double-tap)
+	3.	MarkupToolbar + drawing tools + editing (select/move/resize)
+	4.	Annotation persistence + rehydration
+	5.	Export pipeline: “Download annotated PDF”
+	6.	A short test checklist (zoom/pan, annotation alignment, export correctness)
+
+Start by implementing viewer + toolbar + gestures. Then add markup overlay. Then persistence. Then export.
