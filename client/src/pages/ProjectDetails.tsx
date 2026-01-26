@@ -481,7 +481,7 @@ export default function ProjectDetails() {
                   <MoreVertical className="w-4 h-4" />
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="bg-white dark:bg-zinc-900">
+              <DropdownMenuContent align="end" className="bg-white dark:bg-zinc-900 text-black dark:text-white">
                 <DropdownMenuItem className="text-destructive focus:text-destructive cursor-pointer" onClick={handleDeleteProject} data-testid="button-delete-project">
                   <Trash2 className="w-4 h-4 mr-2" /> Delete Project
                 </DropdownMenuItem>
@@ -566,7 +566,7 @@ export default function ProjectDetails() {
                                 <SelectValue placeholder="Select" />
                               </SelectTrigger>
                             </FormControl>
-                            <SelectContent className="bg-white dark:bg-zinc-900">
+                            <SelectContent className="bg-white dark:bg-zinc-900 text-black dark:text-white">
                               {US_STATES.map((state) => (
                                 <SelectItem key={state} value={state}>
                                   {state}
@@ -618,8 +618,8 @@ export default function ProjectDetails() {
                             </Button>
                           </FormControl>
                         </PopoverTrigger>
-                        <PopoverContent className="w-full p-0 bg-white dark:bg-zinc-900" align="start">
-                          <Command className="bg-white dark:bg-zinc-900">
+                        <PopoverContent className="w-full p-0 bg-white dark:bg-zinc-900 text-black dark:text-white" align="start">
+                          <Command className="bg-white dark:bg-zinc-900 text-black dark:text-white">
                             <CommandInput 
                               placeholder="Search customers..." 
                               value={customerSearch}
@@ -668,7 +668,7 @@ export default function ProjectDetails() {
                             <SelectValue placeholder="Select status" />
                           </SelectTrigger>
                         </FormControl>
-                        <SelectContent className="bg-white dark:bg-zinc-900">
+                        <SelectContent className="bg-white dark:bg-zinc-900 text-black dark:text-white">
                           {PROJECT_STATUSES.map((status) => (
                             <SelectItem key={status.value} value={status.value}>
                               <div className="flex items-center gap-2">

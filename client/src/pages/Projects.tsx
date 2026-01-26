@@ -323,7 +323,7 @@ export default function Projects() {
                                 <SelectValue placeholder="Select" />
                               </SelectTrigger>
                             </FormControl>
-                            <SelectContent className="bg-white dark:bg-zinc-900">
+                            <SelectContent className="bg-white dark:bg-zinc-900 text-black dark:text-white">
                               {US_STATES.map((state) => (
                                 <SelectItem key={state} value={state}>
                                   {state}
@@ -376,8 +376,8 @@ export default function Projects() {
                             </Button>
                           </FormControl>
                         </PopoverTrigger>
-                        <PopoverContent className="w-full p-0 bg-white dark:bg-zinc-900" align="start">
-                          <Command className="bg-white dark:bg-zinc-900">
+                        <PopoverContent className="w-full p-0 bg-white dark:bg-zinc-900 text-black dark:text-white" align="start">
+                          <Command className="bg-white dark:bg-zinc-900 text-black dark:text-white">
                             <CommandInput 
                               placeholder="Search customers..." 
                               value={customerSearch}
@@ -451,7 +451,7 @@ export default function Projects() {
                             <SelectValue placeholder="Select status" />
                           </SelectTrigger>
                         </FormControl>
-                        <SelectContent className="bg-white dark:bg-zinc-900">
+                        <SelectContent className="bg-white dark:bg-zinc-900 text-black dark:text-white">
                           {PROJECT_STATUSES.map((status) => (
                             <SelectItem key={status.value} value={status.value}>
                               <div className="flex items-center gap-2">
@@ -595,7 +595,7 @@ export default function Projects() {
                 Sort
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="bg-white dark:bg-zinc-900">
+            <DropdownMenuContent align="end" className="bg-white dark:bg-zinc-900 text-black dark:text-white">
               <DropdownMenuItem onClick={() => setSortBy("name")} className={sortBy === "name" ? "bg-accent" : ""}>
                 Name A-Z
               </DropdownMenuItem>
@@ -616,7 +616,7 @@ export default function Projects() {
                 {hasActiveFilters && <span className="ml-1 text-xs bg-primary text-primary-foreground rounded-full w-5 h-5 flex items-center justify-center">{filterStatus.length + (filterCustomer ? 1 : 0)}</span>}
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56 bg-white dark:bg-zinc-900">
+            <DropdownMenuContent align="end" className="w-56 bg-white dark:bg-zinc-900 text-black dark:text-white">
               <div className="px-2 py-1.5 text-sm font-semibold">Status</div>
               {PROJECT_STATUSES.map((status) => (
                 <DropdownMenuCheckboxItem
