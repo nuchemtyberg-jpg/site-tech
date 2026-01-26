@@ -83,12 +83,8 @@ export default function ProjectDetails() {
 
   const handleFileClick = (file: FileMetadata) => {
     if (isPdfFile(file.contentType)) {
-      const params = new URLSearchParams({
-        name: file.name,
-        path: file.objectPath
-      });
-      // Open PDF in a new browser tab for a cleaner experience
-      window.open(`/projects/${projectId}/pdf/${file.id}?${params.toString()}`, '_blank');
+      // Open PDF in browser's native PDF viewer
+      window.open(file.objectPath, '_blank');
     } else {
       setViewingFile(file);
     }
