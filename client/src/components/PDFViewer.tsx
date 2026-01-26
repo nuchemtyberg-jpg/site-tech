@@ -73,6 +73,9 @@ export function PDFViewer({ url, fileName, onClose, onShare }: PDFViewerProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   
+  const [isLoading, setIsLoading] = useState(true);
+  const [pdfBlobUrl, setPdfBlobUrl] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [scale, setScale] = useState(1);
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [activeTool, setActiveTool] = useState<MarkupTool>("none");
@@ -677,6 +680,37 @@ export function PDFViewer({ url, fileName, onClose, onShare }: PDFViewerProps) {
     ctx.restore();
   }, [paths, shapes, textAnnotations, currentPath, currentShape, scale, position, activeTool, selectedColor, selectedThickness]);
 
+  // Preload PDF as blob for faster display
+  useEffect(() => {
+    let cancelled = false;
+    const loadPdf = async () => {
+      try {
+        setIsLoading(true);
+        setLoadError(null);
+        const response = await fetch(url);
+        if (!response.ok) {
+          throw new Error(`Failed to load PDF: ${response.statusText}`);
+        }
+        const blob = await response.blob();
+        if (cancelled) return;
+        const blobUrl = URL.createObjectURL(blob);
+        setPdfBlobUrl(blobUrl);
+        setIsLoading(false);
+      } catch (err) {
+        if (cancelled) return;
+        setLoadError(err instanceof Error ? err.message : "Failed to load PDF");
+        setIsLoading(false);
+      }
+    };
+    loadPdf();
+    return () => {
+      cancelled = true;
+      if (pdfBlobUrl) {
+        URL.revokeObjectURL(pdfBlobUrl);
+      }
+    };
+  }, [url]);
+
   useEffect(() => {
     const updateCanvasSize = () => {
       const canvas = canvasRef.current;
@@ -771,17 +805,37 @@ export function PDFViewer({ url, fileName, onClose, onShare }: PDFViewerProps) {
         className="flex-1 relative overflow-hidden bg-gray-200"
         style={{ touchAction: "none" }}
       >
+        {/* Loading state */}
+        {isLoading && (
+          <div className="absolute inset-0 flex items-center justify-center bg-gray-200 z-20">
+            <div className="flex flex-col items-center gap-3">
+              <div className="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+              <span className="text-gray-600 text-sm">Loading PDF...</span>
+            </div>
+          </div>
+        )}
+        {/* Error state */}
+        {loadError && (
+          <div className="absolute inset-0 flex items-center justify-center bg-gray-200 z-20">
+            <div className="flex flex-col items-center gap-3 text-center px-4">
+              <div className="text-red-500 text-lg font-medium">Failed to load PDF</div>
+              <span className="text-gray-600 text-sm">{loadError}</span>
+              <Button variant="outline" onClick={onClose}>Close</Button>
+            </div>
+          </div>
+        )}
         <div 
           style={{ 
             transform: `translate(${position.x}px, ${position.y}px) scale(${scale})`,
             transformOrigin: "0 0",
             width: "100%",
-            height: "100%"
+            height: "100%",
+            visibility: isLoading || loadError ? "hidden" : "visible"
           }}
         >
           <iframe
             ref={iframeRef}
-            src={url}
+            src={pdfBlobUrl || ""}
             title={fileName}
             className="w-full h-full bg-white border-0 pointer-events-none"
           />
