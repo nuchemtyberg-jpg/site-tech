@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { 
   ZoomIn, 
@@ -18,16 +18,19 @@ import {
   Share2,
   Download,
   Move,
-  FileDown
+  FileDown,
+  ChevronLeft,
+  ChevronRight
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { PDFDocument, rgb } from "pdf-lib";
+import { Document, Page, pdfjs } from "react-pdf";
 
-// Detect if running on iOS
-const isIOS = () => {
-  return /iPad|iPhone|iPod/.test(navigator.userAgent) || 
-    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-};
+// Configure PDF.js worker
+pdfjs.GlobalWorkerOptions.workerSrc = new URL(
+  'pdfjs-dist/build/pdf.worker.min.mjs',
+  import.meta.url,
+).toString();
 
 interface PDFViewerProps {
   url: string;
@@ -80,9 +83,10 @@ export function PDFViewer({ url, fileName, onClose, onShare }: PDFViewerProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   
   const [isLoading, setIsLoading] = useState(true);
-  const [pdfBlobUrl, setPdfBlobUrl] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const blobUrlRef = useRef<string | null>(null);
+  const [numPages, setNumPages] = useState<number>(0);
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [containerWidth, setContainerWidth] = useState<number>(800);
   const [scale, setScale] = useState(1);
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [activeTool, setActiveTool] = useState<MarkupTool>("none");
@@ -687,65 +691,34 @@ export function PDFViewer({ url, fileName, onClose, onShare }: PDFViewerProps) {
     ctx.restore();
   }, [paths, shapes, textAnnotations, currentPath, currentShape, scale, position, activeTool, selectedColor, selectedThickness]);
 
-  // Preload PDF as blob for faster display
+  // Handle PDF document load success
+  const onDocumentLoadSuccess = ({ numPages }: { numPages: number }) => {
+    setNumPages(numPages);
+    setIsLoading(false);
+    setLoadError(null);
+  };
+
+  // Handle PDF document load error
+  const onDocumentLoadError = (error: Error) => {
+    setLoadError(error.message || "Failed to load PDF");
+    setIsLoading(false);
+  };
+
+  // Update container width for responsive PDF rendering
   useEffect(() => {
-    let cancelled = false;
-    
-    // Clean up previous blob URL if exists
-    if (blobUrlRef.current && !blobUrlRef.current.startsWith("data:")) {
-      URL.revokeObjectURL(blobUrlRef.current);
-      blobUrlRef.current = null;
-    }
-    
-    const loadPdf = async () => {
-      try {
-        setIsLoading(true);
-        setLoadError(null);
-        setPdfBlobUrl(null);
-        
-        const response = await fetch(url, { credentials: "include" });
-        if (!response.ok) {
-          throw new Error(`Failed to load PDF: ${response.statusText}`);
-        }
-        const blob = await response.blob();
-        if (cancelled) return;
-        
-        // Ensure the blob has the correct PDF MIME type
-        const pdfBlob = new Blob([blob], { type: 'application/pdf' });
-        
-        // Use data URL for better cross-browser compatibility
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          if (cancelled) return;
-          const dataUrl = reader.result as string;
-          blobUrlRef.current = dataUrl;
-          setPdfBlobUrl(dataUrl);
-          setIsLoading(false);
-        };
-        reader.onerror = () => {
-          if (cancelled) return;
-          setLoadError("Failed to read PDF file");
-          setIsLoading(false);
-        };
-        reader.readAsDataURL(pdfBlob);
-      } catch (err) {
-        if (cancelled) return;
-        setLoadError(err instanceof Error ? err.message : "Failed to load PDF");
-        setIsLoading(false);
+    const updateWidth = () => {
+      if (containerRef.current) {
+        setContainerWidth(containerRef.current.clientWidth);
       }
     };
-    
-    loadPdf();
-    
-    return () => {
-      cancelled = true;
-      // Only revoke blob URLs, not data URLs
-      if (blobUrlRef.current && !blobUrlRef.current.startsWith("data:")) {
-        URL.revokeObjectURL(blobUrlRef.current);
-      }
-      blobUrlRef.current = null;
-    };
-  }, [url]);
+    updateWidth();
+    window.addEventListener("resize", updateWidth);
+    return () => window.removeEventListener("resize", updateWidth);
+  }, []);
+
+  // Page navigation
+  const goToPrevPage = () => setCurrentPage(prev => Math.max(1, prev - 1));
+  const goToNextPage = () => setCurrentPage(prev => Math.min(numPages, prev + 1));
 
   useEffect(() => {
     const updateCanvasSize = () => {
@@ -866,23 +839,55 @@ export function PDFViewer({ url, fileName, onClose, onShare }: PDFViewerProps) {
             transformOrigin: "0 0",
             width: "100%",
             height: "100%",
-            visibility: isLoading || loadError ? "hidden" : "visible"
           }}
+          className="flex flex-col items-center overflow-auto"
         >
-          {/* Use object with iframe fallback for best cross-browser compatibility */}
-          <object
-            data={pdfBlobUrl || ""}
-            type="application/pdf"
-            className="w-full h-full bg-white border-0 pointer-events-none"
-            aria-label={fileName}
+          {/* Use react-pdf for reliable cross-browser PDF rendering */}
+          <Document
+            file={{ url, withCredentials: true }}
+            onLoadSuccess={onDocumentLoadSuccess}
+            onLoadError={onDocumentLoadError}
+            loading={null}
+            error={null}
+            className="pointer-events-none"
           >
-            <iframe
-              src={pdfBlobUrl || ""}
-              title={fileName}
-              className="w-full h-full bg-white border-0"
+            <Page 
+              pageNumber={currentPage} 
+              width={containerWidth * scale}
+              renderTextLayer={false}
+              renderAnnotationLayer={false}
             />
-          </object>
+          </Document>
         </div>
+        
+        {/* Page navigation */}
+        {numPages > 1 && !isLoading && !loadError && (
+          <div className="absolute bottom-20 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-gray-800/90 rounded-lg px-3 py-2 z-10">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="text-white hover:bg-gray-700 h-8 w-8"
+              onClick={goToPrevPage}
+              disabled={currentPage <= 1}
+              data-testid="button-prev-page"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </Button>
+            <span className="text-white text-sm min-w-[60px] text-center">
+              {currentPage} / {numPages}
+            </span>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="text-white hover:bg-gray-700 h-8 w-8"
+              onClick={goToNextPage}
+              disabled={currentPage >= numPages}
+              data-testid="button-next-page"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </Button>
+          </div>
+        )}
         <canvas
           ref={canvasRef}
           className={cn(
