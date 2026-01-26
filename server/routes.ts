@@ -28,8 +28,8 @@ export async function registerRoutes(
   app.post(api.projects.create.path, async (req, res) => {
     try {
       const bodySchema = api.projects.create.input.extend({
-        startDate: z.coerce.date(),
-        endDate: z.coerce.date(),
+        startDate: z.coerce.date().nullable().optional(),
+        endDate: z.coerce.date().nullable().optional(),
       });
       const input = bodySchema.parse(req.body);
       const project = await storage.createProject(input);
@@ -45,8 +45,8 @@ export async function registerRoutes(
   app.put(api.projects.update.path, async (req, res) => {
     try {
       const bodySchema = api.projects.update.input.extend({
-        startDate: z.coerce.date().optional(),
-        endDate: z.coerce.date().optional(),
+        startDate: z.coerce.date().nullable().optional(),
+        endDate: z.coerce.date().nullable().optional(),
       });
       const input = bodySchema.parse(req.body);
       const project = await storage.updateProject(Number(req.params.id), input);
@@ -78,8 +78,8 @@ export async function registerRoutes(
   app.post(api.tasks.create.path, async (req, res) => {
     try {
       const bodySchema = api.tasks.create.input.extend({
-        startDate: z.coerce.date(),
-        endDate: z.coerce.date(),
+        startDate: z.coerce.date().nullable().optional(),
+        endDate: z.coerce.date().nullable().optional(),
         projectId: z.coerce.number(),
       });
       const input = bodySchema.parse(req.body);
@@ -96,8 +96,8 @@ export async function registerRoutes(
   app.put(api.tasks.update.path, async (req, res) => {
     try {
       const bodySchema = api.tasks.update.input.extend({
-        startDate: z.coerce.date().optional(),
-        endDate: z.coerce.date().optional(),
+        startDate: z.coerce.date().nullable().optional(),
+        endDate: z.coerce.date().nullable().optional(),
         projectId: z.coerce.number().optional(),
       });
       const input = bodySchema.parse(req.body);

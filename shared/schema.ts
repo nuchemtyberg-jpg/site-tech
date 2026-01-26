@@ -11,8 +11,8 @@ export const projects = pgTable("projects", {
   name: text("name").notNull(),
   description: text("description").notNull(),
   location: text("location").notNull(),
-  startDate: timestamp("start_date").notNull(),
-  endDate: timestamp("end_date").notNull(),
+  startDate: timestamp("start_date"),
+  endDate: timestamp("end_date"),
   status: text("status").notNull().default("planning"), // planning, active, completed, on_hold
   color: text("color").notNull().default("#3b82f6"),
 });
@@ -27,8 +27,8 @@ export const tasks = pgTable("tasks", {
   projectId: integer("project_id").notNull(), // Foreign key to projects.id (enforce in app logic for now)
   title: text("title").notNull(),
   description: text("description"),
-  startDate: timestamp("start_date").notNull(),
-  endDate: timestamp("end_date").notNull(),
+  startDate: timestamp("start_date"),
+  endDate: timestamp("end_date"),
   status: text("status").notNull().default("pending"), // pending, in_progress, completed, blocked
   priority: text("priority").notNull().default("medium"), // low, medium, high
 });
