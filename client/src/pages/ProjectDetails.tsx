@@ -16,7 +16,11 @@ import {
   File,
   Folder,
   ChevronRight,
-  Home
+  Home,
+  X,
+  Share2,
+  Download,
+  ExternalLink
 } from "lucide-react";
 import { 
   DropdownMenu, 
@@ -40,7 +44,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useState, useRef } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { insertTaskSchema, type InsertTask } from "@shared/schema";
+import { insertTaskSchema, type InsertTask, type FileMetadata } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { ObjectUploader } from "@/components/ObjectUploader";
@@ -63,12 +67,39 @@ export default function ProjectDetails() {
   const [isFolderOpen, setIsFolderOpen] = useState(false);
   const [folderName, setFolderName] = useState("");
   const [currentFolderId, setCurrentFolderId] = useState<number | null>(null);
+  const [viewingFile, setViewingFile] = useState<FileMetadata | null>(null);
   const currentFolderIdRef = useRef<number | null>(null);
   const uploadedFilePathsRef = useRef<Map<string, string>>(new Map());
   
   // Keep ref in sync with state for use in callbacks
   currentFolderIdRef.current = currentFolderId;
   const { toast } = useToast();
+
+  const handleShareFile = async (file: FileMetadata) => {
+    const shareUrl = `${window.location.origin}${file.objectPath}`;
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: file.name,
+          url: shareUrl,
+        });
+      } else {
+        await navigator.clipboard.writeText(shareUrl);
+        toast({ title: "Link Copied", description: "File link copied to clipboard." });
+      }
+    } catch (err) {
+      await navigator.clipboard.writeText(shareUrl);
+      toast({ title: "Link Copied", description: "File link copied to clipboard." });
+    }
+  };
+
+  const isImageFile = (contentType: string | null) => {
+    return contentType?.startsWith('image/') || false;
+  };
+
+  const isPdfFile = (contentType: string | null) => {
+    return contentType === 'application/pdf';
+  };
 
   const currentFolders = folders?.filter(f => f.parentId === currentFolderId) || [];
   const currentFiles = files?.filter(f => f.folderId === currentFolderId) || [];
@@ -500,11 +531,10 @@ export default function ProjectDetails() {
                   <h3 className="text-sm font-medium text-muted-foreground mb-2">Files</h3>
                   {currentFiles.map(file => (
                     <div key={file.id} className="group bg-card border border-border rounded-lg p-3 hover:border-primary/50 transition-all flex items-center justify-between" data-testid={`file-item-${file.id}`}>
-                      <a 
-                        href={file.objectPath} 
-                        target="_blank" 
-                        rel="noopener noreferrer"
-                        className="flex items-center gap-3 flex-1 hover:text-primary transition-colors"
+                      <button 
+                        onClick={() => setViewingFile(file)}
+                        className="flex items-center gap-3 flex-1 text-left hover:text-primary transition-colors"
+                        data-testid={`button-view-file-${file.id}`}
                       >
                         <File className="w-5 h-5 text-muted-foreground" />
                         <div>
@@ -515,7 +545,7 @@ export default function ProjectDetails() {
                             </span>
                           )}
                         </div>
-                      </a>
+                      </button>
                       <Button 
                         variant="ghost" 
                         size="icon" 
@@ -533,6 +563,89 @@ export default function ProjectDetails() {
           )}
         </TabsContent>
       </Tabs>
+
+      {/* Document Viewer Modal */}
+      {viewingFile && (
+        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4" data-testid="document-viewer-modal">
+          {/* Header */}
+          <div className="absolute top-0 left-0 right-0 flex items-center justify-between p-4 bg-gradient-to-b from-black/50 to-transparent">
+            <h3 className="text-white font-medium truncate max-w-[60%]">{viewingFile.name}</h3>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="text-white hover:bg-white/20"
+                onClick={() => handleShareFile(viewingFile)}
+                data-testid="button-share-file"
+              >
+                <Share2 className="w-5 h-5" />
+              </Button>
+              <a
+                href={viewingFile.objectPath}
+                download={viewingFile.name}
+                className="inline-flex items-center justify-center h-9 w-9 rounded-md text-white hover:bg-white/20"
+                data-testid="button-download-file"
+              >
+                <Download className="w-5 h-5" />
+              </a>
+              <a
+                href={viewingFile.objectPath}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center justify-center h-9 w-9 rounded-md text-white hover:bg-white/20"
+                data-testid="button-open-external"
+              >
+                <ExternalLink className="w-5 h-5" />
+              </a>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="text-white hover:bg-white/20"
+                onClick={() => setViewingFile(null)}
+                data-testid="button-close-viewer"
+              >
+                <X className="w-6 h-6" />
+              </Button>
+            </div>
+          </div>
+
+          {/* Content */}
+          <div className="max-w-4xl max-h-[80vh] w-full overflow-auto" onClick={(e) => e.stopPropagation()}>
+            {isImageFile(viewingFile.contentType) ? (
+              <img 
+                src={viewingFile.objectPath} 
+                alt={viewingFile.name}
+                className="w-full h-auto object-contain rounded-lg"
+              />
+            ) : isPdfFile(viewingFile.contentType) ? (
+              <iframe
+                src={viewingFile.objectPath}
+                title={viewingFile.name}
+                className="w-full h-[80vh] rounded-lg bg-white"
+              />
+            ) : (
+              <div className="bg-card p-8 rounded-lg text-center">
+                <File className="w-16 h-16 mx-auto text-muted-foreground mb-4" />
+                <p className="text-lg font-medium mb-2">{viewingFile.name}</p>
+                <p className="text-muted-foreground mb-4">This file type cannot be previewed.</p>
+                <a
+                  href={viewingFile.objectPath}
+                  download={viewingFile.name}
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
+                >
+                  <Download className="w-4 h-4" /> Download File
+                </a>
+              </div>
+            )}
+          </div>
+
+          {/* Click outside to close */}
+          <div 
+            className="absolute inset-0 -z-10" 
+            onClick={() => setViewingFile(null)}
+          />
+        </div>
+      )}
     </div>
   );
 }
