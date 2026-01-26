@@ -48,6 +48,16 @@ import {
   DialogTrigger,
   DialogFooter,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -156,6 +166,12 @@ export default function ProjectDetails() {
   const [newCustomTitle, setNewCustomTitle] = useState("");
   const [taskTitleSearch, setTaskTitleSearch] = useState("");
   const [taskTitlePopoverOpen, setTaskTitlePopoverOpen] = useState(false);
+  
+  // Delete confirmation states
+  const [deleteProjectOpen, setDeleteProjectOpen] = useState(false);
+  const [deleteTaskId, setDeleteTaskId] = useState<number | null>(null);
+  const [deleteFolderId, setDeleteFolderId] = useState<number | null>(null);
+  const [deleteFileId, setDeleteFileId] = useState<number | null>(null);
 
   const getStatusColor = (status: string) => {
     const statusObj = PROJECT_STATUSES.find(s => s.value === status);
@@ -387,11 +403,9 @@ export default function ProjectDetails() {
   };
 
   const handleDeleteProject = () => {
-    if (confirm("Are you sure you want to delete this project? This action cannot be undone.")) {
-      deleteProjectMutation.mutate(projectId, {
-        onSuccess: () => window.location.href = "/projects"
-      });
-    }
+    deleteProjectMutation.mutate(projectId, {
+      onSuccess: () => window.location.href = "/projects"
+    });
   };
 
   const handleCreateFolder = () => {
@@ -581,7 +595,7 @@ export default function ProjectDetails() {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="bg-white dark:bg-zinc-900 text-black dark:text-white">
-                <DropdownMenuItem className="text-destructive focus:text-destructive cursor-pointer" onClick={handleDeleteProject} data-testid="button-delete-project">
+                <DropdownMenuItem className="text-destructive focus:text-destructive cursor-pointer" onClick={() => setDeleteProjectOpen(true)} data-testid="button-delete-project">
                   <Trash2 className="w-4 h-4 mr-2" /> Delete Project
                 </DropdownMenuItem>
               </DropdownMenuContent>
@@ -1040,7 +1054,7 @@ export default function ProjectDetails() {
                     variant="ghost" 
                     size="icon" 
                     className="opacity-0 group-hover:opacity-100 hover:text-destructive hover:bg-destructive/10"
-                    onClick={() => deleteTaskMutation.mutate(task.id)}
+                    onClick={() => setDeleteTaskId(task.id)}
                     data-testid={`button-delete-task-${task.id}`}
                   >
                     <Trash2 className="w-4 h-4" />
@@ -1184,7 +1198,7 @@ export default function ProjectDetails() {
                         className="opacity-0 group-hover:opacity-100"
                         onClick={(e) => {
                           e.stopPropagation();
-                          deleteFolderMutation.mutate(folder.id);
+                          setDeleteFolderId(folder.id);
                         }}
                         data-testid={`button-delete-folder-${folder.id}`}
                       >
@@ -1225,7 +1239,7 @@ export default function ProjectDetails() {
                               className="absolute top-1 right-1 h-6 w-6 opacity-0 group-hover:opacity-100 bg-black/50 hover:bg-black/70 text-white"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                deleteFileMutation.mutate(file.id);
+                                setDeleteFileId(file.id);
                               }}
                               data-testid={`button-delete-file-${file.id}`}
                             >
@@ -1263,7 +1277,7 @@ export default function ProjectDetails() {
                         variant="ghost" 
                         size="icon" 
                         className="opacity-0 group-hover:opacity-100"
-                        onClick={() => deleteFileMutation.mutate(file.id)}
+                        onClick={() => setDeleteFileId(file.id)}
                         data-testid={`button-delete-file-${file.id}`}
                       >
                         <Trash2 className="w-4 h-4" />
@@ -1357,6 +1371,103 @@ export default function ProjectDetails() {
           <div className="absolute inset-0 -z-10" onClick={() => setViewingFile(null)} />
         </div>
       )}
+
+      {/* Delete Project Confirmation */}
+      <AlertDialog open={deleteProjectOpen} onOpenChange={setDeleteProjectOpen}>
+        <AlertDialogContent className="bg-white dark:bg-zinc-900 text-black dark:text-white">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Project</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this project? This action cannot be undone and will remove all associated tasks, documents, and allocations.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-cancel-delete-project">Cancel</AlertDialogCancel>
+            <AlertDialogAction 
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={handleDeleteProject}
+              data-testid="button-confirm-delete-project"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Delete Task Confirmation */}
+      <AlertDialog open={deleteTaskId !== null} onOpenChange={(open) => !open && setDeleteTaskId(null)}>
+        <AlertDialogContent className="bg-white dark:bg-zinc-900 text-black dark:text-white">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Task</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this task? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-cancel-delete-task">Cancel</AlertDialogCancel>
+            <AlertDialogAction 
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => {
+                if (deleteTaskId) deleteTaskMutation.mutate(deleteTaskId);
+                setDeleteTaskId(null);
+              }}
+              data-testid="button-confirm-delete-task"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Delete Folder Confirmation */}
+      <AlertDialog open={deleteFolderId !== null} onOpenChange={(open) => !open && setDeleteFolderId(null)}>
+        <AlertDialogContent className="bg-white dark:bg-zinc-900 text-black dark:text-white">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Folder</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this folder and all its contents? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-cancel-delete-folder">Cancel</AlertDialogCancel>
+            <AlertDialogAction 
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => {
+                if (deleteFolderId) deleteFolderMutation.mutate(deleteFolderId);
+                setDeleteFolderId(null);
+              }}
+              data-testid="button-confirm-delete-folder"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Delete File Confirmation */}
+      <AlertDialog open={deleteFileId !== null} onOpenChange={(open) => !open && setDeleteFileId(null)}>
+        <AlertDialogContent className="bg-white dark:bg-zinc-900 text-black dark:text-white">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete File</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this file? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-cancel-delete-file">Cancel</AlertDialogCancel>
+            <AlertDialogAction 
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => {
+                if (deleteFileId) deleteFileMutation.mutate(deleteFileId);
+                setDeleteFileId(null);
+              }}
+              data-testid="button-confirm-delete-file"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

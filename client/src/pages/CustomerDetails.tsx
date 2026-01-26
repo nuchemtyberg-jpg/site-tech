@@ -6,6 +6,16 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -34,6 +44,7 @@ export default function CustomerDetails() {
   const { id } = useParams<{ id: string }>();
   const [, navigate] = useLocation();
   const [commDialogOpen, setCommDialogOpen] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const { toast } = useToast();
 
   const { data: customer, isLoading } = useQuery<Customer>({
@@ -139,11 +150,7 @@ export default function CustomerDetails() {
         <Button
           variant="destructive"
           size="sm"
-          onClick={() => {
-            if (confirm("Are you sure you want to delete this customer?")) {
-              deleteMutation.mutate();
-            }
-          }}
+          onClick={() => setDeleteConfirmOpen(true)}
           data-testid="button-delete-customer"
         >
           <Trash2 className="w-4 h-4 mr-2" />
@@ -386,6 +393,31 @@ export default function CustomerDetails() {
           </Tabs>
         </div>
       </div>
+
+      {/* Delete Customer Confirmation */}
+      <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+        <AlertDialogContent className="bg-white dark:bg-zinc-900 text-black dark:text-white">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Customer</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this customer? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-cancel-delete-customer">Cancel</AlertDialogCancel>
+            <AlertDialogAction 
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => {
+                deleteMutation.mutate();
+                setDeleteConfirmOpen(false);
+              }}
+              data-testid="button-confirm-delete-customer"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

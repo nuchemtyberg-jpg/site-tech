@@ -15,6 +15,10 @@ Core features include:
 
 Preferred communication style: Simple, everyday language.
 
+### UI/UX Requirements
+- **Delete Confirmations**: Always show a confirmation dialog before deleting anything in the system (projects, tasks, customers, equipment, files, folders, etc.)
+- **Mandatory Field Indicators**: Add a red asterisk (*) before the label of all mandatory/required fields in forms throughout the system
+
 ## System Architecture
 
 ### Frontend Architecture
