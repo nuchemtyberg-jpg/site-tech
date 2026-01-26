@@ -1449,11 +1449,11 @@ export default function ProjectDetails() {
             {/* Album Selector */}
             <div className="flex items-center gap-2">
               <Select value={currentAlbumId?.toString() || "all"} onValueChange={(v) => setCurrentAlbumId(v === "all" ? null : Number(v))}>
-                <SelectTrigger className="w-40 bg-white dark:bg-zinc-900" data-testid="select-album">
-                  <FolderOpen className="w-4 h-4 mr-2" />
+                <SelectTrigger className="w-40 bg-white dark:bg-zinc-900 text-black" data-testid="select-album">
+                  <FolderOpen className="w-4 h-4 mr-2 text-black" />
                   <SelectValue placeholder="All Photos" />
                 </SelectTrigger>
-                <SelectContent className="bg-white dark:bg-zinc-900">
+                <SelectContent className="bg-white dark:bg-zinc-900 text-black">
                   <SelectItem value="all">All Photos</SelectItem>
                   {albums.map((album) => (
                     <SelectItem key={album.id} value={album.id.toString()}>{album.name}</SelectItem>
@@ -1468,16 +1468,16 @@ export default function ProjectDetails() {
                 </DialogTrigger>
                 <DialogContent className="bg-white dark:bg-zinc-900">
                   <DialogHeader>
-                    <DialogTitle>Create Album</DialogTitle>
+                    <DialogTitle className="text-black">Create Album</DialogTitle>
                   </DialogHeader>
                   <div className="grid gap-4 py-4">
                     <div className="grid gap-2">
-                      <Label htmlFor="album-name"><span className="text-red-500">*</span> Album Name</Label>
+                      <Label htmlFor="album-name" className="text-black"><span className="text-red-500">*</span> Album Name</Label>
                       <Input 
                         id="album-name" 
                         value={newAlbumName} 
                         onChange={(e) => setNewAlbumName(e.target.value)}
-                        className="bg-white dark:bg-zinc-900"
+                        className="bg-white dark:bg-zinc-900 text-black"
                         placeholder="Enter album name"
                         data-testid="input-album-name"
                       />
