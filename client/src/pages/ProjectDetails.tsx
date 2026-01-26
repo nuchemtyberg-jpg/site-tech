@@ -24,7 +24,11 @@ import {
   List,
   Image as ImageIcon,
   Pencil,
-  Hash
+  Hash,
+  User,
+  DollarSign,
+  StickyNote,
+  Building2
 } from "lucide-react";
 import { 
   DropdownMenu, 
@@ -102,6 +106,7 @@ export default function ProjectDetails() {
   const { data: tasks, isLoading: isTasksLoading } = useProjectTasks(projectId);
   const { data: files, isLoading: isFilesLoading } = useProjectFiles(projectId);
   const { data: folders, isLoading: isFoldersLoading } = useProjectFolders(projectId);
+  const { data: customers = [] } = useQuery<Customer[]>({ queryKey: ["/api/customers"] });
   const deleteTaskMutation = useDeleteTask();
   const deleteProjectMutation = useDeleteProject();
   const updateProjectMutation = useUpdateProject();
@@ -116,10 +121,6 @@ export default function ProjectDetails() {
   const [folderName, setFolderName] = useState("");
   const [customerSearch, setCustomerSearch] = useState("");
   const [customerPopoverOpen, setCustomerPopoverOpen] = useState(false);
-
-  const { data: customers = [] } = useQuery<Customer[]>({
-    queryKey: ["/api/customers"],
-  });
 
   const getStatusColor = (status: string) => {
     const statusObj = PROJECT_STATUSES.find(s => s.value === status);
@@ -438,37 +439,96 @@ export default function ProjectDetails() {
         
         <div className="flex flex-col md:flex-row md:items-start justify-between gap-4 bg-card p-6 rounded-xl border border-border shadow-sm">
           <div className="flex-1">
-            <div className="flex items-center gap-3 mb-2">
+            <div className="flex items-center gap-3 mb-2 flex-wrap">
               <div className={cn("px-3 py-1 rounded text-xs font-bold uppercase tracking-wider", statusColor(project.status))}>
                 {project.status.replace('_', ' ')}
               </div>
               {project.projectNumber && (
                 <span className="text-sm font-mono text-muted-foreground">{project.projectNumber}</span>
               )}
-              <h1 className="text-3xl font-bold font-display">{project.name}</h1>
             </div>
-            <p className="text-muted-foreground mb-4 max-w-2xl">{project.description}</p>
+            <h1 className="text-3xl font-bold font-display mb-2">{project.name}</h1>
+            {project.description && (
+              <p className="text-muted-foreground mb-4 max-w-2xl">{project.description}</p>
+            )}
             
-            <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
-              {project.location && (
-                <div className="flex items-center gap-2 bg-muted/50 px-3 py-1.5 rounded-full">
-                  <MapPin className="w-4 h-4 text-primary" />
-                  {project.location}
+            {/* Project Details Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm mb-4">
+              {/* Customer */}
+              {project.customerId && (
+                <div className="flex items-start gap-3">
+                  <User className="w-4 h-4 text-primary mt-0.5 shrink-0" />
+                  <div>
+                    <span className="text-muted-foreground block text-xs uppercase tracking-wide">Customer</span>
+                    <span className="text-foreground font-medium">
+                      {customers.find(c => c.id === project.customerId)?.name || "Unknown"}
+                      {customers.find(c => c.id === project.customerId)?.company && (
+                        <span className="text-muted-foreground font-normal ml-1">
+                          ({customers.find(c => c.id === project.customerId)?.company})
+                        </span>
+                      )}
+                    </span>
+                  </div>
                 </div>
               )}
-              {(project.startDate || project.endDate) && (
-                <div className="flex items-center gap-2 bg-muted/50 px-3 py-1.5 rounded-full">
-                  <Calendar className="w-4 h-4 text-primary" />
-                  {formatDateRange(project.startDate, project.endDate)}
+              
+              {/* Address */}
+              {(project.streetAddress || project.city || project.state || project.zip) && (
+                <div className="flex items-start gap-3">
+                  <MapPin className="w-4 h-4 text-primary mt-0.5 shrink-0" />
+                  <div>
+                    <span className="text-muted-foreground block text-xs uppercase tracking-wide">Address</span>
+                    <span className="text-foreground">
+                      {[project.streetAddress, project.city, project.state, project.zip].filter(Boolean).join(", ")}
+                    </span>
+                  </div>
                 </div>
               )}
+              
+              {/* Created Date */}
               {project.createdAt && (
-                <div className="flex items-center gap-2 bg-muted/50 px-3 py-1.5 rounded-full">
-                  <Hash className="w-4 h-4 text-primary" />
-                  Created {format(new Date(project.createdAt), "MMM d, yyyy")}
+                <div className="flex items-start gap-3">
+                  <Calendar className="w-4 h-4 text-primary mt-0.5 shrink-0" />
+                  <div>
+                    <span className="text-muted-foreground block text-xs uppercase tracking-wide">Created</span>
+                    <span className="text-foreground">{format(new Date(project.createdAt), "MMMM d, yyyy")}</span>
+                  </div>
+                </div>
+              )}
+              
+              {/* Estimated Value */}
+              {project.estimatedValue && (
+                <div className="flex items-start gap-3">
+                  <DollarSign className="w-4 h-4 text-primary mt-0.5 shrink-0" />
+                  <div>
+                    <span className="text-muted-foreground block text-xs uppercase tracking-wide">Estimated Value</span>
+                    <span className="text-foreground font-medium">${project.estimatedValue.toLocaleString()}</span>
+                  </div>
+                </div>
+              )}
+              
+              {/* Date Range */}
+              {(project.startDate || project.endDate) && (
+                <div className="flex items-start gap-3">
+                  <Calendar className="w-4 h-4 text-primary mt-0.5 shrink-0" />
+                  <div>
+                    <span className="text-muted-foreground block text-xs uppercase tracking-wide">Project Dates</span>
+                    <span className="text-foreground">{formatDateRange(project.startDate, project.endDate)}</span>
+                  </div>
                 </div>
               )}
             </div>
+            
+            {/* Notes */}
+            {project.notes && (
+              <div className="flex items-start gap-3 text-sm border-t border-border pt-4 mt-2">
+                <StickyNote className="w-4 h-4 text-primary mt-0.5 shrink-0" />
+                <div>
+                  <span className="text-muted-foreground block text-xs uppercase tracking-wide mb-1">Notes</span>
+                  <p className="text-foreground whitespace-pre-wrap">{project.notes}</p>
+                </div>
+              </div>
+            )}
           </div>
           
           <div className="flex items-center gap-2">
