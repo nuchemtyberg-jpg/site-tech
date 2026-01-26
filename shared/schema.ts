@@ -59,6 +59,7 @@ export const tasks = pgTable("tasks", {
   dueDate: date("due_date"),
   status: text("status").notNull().default("pending"), // pending, scheduled, in_progress, completed, blocked
   priority: text("priority").notNull().default("medium"), // low, medium, high, urgent
+  percentComplete: integer("percent_complete").notNull().default(0), // 0-100
   estimatedHours: integer("estimated_hours"),
   assignedTo: text("assigned_to"),
   createdAt: timestamp("created_at").defaultNow(),

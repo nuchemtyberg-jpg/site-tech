@@ -1,6 +1,6 @@
 import { useParams, Link, useLocation } from "wouter";
 import { useProject, useDeleteProject, useUpdateProject } from "@/hooks/use-projects";
-import { useProjectTasks, useCreateTask, useDeleteTask } from "@/hooks/use-tasks";
+import { useProjectTasks, useCreateTask, useDeleteTask, useUpdateTask } from "@/hooks/use-tasks";
 import { useProjectFiles, useProjectFolders, useCreateFile, useDeleteFile, useCreateFolder, useDeleteFolder } from "@/hooks/use-files";
 import { Button } from "@/components/ui/button";
 import { 
@@ -62,10 +62,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { Slider } from "@/components/ui/slider";
 import { useState, useRef, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { insertTaskSchema, type InsertTask, type FileMetadata } from "@shared/schema";
+import { insertTaskSchema, type InsertTask, type FileMetadata, type Task } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { ObjectUploader } from "@/components/ObjectUploader";
@@ -151,6 +152,7 @@ export default function ProjectDetails() {
   const deleteProjectMutation = useDeleteProject();
   const updateProjectMutation = useUpdateProject();
   const createTaskMutation = useCreateTask();
+  const updateTaskMutation = useUpdateTask();
   const createFileMutation = useCreateFile(projectId);
   const deleteFileMutation = useDeleteFile(projectId);
   const createFolderMutation = useCreateFolder(projectId);
@@ -172,6 +174,14 @@ export default function ProjectDetails() {
   const [deleteTaskId, setDeleteTaskId] = useState<number | null>(null);
   const [deleteFolderId, setDeleteFolderId] = useState<number | null>(null);
   const [deleteFileId, setDeleteFileId] = useState<number | null>(null);
+  
+  // Edit task state
+  const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [editTaskDescription, setEditTaskDescription] = useState("");
+  const [editTaskScheduledDate, setEditTaskScheduledDate] = useState("");
+  const [editTaskStatus, setEditTaskStatus] = useState("pending");
+  const [editTaskPriority, setEditTaskPriority] = useState("medium");
+  const [editTaskPercentComplete, setEditTaskPercentComplete] = useState(0);
 
   const getStatusColor = (status: string) => {
     const statusObj = PROJECT_STATUSES.find(s => s.value === status);
@@ -405,6 +415,57 @@ export default function ProjectDetails() {
   const handleDeleteProject = () => {
     deleteProjectMutation.mutate(projectId, {
       onSuccess: () => window.location.href = "/projects"
+    });
+  };
+
+  const handleOpenEditTask = (task: Task) => {
+    setEditingTask(task);
+    setEditTaskDescription(task.description || "");
+    setEditTaskScheduledDate(task.scheduledDate || "");
+    setEditTaskStatus(task.status);
+    setEditTaskPriority(task.priority);
+    setEditTaskPercentComplete(task.percentComplete || 0);
+  };
+
+  const handlePercentCompleteChange = (value: number[]) => {
+    const percent = value[0];
+    setEditTaskPercentComplete(percent);
+    
+    // Auto-update status based on percentage
+    if (percent === 0) {
+      setEditTaskStatus("pending");
+    } else if (percent === 100) {
+      setEditTaskStatus("completed");
+    } else if (percent > 0 && percent < 100) {
+      setEditTaskStatus("in_progress");
+    }
+  };
+
+  const handleSaveTaskEdit = () => {
+    if (!editingTask) return;
+    
+    updateTaskMutation.mutate({
+      id: editingTask.id,
+      description: editTaskDescription || null,
+      scheduledDate: editTaskScheduledDate || null,
+      status: editTaskStatus,
+      priority: editTaskPriority,
+      percentComplete: editTaskPercentComplete,
+    }, {
+      onSuccess: () => {
+        setEditingTask(null);
+        toast({
+          title: "Task updated",
+          description: "Task has been updated successfully.",
+        });
+      },
+      onError: () => {
+        toast({
+          title: "Error",
+          description: "Failed to update task.",
+          variant: "destructive",
+        });
+      }
     });
   };
 
@@ -1024,7 +1085,12 @@ export default function ProjectDetails() {
           ) : (
             <div className="grid gap-4">
               {tasks?.map(task => (
-                <div key={task.id} className="group bg-card border border-border rounded-lg p-4 hover:border-primary/50 transition-all shadow-sm hover:shadow-md flex items-center justify-between" data-testid={`task-item-${task.id}`}>
+                <div 
+                  key={task.id} 
+                  className="group bg-card border border-border rounded-lg p-4 hover:border-primary/50 transition-all shadow-sm hover:shadow-md flex items-center justify-between cursor-pointer" 
+                  data-testid={`task-item-${task.id}`}
+                  onClick={() => handleOpenEditTask(task)}
+                >
                   <div className="flex items-start gap-4">
                     <div className={cn(
                       "mt-1 w-2 h-2 rounded-full",
@@ -1047,6 +1113,11 @@ export default function ProjectDetails() {
                         )}>
                           {task.priority} Priority
                         </span>
+                        {task.percentComplete > 0 && (
+                          <span className="px-2 py-0.5 rounded bg-primary/10 text-primary">
+                            {task.percentComplete}% Complete
+                          </span>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -1054,7 +1125,10 @@ export default function ProjectDetails() {
                     variant="ghost" 
                     size="icon" 
                     className="opacity-0 group-hover:opacity-100 hover:text-destructive hover:bg-destructive/10"
-                    onClick={() => setDeleteTaskId(task.id)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setDeleteTaskId(task.id);
+                    }}
                     data-testid={`button-delete-task-${task.id}`}
                   >
                     <Trash2 className="w-4 h-4" />
@@ -1468,6 +1542,104 @@ export default function ProjectDetails() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Edit Task Dialog */}
+      <Dialog open={editingTask !== null} onOpenChange={(open) => !open && setEditingTask(null)}>
+        <DialogContent className="bg-white dark:bg-zinc-900 text-black dark:text-white max-w-md">
+          <DialogHeader>
+            <DialogTitle>Edit Task: {editingTask?.title}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 mt-4">
+            <div className="grid gap-2">
+              <Label htmlFor="edit-description">Description</Label>
+              <Textarea
+                id="edit-description"
+                placeholder="Task description..."
+                value={editTaskDescription}
+                onChange={(e) => setEditTaskDescription(e.target.value)}
+                className="bg-white dark:bg-zinc-900 text-black dark:text-white min-h-[80px]"
+                data-testid="input-edit-task-description"
+              />
+            </div>
+
+            <div className="grid gap-2">
+              <Label htmlFor="edit-scheduled-date">Scheduled Date</Label>
+              <Input
+                id="edit-scheduled-date"
+                type="date"
+                value={editTaskScheduledDate}
+                onChange={(e) => setEditTaskScheduledDate(e.target.value)}
+                className="bg-white dark:bg-zinc-900 text-black dark:text-white"
+                data-testid="input-edit-task-scheduled-date"
+              />
+            </div>
+
+            <div className="grid gap-2">
+              <Label htmlFor="edit-status">Status</Label>
+              <Select value={editTaskStatus} onValueChange={setEditTaskStatus}>
+                <SelectTrigger className="bg-white dark:bg-zinc-900 text-black dark:text-white" data-testid="select-edit-task-status">
+                  <SelectValue placeholder="Select status" />
+                </SelectTrigger>
+                <SelectContent className="bg-white dark:bg-zinc-900 text-black dark:text-white">
+                  <SelectItem value="pending">Pending</SelectItem>
+                  <SelectItem value="scheduled">Scheduled</SelectItem>
+                  <SelectItem value="in_progress">In Progress</SelectItem>
+                  <SelectItem value="completed">Completed</SelectItem>
+                  <SelectItem value="blocked">Blocked</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="grid gap-2">
+              <Label htmlFor="edit-priority">Priority</Label>
+              <Select value={editTaskPriority} onValueChange={setEditTaskPriority}>
+                <SelectTrigger className="bg-white dark:bg-zinc-900 text-black dark:text-white" data-testid="select-edit-task-priority">
+                  <SelectValue placeholder="Select priority" />
+                </SelectTrigger>
+                <SelectContent className="bg-white dark:bg-zinc-900 text-black dark:text-white">
+                  <SelectItem value="low">Low</SelectItem>
+                  <SelectItem value="medium">Medium</SelectItem>
+                  <SelectItem value="high">High</SelectItem>
+                  <SelectItem value="urgent">Urgent</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="grid gap-2">
+              <Label htmlFor="edit-percent-complete">
+                Percent Complete: {editTaskPercentComplete}%
+              </Label>
+              <div className="flex items-center gap-4">
+                <span className="text-sm text-muted-foreground">0%</span>
+                <Slider
+                  value={[editTaskPercentComplete]}
+                  onValueChange={handlePercentCompleteChange}
+                  max={100}
+                  step={5}
+                  className="flex-1"
+                  data-testid="slider-edit-task-percent-complete"
+                />
+                <span className="text-sm text-muted-foreground">100%</span>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Status automatically updates: 1-99% = In Progress, 100% = Completed
+              </p>
+            </div>
+          </div>
+          <DialogFooter className="mt-4">
+            <Button variant="outline" onClick={() => setEditingTask(null)} data-testid="button-cancel-edit-task">
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleSaveTaskEdit} 
+              disabled={updateTaskMutation.isPending}
+              data-testid="button-save-edit-task"
+            >
+              {updateTaskMutation.isPending ? "Saving..." : "Save Changes"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
