@@ -445,6 +445,17 @@ export default function ProjectDetails() {
     }
   };
 
+  const handleStatusChange = (status: string) => {
+    setEditTaskStatus(status);
+    
+    // Auto-update percentage based on status
+    if (status === "completed") {
+      setEditTaskPercentComplete(100);
+    } else if (status === "pending") {
+      setEditTaskPercentComplete(0);
+    }
+  };
+
   const handleSaveTaskEdit = () => {
     if (!editingTask) return;
     
@@ -1580,7 +1591,7 @@ export default function ProjectDetails() {
 
             <div className="grid gap-2">
               <Label htmlFor="edit-status">Status</Label>
-              <Select value={editTaskStatus} onValueChange={setEditTaskStatus}>
+              <Select value={editTaskStatus} onValueChange={handleStatusChange}>
                 <SelectTrigger className="bg-white dark:bg-zinc-900 text-black dark:text-white" data-testid="select-edit-task-status">
                   <SelectValue placeholder="Select status" />
                 </SelectTrigger>
