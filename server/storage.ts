@@ -132,7 +132,52 @@ export class DatabaseStorage implements IStorage {
   }
   async createProject(insertProject: InsertProject): Promise<Project> {
     const [project] = await db.insert(projects).values(insertProject).returning();
+    
+    // Create default folder structure for new projects
+    await this.createDefaultFolders(project.id);
+    
     return project;
+  }
+  
+  private async createDefaultFolders(projectId: number): Promise<void> {
+    // Office folder structure
+    const [officeFolder] = await db.insert(folders).values({
+      projectId,
+      name: "Office",
+      parentId: null
+    }).returning();
+    
+    await db.insert(folders).values([
+      { projectId, name: "Takeoffs", parentId: officeFolder.id },
+      { projectId, name: "Proposals", parentId: officeFolder.id }
+    ]);
+    
+    // Billing subfolder under Office
+    const [billingFolder] = await db.insert(folders).values({
+      projectId,
+      name: "Billing",
+      parentId: officeFolder.id
+    }).returning();
+    
+    await db.insert(folders).values([
+      { projectId, name: "Change Orders", parentId: billingFolder.id },
+      { projectId, name: "SOV", parentId: billingFolder.id },
+      { projectId, name: "REQs & Invoices", parentId: billingFolder.id }
+    ]);
+    
+    // Field folder structure
+    const [fieldFolder] = await db.insert(folders).values({
+      projectId,
+      name: "Field",
+      parentId: null
+    }).returning();
+    
+    await db.insert(folders).values([
+      { projectId, name: "Drawings", parentId: fieldFolder.id },
+      { projectId, name: "Permits & Legal", parentId: fieldFolder.id },
+      { projectId, name: "Submittals", parentId: fieldFolder.id },
+      { projectId, name: "RFI's", parentId: fieldFolder.id }
+    ]);
   }
   async updateProject(id: number, updates: Partial<InsertProject>): Promise<Project> {
     const [project] = await db.update(projects).set(updates).where(eq(projects.id, id)).returning();
