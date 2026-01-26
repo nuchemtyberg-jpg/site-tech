@@ -562,7 +562,7 @@ export default function ProjectDetails() {
                           <FormLabel>State *</FormLabel>
                           <Select onValueChange={field.onChange} value={field.value || ""}>
                             <FormControl>
-                              <SelectTrigger className="bg-white dark:bg-zinc-900">
+                              <SelectTrigger className="bg-white dark:bg-zinc-900" data-testid="select-edit-project-state">
                                 <SelectValue placeholder="Select" />
                               </SelectTrigger>
                             </FormControl>
@@ -606,6 +606,7 @@ export default function ProjectDetails() {
                             <Button
                               variant="outline"
                               role="combobox"
+                              data-testid="button-edit-customer-select"
                               className={cn(
                                 "w-full justify-between bg-white dark:bg-zinc-900",
                                 !field.value && "text-muted-foreground"
@@ -623,6 +624,7 @@ export default function ProjectDetails() {
                               placeholder="Search customers..." 
                               value={customerSearch}
                               onValueChange={setCustomerSearch}
+                              data-testid="input-edit-customer-search"
                             />
                             <CommandList>
                               <CommandEmpty>No customer found.</CommandEmpty>
@@ -662,7 +664,7 @@ export default function ProjectDetails() {
                       <FormLabel>Status *</FormLabel>
                       <Select onValueChange={field.onChange} value={field.value}>
                         <FormControl>
-                          <SelectTrigger className="bg-white dark:bg-zinc-900">
+                          <SelectTrigger className="bg-white dark:bg-zinc-900" data-testid="select-edit-project-status">
                             <SelectValue placeholder="Select status" />
                           </SelectTrigger>
                         </FormControl>

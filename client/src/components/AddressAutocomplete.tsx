@@ -32,6 +32,7 @@ interface AddressAutocompleteProps {
   placeholder?: string;
   initialValue?: string;
   className?: string;
+  "data-testid"?: string;
 }
 
 const STATE_ABBREVIATIONS: Record<string, string> = {
