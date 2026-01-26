@@ -407,14 +407,9 @@ export default function ProjectDetails() {
     }
   };
 
-  const statusColor = (status: string) => {
-    switch(status) {
-      case 'active': return 'bg-green-500 text-white';
-      case 'planning': return 'bg-blue-500 text-white';
-      case 'completed': return 'bg-gray-500 text-white';
-      case 'on_hold': return 'bg-yellow-500 text-black';
-      default: return 'bg-gray-500';
-    }
+  const getStatusBgColor = (status: string) => {
+    const statusObj = PROJECT_STATUSES.find(s => s.value === status);
+    return statusObj?.color || "#6b7280";
   };
 
   const formatDate = (date: Date | string | null) => {
@@ -440,7 +435,10 @@ export default function ProjectDetails() {
         <div className="flex flex-col md:flex-row md:items-start justify-between gap-4 bg-card p-6 rounded-xl border border-border shadow-sm">
           <div className="flex-1">
             <div className="flex items-center gap-3 mb-2 flex-wrap">
-              <div className={cn("px-3 py-1 rounded text-xs font-bold uppercase tracking-wider", statusColor(project.status))}>
+              <div 
+                className="px-3 py-1 rounded text-xs font-bold uppercase tracking-wider text-white"
+                style={{ backgroundColor: getStatusBgColor(project.status) }}
+              >
                 {project.status.replace('_', ' ')}
               </div>
               {project.projectNumber && (
