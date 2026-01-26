@@ -19,7 +19,10 @@ import {
   Home,
   X,
   Share2,
-  Download
+  Download,
+  LayoutGrid,
+  List,
+  Image as ImageIcon
 } from "lucide-react";
 import { 
   DropdownMenu, 
@@ -74,6 +77,7 @@ export default function ProjectDetails() {
     return folderId ? parseInt(folderId, 10) : null;
   });
   const [viewingFile, setViewingFile] = useState<FileMetadata | null>(null);
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const currentFolderIdRef = useRef<number | null>(null);
   const uploadedFilePathsRef = useRef<Map<string, string>>(new Map());
   
@@ -135,12 +139,11 @@ export default function ProjectDetails() {
   const currentFolders = folders?.filter(f => f.parentId === currentFolderId) || [];
   const currentFiles = files?.filter(f => f.folderId === currentFolderId) || [];
   
-  // Separate image files from other files
-  const imageFiles = currentFiles.filter(f => isImageFile(f.contentType));
-  const otherFiles = currentFiles.filter(f => !isImageFile(f.contentType));
+  // All files combined for unified view
+  const allFiles = currentFiles;
   
-  // Group images by date (month and day)
-  const groupedImages = imageFiles.reduce((groups, file) => {
+  // Group all files by date (month and day) for grid view
+  const groupedFiles = allFiles.reduce((groups, file) => {
     const date = file.createdAt ? new Date(file.createdAt) : new Date();
     const dateKey = format(date, "MMMM d, yyyy");
     if (!groups[dateKey]) {
@@ -148,14 +151,53 @@ export default function ProjectDetails() {
     }
     groups[dateKey].push(file);
     return groups;
-  }, {} as Record<string, typeof imageFiles>);
+  }, {} as Record<string, typeof allFiles>);
   
   // Sort date groups by date (newest first)
-  const sortedDateGroups = Object.entries(groupedImages).sort((a, b) => {
+  const sortedDateGroups = Object.entries(groupedFiles).sort((a, b) => {
     const dateA = new Date(a[0]);
     const dateB = new Date(b[0]);
     return dateB.getTime() - dateA.getTime();
   });
+  
+  // Get file type icon component
+  const getFileIcon = (file: FileMetadata) => {
+    if (isImageFile(file.contentType)) {
+      return <ImageIcon className="w-5 h-5 text-green-500" />;
+    } else if (isPdfFile(file.contentType)) {
+      return <FileText className="w-5 h-5 text-red-500" />;
+    }
+    return <File className="w-5 h-5 text-muted-foreground" />;
+  };
+  
+  // Get file thumbnail for grid view
+  const getFileThumbnail = (file: FileMetadata) => {
+    if (isImageFile(file.contentType)) {
+      return (
+        <img 
+          src={file.objectPath} 
+          alt={file.name}
+          className="w-full h-full object-cover"
+          loading="lazy"
+        />
+      );
+    } else if (isPdfFile(file.contentType)) {
+      return (
+        <div className="w-full h-full flex flex-col items-center justify-center bg-red-500/10">
+          <FileText className="w-10 h-10 text-red-500" />
+          <span className="text-xs text-red-500 font-medium mt-1">PDF</span>
+        </div>
+      );
+    }
+    return (
+      <div className="w-full h-full flex flex-col items-center justify-center bg-muted/50">
+        <File className="w-10 h-10 text-muted-foreground" />
+        <span className="text-xs text-muted-foreground font-medium mt-1 uppercase">
+          {file.name.split('.').pop()?.slice(0, 4) || 'FILE'}
+        </span>
+      </div>
+    );
+  };
   
   const currentFolder = folders?.find(f => f.id === currentFolderId);
   
@@ -458,7 +500,28 @@ export default function ProjectDetails() {
         </TabsContent>
 
         <TabsContent value="documents" className="space-y-4">
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:justify-end relative z-10">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:justify-between relative z-10">
+            {/* View Toggle */}
+            <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
+              <Button
+                variant={viewMode === 'grid' ? 'default' : 'ghost'}
+                size="sm"
+                onClick={() => setViewMode('grid')}
+                data-testid="button-view-grid"
+              >
+                <LayoutGrid className="w-4 h-4" />
+              </Button>
+              <Button
+                variant={viewMode === 'list' ? 'default' : 'ghost'}
+                size="sm"
+                onClick={() => setViewMode('list')}
+                data-testid="button-view-list"
+              >
+                <List className="w-4 h-4" />
+              </Button>
+            </div>
+            
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
             <Dialog open={isFolderOpen} onOpenChange={setIsFolderOpen}>
               <DialogTrigger asChild>
                 <Button variant="outline" className="w-full sm:w-auto" data-testid="button-new-folder">
@@ -517,6 +580,7 @@ export default function ProjectDetails() {
             >
               <Upload className="w-4 h-4 mr-2" /> Upload Files
             </ObjectUploader>
+            </div>
           </div>
 
           {/* Breadcrumb Navigation */}
@@ -578,41 +642,39 @@ export default function ProjectDetails() {
                 </div>
               )}
 
-              {/* Photos - Thumbnails grouped by date */}
-              {sortedDateGroups.length > 0 && (
+              {/* Files - Grid View (grouped by date) */}
+              {viewMode === 'grid' && sortedDateGroups.length > 0 && (
                 <div className="space-y-6">
-                  <h3 className="text-sm font-medium text-muted-foreground">Photos</h3>
-                  {sortedDateGroups.map(([dateGroup, photos]) => (
+                  <h3 className="text-sm font-medium text-muted-foreground">Files</h3>
+                  {sortedDateGroups.map(([dateGroup, groupFiles]) => (
                     <div key={dateGroup} className="space-y-3">
                       <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{dateGroup}</h4>
                       <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2">
-                        {photos.map(photo => (
+                        {groupFiles.map((file: FileMetadata) => (
                           <div 
-                            key={photo.id} 
+                            key={file.id} 
                             className="group relative aspect-square bg-card border border-border rounded-lg overflow-hidden hover:border-primary/50 transition-all cursor-pointer"
-                            data-testid={`photo-item-${photo.id}`}
+                            data-testid={`file-item-${file.id}`}
                           >
                             <button 
-                              onClick={() => setViewingFile(photo)}
+                              onClick={() => handleFileClick(file)}
                               className="w-full h-full"
-                              data-testid={`button-view-photo-${photo.id}`}
+                              data-testid={`button-view-file-${file.id}`}
                             >
-                              <img 
-                                src={photo.objectPath} 
-                                alt={photo.name}
-                                className="w-full h-full object-cover"
-                                loading="lazy"
-                              />
+                              {getFileThumbnail(file)}
                             </button>
+                            <div className="absolute bottom-0 left-0 right-0 bg-black/60 backdrop-blur-sm px-2 py-1">
+                              <p className="text-white text-xs truncate">{file.name}</p>
+                            </div>
                             <Button 
                               variant="ghost" 
                               size="icon" 
                               className="absolute top-1 right-1 h-6 w-6 opacity-0 group-hover:opacity-100 bg-black/50 hover:bg-black/70 text-white"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                deleteFileMutation.mutate(photo.id);
+                                deleteFileMutation.mutate(file.id);
                               }}
-                              data-testid={`button-delete-photo-${photo.id}`}
+                              data-testid={`button-delete-file-${file.id}`}
                             >
                               <Trash2 className="w-3 h-3" />
                             </Button>
@@ -624,25 +686,24 @@ export default function ProjectDetails() {
                 </div>
               )}
 
-              {/* Other Files (PDFs, documents, etc.) */}
-              {otherFiles.length > 0 && (
+              {/* Files - List View */}
+              {viewMode === 'list' && allFiles.length > 0 && (
                 <div className="grid gap-2">
                   <h3 className="text-sm font-medium text-muted-foreground mb-2">Files</h3>
-                  {otherFiles.map(file => (
+                  {allFiles.map((file: FileMetadata) => (
                     <div key={file.id} className="group bg-card border border-border rounded-lg p-3 hover:border-primary/50 transition-all flex items-center justify-between" data-testid={`file-item-${file.id}`}>
                       <button 
                         onClick={() => handleFileClick(file)}
                         className="flex items-center gap-3 flex-1 text-left hover:text-primary transition-colors"
                         data-testid={`button-view-file-${file.id}`}
                       >
-                        <File className="w-5 h-5 text-muted-foreground" />
-                        <div>
-                          <span className="font-medium">{file.name}</span>
-                          {file.size && (
-                            <span className="text-xs text-muted-foreground ml-2">
-                              ({Math.round(file.size / 1024)} KB)
-                            </span>
-                          )}
+                        {getFileIcon(file)}
+                        <div className="flex-1 min-w-0">
+                          <span className="font-medium block truncate">{file.name}</span>
+                          <span className="text-xs text-muted-foreground">
+                            {file.createdAt && format(new Date(file.createdAt), "MMM d, yyyy")}
+                            {file.size && ` • ${Math.round(file.size / 1024)} KB`}
+                          </span>
                         </div>
                       </button>
                       <Button 

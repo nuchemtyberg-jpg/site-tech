@@ -104,15 +104,31 @@ The PDF viewer (`client/src/components/PDFViewer.tsx`) provides professional mar
 
 ## Document Management
 
-### Photo Display
-- Photos in document folders are displayed as thumbnails in a responsive grid
-- Grid layout: 3 columns on mobile, scaling up to 6 columns on large screens
-- Photos are grouped by upload date (format: "Month Day, Year")
-- Date groups are sorted with newest first
-- Clicking a thumbnail opens the full image viewer
-- Delete button appears on hover (top-right corner of thumbnail)
+### Default Folder Structure
+When a new project is created, the following folder structure is automatically generated:
+- **Office/** (root folder)
+  - Takeoffs
+  - Proposals
+  - **Billing/** (subfolder)
+    - Change Orders
+    - SOV
+    - REQs & Invoices
+- **Field/** (root folder)
+  - Drawings
+  - Permits & Legal
+  - Submittals
+  - RFI's
+
+### View Modes
+Documents can be displayed in two view modes (toggle available in Documents tab):
+- **Grid View**: Files displayed as thumbnail cards grouped by upload date
+  - Images show actual thumbnails
+  - PDFs show red PDF icon with "PDF" label
+  - Other files show generic file icon with file extension
+  - File names displayed at bottom of each card
+- **List View**: Files displayed in a traditional list format with icon, name, date, and size
 
 ### File Types
-- **Images**: Displayed as thumbnail grid grouped by date
-- **PDFs**: Displayed in list format, opens PDF viewer with annotation tools
-- **Other files**: Displayed in list format with download capability
+- **Images**: Displayed with actual image thumbnail in grid view, green image icon in list view
+- **PDFs**: Opens in browser's native PDF viewer in new tab
+- **Other files**: Download prompt with file info
