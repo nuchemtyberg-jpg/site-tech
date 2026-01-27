@@ -62,6 +62,8 @@ interface TaskEntryWithDetails {
   laborLines: LaborLine[];
   equipmentLines: EquipmentLine[];
   photos: Photo[];
+  allowedMin?: number;
+  allowedMax?: number;
 }
 
 interface LaborLine {
@@ -118,6 +120,7 @@ interface ReportWithDetails {
   updatedAt: Date | null;
   taskEntries: TaskEntryWithDetails[];
   deliveryEntries: DeliveryEntry[];
+  isLatestReport?: boolean;
 }
 
 function safeFormatDate(dateString: string | null | undefined, formatStr: string, fallback: string = 'N/A'): string {
