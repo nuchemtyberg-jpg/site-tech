@@ -194,75 +194,84 @@ The Photos tab provides a dedicated photo management experience for project phot
 Daily Reports provide field reporting capabilities for construction projects with weather integration, task tracking, labor/equipment resources, and deliveries.
 
 ### Core Features
-- One report per day per project (with date conflict resolution)
-- Automatic weather fetching using Open-Meteo API (free, no key required)
-- Report list showing all reports sorted by date descending
-- Report date display formatted as "MM/DD/YYYY"
-- Component located at `client/src/components/DailyReportsTab.tsx`
+- One report per day per project (409 conflict if duplicate date)
+- Status workflow: draft (editable) → completed (read-only with signature)
+- Full-screen report editor page at `/projects/:projectId/reports/:reportId`
+- Report list with table view showing date, weather, last updated, and status badge
+- Signature capture (freehand drawing or typed) to complete and lock reports
+- Component located at `client/src/components/DailyReportsTab.tsx` and `client/src/pages/DailyReportPage.tsx`
 
 ### Weather Integration
 - Uses Open-Meteo geocoding API to convert project address to coordinates
 - Fetches current weather conditions and daily min/max temperatures
-- Weather data includes: condition (sunny, cloudy, rainy, etc.), temperature, high, low
+- Weather data includes: summary, temperature, temperatureHigh, temperatureLow, windSpeed
 - Falls back to default values if geocoding or weather fetch fails
 - Weather is auto-filled when creating a new report
 
-### Report Tasks
-- Can add tasks from the project's uncompleted tasks list
-- Task completion slider (0-100% in 5% increments) syncs bidirectionally with project Tasks tab
-- When task is marked 100%, status auto-updates to "completed"
-- When task is marked 0%, status auto-updates to "pending"
-- Status history tracking records all changes with user attribution
+### Task Entries
+- Add tasks from the project's uncompleted tasks list
+- Task title stored as snapshot for historical accuracy
+- Progress slider (0-100% in 5% increments)
+- Progress syncs back to main project task when updated
+- Each task entry has its own labor lines and equipment lines
 
-### Labor Entries
+### Labor Lines (per task entry)
 - Labor types: Foreman, Operator, Laborer
-- Fields: type, count, hours
-- Multiple labor entries per report
+- Fields: laborType, quantity, hours
+- Multiple labor lines per task entry
 
-### Equipment Entries
-- Equipment types: Mini Excavator, Excavator, Skidsteer, Compactor
-- Fields: type, hours, notes
-- Multiple equipment entries per report
+### Equipment Lines (per task entry)
+- Equipment types: Mini Excavator, Excavator, Skid Steer, Compactor
+- Fields: equipmentType, quantity, hours
+- Multiple equipment lines per task entry
 
-### Deliveries Section
+### Delivery Entries
 - Track deliveries for each report
-- Fields: description, vendor, time arrived, receiver name
-- Photo upload capability (placeholder - redirects to Photos tab)
-- Multiple deliveries per report
+- Fields: vendor, deliveryTime, description, allDelivered (boolean), missingItemsDetails
+- Missing items details required when allDelivered is false
+- Photo upload capability for delivery slips
+- Multiple delivery entries per report
+
+### Signature Capture
+- Two signature types: freehand (canvas drawing) or typed
+- Canvas supports mouse and touch input
+- Signature stored as Base64 data URL (freehand) or text string (typed)
+- Completing report requires signer name and signature
+- Once completed, report becomes read-only
 
 ### Data Model
 Tables defined in `shared/schema.ts`:
-- **dailyReports**: Main report table (id, projectId, reportDate, weather fields, workSummary, notes, timestamps)
-- **reportTasks**: Links reports to project tasks with current percent complete
-- **laborEntries**: Labor resources per report
-- **equipmentEntries**: Equipment resources per report
-- **reportTaskPhotos**: Photos for report tasks (placeholder)
-- **deliveries**: Delivery entries per report
-- **deliveryPhotos**: Photos for deliveries (placeholder)
+- **dailyReports**: Main report table with status (draft/completed), weather fields, signature data, audit fields
+- **dailyReportTaskEntries**: Links reports to project tasks with taskTitleSnapshot, percentComplete, comments
+- **dailyReportLaborLines**: Labor resources per task entry (type, quantity, hours)
+- **dailyReportEquipmentLines**: Equipment resources per task entry (type, quantity, hours)
+- **dailyReportDeliveryEntries**: Delivery entries with vendor, time, description, allDelivered, missingItemsDetails
+- **dailyReportPhotos**: Flexible photo storage linked to report, task entry, or delivery entry
 
 ### API Endpoints
 - GET `/api/projects/:projectId/reports` - List all reports for a project
-- POST `/api/projects/:projectId/reports` - Create a new report
-- GET `/api/reports/:id` - Get a single report with all related data
-- PUT `/api/reports/:id` - Update a report
-- DELETE `/api/reports/:id` - Delete a report
-- POST `/api/reports/:reportId/tasks` - Add task to report
-- PUT `/api/report-tasks/:id` - Update report task (syncs with project task)
-- DELETE `/api/report-tasks/:id` - Remove task from report
-- POST `/api/reports/:reportId/labor` - Add labor entry
-- DELETE `/api/labor-entries/:id` - Delete labor entry
-- POST `/api/reports/:reportId/equipment` - Add equipment entry
-- DELETE `/api/equipment-entries/:id` - Delete equipment entry
-- POST `/api/reports/:reportId/deliveries` - Add delivery
-- PUT `/api/deliveries/:id` - Update delivery
-- DELETE `/api/deliveries/:id` - Delete delivery
+- POST `/api/projects/:projectId/reports` - Create new report (409 if date exists)
+- GET `/api/reports/:id` - Get report with nested taskEntries and deliveryEntries
+- PUT `/api/reports/:id` - Update report (403 if completed)
+- DELETE `/api/reports/:id` - Delete report (403 if completed)
+- POST `/api/reports/:id/complete` - Complete and sign report
+- POST `/api/reports/:reportId/task-entries` - Add task entry
+- PUT `/api/daily-report-task-entries/:id` - Update task entry (syncs progress to main task)
+- DELETE `/api/daily-report-task-entries/:id` - Remove task entry
+- POST `/api/daily-report-task-entries/:taskEntryId/labor-lines` - Add labor line
+- PUT `/api/daily-report-labor-lines/:id` - Update labor line
+- DELETE `/api/daily-report-labor-lines/:id` - Delete labor line
+- POST `/api/daily-report-task-entries/:taskEntryId/equipment-lines` - Add equipment line
+- PUT `/api/daily-report-equipment-lines/:id` - Update equipment line
+- DELETE `/api/daily-report-equipment-lines/:id` - Delete equipment line
+- POST `/api/reports/:reportId/delivery-entries` - Add delivery entry
+- PUT `/api/daily-report-delivery-entries/:id` - Update delivery entry
+- DELETE `/api/daily-report-delivery-entries/:id` - Delete delivery entry
 
 ### Mobile UI/UX
-- Responsive layout using `flex-col sm:flex-row` patterns for stacked controls on mobile
+- Responsive layout using `flex-col sm:flex-row` patterns
 - Full-width buttons on mobile using `w-full sm:w-auto`
-- Grid breakpoints: `grid-cols-1 lg:grid-cols-3` for report list/detail layout
-- Dialogs use `mx-4 max-w-sm sm:max-w-lg` for mobile-friendly sizing
+- Collapsible task entries with expand/collapse toggle
 - Text contrast uses `text-foreground` semantic class consistently
 - Weather section uses explicit colors `text-blue-800 dark:text-blue-200` for legibility
-- Labor/Equipment entries wrap on mobile with `flex-wrap`
 - `safeFormatDate` helper function prevents runtime errors on invalid dates

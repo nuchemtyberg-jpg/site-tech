@@ -1791,12 +1791,7 @@ export default function ProjectDetails() {
         </TabsContent>
 
         <TabsContent value="daily-reports" className="space-y-4">
-          <DailyReportsTab 
-            projectId={Number(id)}
-            projectAddress={project?.streetAddress || undefined}
-            projectCity={project?.city || undefined}
-            projectState={project?.state || undefined}
-          />
+          {project && <DailyReportsTab project={project} />}
         </TabsContent>
       </Tabs>
 

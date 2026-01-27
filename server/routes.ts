@@ -281,18 +281,70 @@ export async function registerRoutes(
     res.json(reports);
   });
 
-  app.get(api.dailyReports.get.path, async (req, res) => {
-    const report = await storage.getDailyReport(Number(req.params.id));
+  // Get report by date
+  app.get("/api/projects/:projectId/reports/by-date", async (req, res) => {
+    const { date } = req.query;
+    if (!date || typeof date !== 'string') {
+      return res.status(400).json({ message: "Date query parameter is required" });
+    }
+    const report = await storage.getDailyReportByDate(Number(req.params.projectId), date);
     if (!report) return res.status(404).json({ message: "Report not found" });
     res.json(report);
   });
 
+  app.get(api.dailyReports.get.path, async (req, res) => {
+    const report = await storage.getDailyReport(Number(req.params.id));
+    if (!report) return res.status(404).json({ message: "Report not found" });
+    
+    // Fetch related data
+    const taskEntries = await storage.getDailyReportTaskEntries(report.id);
+    const deliveryEntries = await storage.getDailyReportDeliveryEntries(report.id);
+    
+    // For each task entry, get labor lines, equipment lines, and photos
+    const taskEntriesWithDetails = await Promise.all(taskEntries.map(async (entry) => {
+      const laborLines = await storage.getDailyReportLaborLines(entry.id);
+      const equipmentLines = await storage.getDailyReportEquipmentLines(entry.id);
+      const photos = await storage.getDailyReportPhotos(undefined, entry.id, undefined);
+      return { ...entry, laborLines, equipmentLines, photos };
+    }));
+    
+    // For each delivery entry, get photos
+    const deliveryEntriesWithPhotos = await Promise.all(deliveryEntries.map(async (entry) => {
+      const photos = await storage.getDailyReportPhotos(undefined, undefined, entry.id);
+      return { ...entry, photos };
+    }));
+    
+    res.json({
+      ...report,
+      taskEntries: taskEntriesWithDetails,
+      deliveryEntries: deliveryEntriesWithPhotos,
+    });
+  });
+
   app.post(api.dailyReports.create.path, async (req, res) => {
     try {
-      const input = api.dailyReports.create.input.parse(req.body);
+      const projectId = Number(req.params.projectId);
+      const { reportDate, ...rest } = req.body;
+      
+      if (!reportDate) {
+        return res.status(400).json({ message: "Report date is required" });
+      }
+      
+      // Check for existing report on same date - return 409 if exists
+      const existingReport = await storage.getDailyReportByDate(projectId, reportDate);
+      if (existingReport) {
+        return res.status(409).json({ 
+          error: "REPORT_EXISTS_FOR_DATE",
+          message: "A report for this date already exists",
+          existingReportId: existingReport.id
+        });
+      }
+      
       const report = await storage.createDailyReport({
-        ...input,
-        projectId: Number(req.params.projectId),
+        ...rest,
+        reportDate,
+        projectId,
+        status: 'draft',
       });
       res.status(201).json(report);
     } catch (err) {
@@ -305,15 +357,30 @@ export async function registerRoutes(
 
   app.put(api.dailyReports.update.path, async (req, res) => {
     try {
-      const body = { ...req.body };
-      if (body.signedAt && typeof body.signedAt === 'string') {
-        body.signedAt = new Date(body.signedAt);
-      }
-      const input = api.dailyReports.update.input.parse(body);
-      const report = await storage.updateDailyReport(Number(req.params.id), input);
-      if (!report) {
+      const reportId = Number(req.params.id);
+      
+      // Check if report exists and is not completed
+      const existingReport = await storage.getDailyReport(reportId);
+      if (!existingReport) {
         return res.status(404).json({ message: "Report not found" });
       }
+      
+      // Reject edits if report is completed (read-only)
+      if (existingReport.status === 'completed' && !req.body.status) {
+        return res.status(403).json({ message: "Cannot edit a completed report" });
+      }
+      
+      const body = { ...req.body };
+      
+      // Handle timestamp conversion
+      if (body.completedAt && typeof body.completedAt === 'string') {
+        body.completedAt = new Date(body.completedAt);
+      }
+      if (body.weatherFetchedAt && typeof body.weatherFetchedAt === 'string') {
+        body.weatherFetchedAt = new Date(body.weatherFetchedAt);
+      }
+      
+      const report = await storage.updateDailyReport(reportId, body);
       res.json(report);
     } catch (err) {
       if (err instanceof z.ZodError) {
@@ -325,8 +392,292 @@ export async function registerRoutes(
     }
   });
 
+  // Complete and sign report
+  app.post("/api/reports/:id/complete", async (req, res) => {
+    try {
+      const reportId = Number(req.params.id);
+      const { signatureType, signatureValue, completedBy, completedByName } = req.body;
+      
+      const existingReport = await storage.getDailyReport(reportId);
+      if (!existingReport) {
+        return res.status(404).json({ message: "Report not found" });
+      }
+      
+      if (existingReport.status === 'completed') {
+        return res.status(403).json({ message: "Report is already completed" });
+      }
+      
+      if (!signatureType || !signatureValue) {
+        return res.status(400).json({ message: "Signature is required to complete report" });
+      }
+      
+      const report = await storage.updateDailyReport(reportId, {
+        status: 'completed',
+        signatureType,
+        signatureValue,
+        completedAt: new Date(),
+        completedBy,
+        completedByName,
+      });
+      
+      res.json(report);
+    } catch (err) {
+      console.error("Complete report error:", err);
+      return res.status(500).json({ message: "Failed to complete report" });
+    }
+  });
+
   app.delete(api.dailyReports.delete.path, async (req, res) => {
+    const report = await storage.getDailyReport(Number(req.params.id));
+    if (report?.status === 'completed') {
+      return res.status(403).json({ message: "Cannot delete a completed report" });
+    }
     await storage.deleteDailyReport(Number(req.params.id));
+    res.status(204).send();
+  });
+
+  // Daily Report Task Entries
+  app.get("/api/reports/:reportId/task-entries", async (req, res) => {
+    const entries = await storage.getDailyReportTaskEntries(Number(req.params.reportId));
+    res.json(entries);
+  });
+
+  app.post("/api/reports/:reportId/task-entries", async (req, res) => {
+    try {
+      const reportId = Number(req.params.reportId);
+      const report = await storage.getDailyReport(reportId);
+      if (!report) return res.status(404).json({ message: "Report not found" });
+      if (report.status === 'completed') return res.status(403).json({ message: "Cannot edit a completed report" });
+      
+      const { taskId, taskTitleSnapshot, percentComplete, comments } = req.body;
+      if (!taskId || !taskTitleSnapshot) {
+        return res.status(400).json({ message: "taskId and taskTitleSnapshot are required" });
+      }
+      
+      const entry = await storage.createDailyReportTaskEntry({
+        reportId,
+        taskId,
+        taskTitleSnapshot,
+        percentComplete: percentComplete || 0,
+        comments,
+      });
+      res.status(201).json(entry);
+    } catch (err) {
+      console.error("Create task entry error:", err);
+      return res.status(500).json({ message: "Failed to create task entry" });
+    }
+  });
+
+  app.put("/api/daily-report-task-entries/:id", async (req, res) => {
+    try {
+      const entryId = Number(req.params.id);
+      const entry = await storage.getDailyReportTaskEntry(entryId);
+      if (!entry) return res.status(404).json({ message: "Task entry not found" });
+      
+      const report = await storage.getDailyReport(entry.reportId);
+      if (report?.status === 'completed') return res.status(403).json({ message: "Cannot edit a completed report" });
+      
+      const updated = await storage.updateDailyReportTaskEntry(entryId, req.body);
+      
+      // Sync progress back to the main task
+      if (req.body.percentComplete !== undefined) {
+        const task = await storage.getTask(entry.taskId);
+        if (task) {
+          const newStatus = req.body.percentComplete === 0 ? 'pending' 
+            : req.body.percentComplete === 100 ? 'completed' 
+            : 'in_progress';
+          await storage.updateTask(entry.taskId, { 
+            percentComplete: req.body.percentComplete,
+            status: newStatus
+          });
+        }
+      }
+      
+      res.json(updated);
+    } catch (err) {
+      console.error("Update task entry error:", err);
+      return res.status(500).json({ message: "Failed to update task entry" });
+    }
+  });
+
+  app.delete("/api/daily-report-task-entries/:id", async (req, res) => {
+    const entry = await storage.getDailyReportTaskEntry(Number(req.params.id));
+    if (!entry) return res.status(404).json({ message: "Task entry not found" });
+    
+    const report = await storage.getDailyReport(entry.reportId);
+    if (report?.status === 'completed') return res.status(403).json({ message: "Cannot edit a completed report" });
+    
+    await storage.deleteDailyReportTaskEntry(Number(req.params.id));
+    res.status(204).send();
+  });
+
+  // Daily Report Labor Lines
+  app.post("/api/daily-report-task-entries/:taskEntryId/labor-lines", async (req, res) => {
+    try {
+      const taskEntryId = Number(req.params.taskEntryId);
+      const entry = await storage.getDailyReportTaskEntry(taskEntryId);
+      if (!entry) return res.status(404).json({ message: "Task entry not found" });
+      
+      const report = await storage.getDailyReport(entry.reportId);
+      if (report?.status === 'completed') return res.status(403).json({ message: "Cannot edit a completed report" });
+      
+      const { laborType, quantity, hours } = req.body;
+      const line = await storage.createDailyReportLaborLine({
+        taskEntryId,
+        laborType: laborType || 'Laborer',
+        quantity: quantity || 1,
+        hours: hours || 0,
+      });
+      res.status(201).json(line);
+    } catch (err) {
+      console.error("Create labor line error:", err);
+      return res.status(500).json({ message: "Failed to create labor line" });
+    }
+  });
+
+  app.put("/api/daily-report-labor-lines/:id", async (req, res) => {
+    try {
+      const updated = await storage.updateDailyReportLaborLine(Number(req.params.id), req.body);
+      res.json(updated);
+    } catch (err) {
+      return res.status(500).json({ message: "Failed to update labor line" });
+    }
+  });
+
+  app.delete("/api/daily-report-labor-lines/:id", async (req, res) => {
+    await storage.deleteDailyReportLaborLine(Number(req.params.id));
+    res.status(204).send();
+  });
+
+  // Daily Report Equipment Lines
+  app.post("/api/daily-report-task-entries/:taskEntryId/equipment-lines", async (req, res) => {
+    try {
+      const taskEntryId = Number(req.params.taskEntryId);
+      const entry = await storage.getDailyReportTaskEntry(taskEntryId);
+      if (!entry) return res.status(404).json({ message: "Task entry not found" });
+      
+      const report = await storage.getDailyReport(entry.reportId);
+      if (report?.status === 'completed') return res.status(403).json({ message: "Cannot edit a completed report" });
+      
+      const { equipmentType, quantity, hours } = req.body;
+      const line = await storage.createDailyReportEquipmentLine({
+        taskEntryId,
+        equipmentType: equipmentType || 'Excavator',
+        quantity: quantity || 1,
+        hours: hours || 0,
+      });
+      res.status(201).json(line);
+    } catch (err) {
+      console.error("Create equipment line error:", err);
+      return res.status(500).json({ message: "Failed to create equipment line" });
+    }
+  });
+
+  app.put("/api/daily-report-equipment-lines/:id", async (req, res) => {
+    try {
+      const updated = await storage.updateDailyReportEquipmentLine(Number(req.params.id), req.body);
+      res.json(updated);
+    } catch (err) {
+      return res.status(500).json({ message: "Failed to update equipment line" });
+    }
+  });
+
+  app.delete("/api/daily-report-equipment-lines/:id", async (req, res) => {
+    await storage.deleteDailyReportEquipmentLine(Number(req.params.id));
+    res.status(204).send();
+  });
+
+  // Daily Report Delivery Entries
+  app.post("/api/reports/:reportId/delivery-entries", async (req, res) => {
+    try {
+      const reportId = Number(req.params.reportId);
+      const report = await storage.getDailyReport(reportId);
+      if (!report) return res.status(404).json({ message: "Report not found" });
+      if (report.status === 'completed') return res.status(403).json({ message: "Cannot edit a completed report" });
+      
+      const entry = await storage.createDailyReportDeliveryEntry({
+        reportId,
+        ...req.body,
+      });
+      res.status(201).json(entry);
+    } catch (err) {
+      console.error("Create delivery entry error:", err);
+      return res.status(500).json({ message: "Failed to create delivery entry" });
+    }
+  });
+
+  app.put("/api/daily-report-delivery-entries/:id", async (req, res) => {
+    try {
+      const entry = await storage.getDailyReportDeliveryEntry(Number(req.params.id));
+      if (!entry) return res.status(404).json({ message: "Delivery entry not found" });
+      
+      const report = await storage.getDailyReport(entry.reportId);
+      if (report?.status === 'completed') return res.status(403).json({ message: "Cannot edit a completed report" });
+      
+      const updated = await storage.updateDailyReportDeliveryEntry(Number(req.params.id), req.body);
+      res.json(updated);
+    } catch (err) {
+      return res.status(500).json({ message: "Failed to update delivery entry" });
+    }
+  });
+
+  app.delete("/api/daily-report-delivery-entries/:id", async (req, res) => {
+    const entry = await storage.getDailyReportDeliveryEntry(Number(req.params.id));
+    if (!entry) return res.status(404).json({ message: "Delivery entry not found" });
+    
+    const report = await storage.getDailyReport(entry.reportId);
+    if (report?.status === 'completed') return res.status(403).json({ message: "Cannot delete from a completed report" });
+    
+    await storage.deleteDailyReportDeliveryEntry(Number(req.params.id));
+    res.status(204).send();
+  });
+
+  // Daily Report Photos
+  app.post("/api/daily-report-photos", async (req, res) => {
+    try {
+      const { reportId, taskEntryId, deliveryEntryId, url, caption, createdBy, createdByName } = req.body;
+      
+      // Validate that at least one reference is provided
+      if (!reportId && !taskEntryId && !deliveryEntryId) {
+        return res.status(400).json({ message: "Must provide reportId, taskEntryId, or deliveryEntryId" });
+      }
+      
+      // Check report is not completed
+      let checkReportId = reportId;
+      if (taskEntryId) {
+        const entry = await storage.getDailyReportTaskEntry(taskEntryId);
+        if (entry) checkReportId = entry.reportId;
+      }
+      if (deliveryEntryId) {
+        const entry = await storage.getDailyReportDeliveryEntry(deliveryEntryId);
+        if (entry) checkReportId = entry.reportId;
+      }
+      
+      if (checkReportId) {
+        const report = await storage.getDailyReport(checkReportId);
+        if (report?.status === 'completed') {
+          return res.status(403).json({ message: "Cannot add photos to a completed report" });
+        }
+      }
+      
+      const photo = await storage.createDailyReportPhoto({
+        reportId,
+        taskEntryId,
+        deliveryEntryId,
+        url,
+        caption,
+        createdBy,
+        createdByName,
+      });
+      res.status(201).json(photo);
+    } catch (err) {
+      console.error("Create photo error:", err);
+      return res.status(500).json({ message: "Failed to create photo" });
+    }
+  });
+
+  app.delete("/api/daily-report-photos/:id", async (req, res) => {
+    await storage.deleteDailyReportPhoto(Number(req.params.id));
     res.status(204).send();
   });
 

@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -27,15 +28,83 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { ArrowLeft, Save, Plus, Trash2, Calendar, Cloud, Truck, ChevronDown, ChevronUp, Upload, X, CheckCircle, PenLine } from "lucide-react";
+import { ArrowLeft, Save, Plus, Trash2, Cloud, Truck, ChevronDown, ChevronUp, CheckCircle, PenLine, Download } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
-import type { DailyReport, Task, ReportTask, LaborEntry, EquipmentEntry, Delivery, Project } from "@shared/schema";
+import type { Task, Project } from "@shared/schema";
 
 const LABOR_TYPES = ["Foreman", "Operator", "Laborer"];
-const EQUIPMENT_TYPES = ["Mini Excavator", "Excavator", "Skidsteer", "Compactor"];
+const EQUIPMENT_TYPES = ["Mini Excavator", "Excavator", "Skid Steer", "Compactor"];
 
-function safeFormatDate(dateString: string | null | undefined, formatStr: string, fallback: string = 'this date'): string {
+interface TaskEntryWithDetails {
+  id: number;
+  reportId: number;
+  taskId: number;
+  taskTitleSnapshot: string;
+  percentComplete: number;
+  comments: string | null;
+  laborLines: LaborLine[];
+  equipmentLines: EquipmentLine[];
+  photos: Photo[];
+}
+
+interface LaborLine {
+  id: number;
+  taskEntryId: number;
+  laborType: string;
+  quantity: number;
+  hours: number;
+}
+
+interface EquipmentLine {
+  id: number;
+  taskEntryId: number;
+  equipmentType: string;
+  quantity: number;
+  hours: number;
+}
+
+interface DeliveryEntry {
+  id: number;
+  reportId: number;
+  vendor: string | null;
+  deliveryTime: string | null;
+  description: string | null;
+  allDelivered: boolean | null;
+  missingItemsDetails: string | null;
+  photos: Photo[];
+}
+
+interface Photo {
+  id: number;
+  url: string;
+  caption: string | null;
+}
+
+interface ReportWithDetails {
+  id: number;
+  projectId: number;
+  reportDate: string;
+  status: string;
+  weatherSummary: string | null;
+  temperature: string | null;
+  temperatureHigh: string | null;
+  temperatureLow: string | null;
+  windSpeed: string | null;
+  notes: string | null;
+  signatureType: string | null;
+  signatureValue: string | null;
+  completedAt: Date | null;
+  completedBy: string | null;
+  completedByName: string | null;
+  createdByName: string | null;
+  updatedByName: string | null;
+  updatedAt: Date | null;
+  taskEntries: TaskEntryWithDetails[];
+  deliveryEntries: DeliveryEntry[];
+}
+
+function safeFormatDate(dateString: string | null | undefined, formatStr: string, fallback: string = 'N/A'): string {
   if (!dateString) return fallback;
   try {
     const date = new Date(dateString + 'T00:00:00');
@@ -58,21 +127,24 @@ export default function DailyReportPage() {
   const { toast } = useToast();
   const [newReportDate, setNewReportDate] = useState(format(new Date(), "yyyy-MM-dd"));
   const [expandedTasks, setExpandedTasks] = useState<Set<number>>(new Set());
-  const [deleteTaskId, setDeleteTaskId] = useState<number | null>(null);
+  const [deleteTaskEntryId, setDeleteTaskEntryId] = useState<number | null>(null);
   const [deleteDeliveryId, setDeleteDeliveryId] = useState<number | null>(null);
   const [showSignatureDialog, setShowSignatureDialog] = useState(false);
   const [signatureType, setSignatureType] = useState<'freehand' | 'typed'>('freehand');
   const [typedSignature, setTypedSignature] = useState('');
   const [signerName, setSignerName] = useState('');
+  const [notes, setNotes] = useState('');
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isDrawing, setIsDrawing] = useState(false);
+  const [showAddTaskDialog, setShowAddTaskDialog] = useState(false);
+  const [selectedTaskId, setSelectedTaskId] = useState<number | null>(null);
 
   const { data: project } = useQuery<Project>({
     queryKey: ['/api/projects', projectId],
     enabled: !!projectId,
   });
 
-  const { data: report, isLoading: reportLoading } = useQuery<DailyReport>({
+  const { data: report, isLoading: reportLoading, refetch: refetchReport } = useQuery<ReportWithDetails>({
     queryKey: ['/api/reports', reportId],
     enabled: !!reportId,
   });
@@ -82,278 +154,207 @@ export default function DailyReportPage() {
     enabled: !!projectId,
   });
 
-  const { data: reportTasks = [], refetch: refetchReportTasks } = useQuery<ReportTask[]>({
-    queryKey: ['/api/reports', reportId, 'tasks'],
-    enabled: !!reportId,
-  });
-
-  const { data: deliveries = [], refetch: refetchDeliveries } = useQuery<Delivery[]>({
-    queryKey: ['/api/reports', reportId, 'deliveries'],
-    enabled: !!reportId,
-  });
-
-  const { data: laborEntriesMap = {} } = useQuery({
-    queryKey: ['laborEntries', reportTasks.map(rt => rt.id)],
-    queryFn: async () => {
-      const entries: Record<number, LaborEntry[]> = {};
-      for (const rt of reportTasks) {
-        const res = await fetch(`/api/report-tasks/${rt.id}/labor`);
-        if (res.ok) {
-          entries[rt.id] = await res.json();
-        }
-      }
-      return entries;
-    },
-    enabled: reportTasks.length > 0,
-  });
-
-  const { data: equipmentEntriesMap = {} } = useQuery({
-    queryKey: ['equipmentEntries', reportTasks.map(rt => rt.id)],
-    queryFn: async () => {
-      const entries: Record<number, EquipmentEntry[]> = {};
-      for (const rt of reportTasks) {
-        const res = await fetch(`/api/report-tasks/${rt.id}/equipment-entries`);
-        if (res.ok) {
-          entries[rt.id] = await res.json();
-        }
-      }
-      return entries;
-    },
-    enabled: reportTasks.length > 0,
-  });
-
-  const uncompletedTasks = projectTasks.filter(t => t.status !== 'completed');
-  const availableTasksToAdd = uncompletedTasks.filter(
-    t => !reportTasks.some(rt => rt.taskId === t.id)
-  );
-
-  async function fetchWeather() {
-    try {
-      const location = [project?.city, project?.state].filter(Boolean).join(', ') || 'New York';
-      const geocodeRes = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(location)}&count=1`);
-      const geocodeData = await geocodeRes.json();
-      
-      if (geocodeData.results?.[0]) {
-        const { latitude, longitude } = geocodeData.results[0];
-        const weatherRes = await fetch(
-          `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m&daily=temperature_2m_max,temperature_2m_min&temperature_unit=fahrenheit&wind_speed_unit=mph&timezone=auto`
-        );
-        const weatherData = await weatherRes.json();
-        
-        const weatherCodes: Record<number, string> = {
-          0: "Clear sky", 1: "Mainly clear", 2: "Partly cloudy", 3: "Overcast",
-          45: "Foggy", 48: "Depositing rime fog",
-          51: "Light drizzle", 53: "Moderate drizzle", 55: "Dense drizzle",
-          61: "Slight rain", 63: "Moderate rain", 65: "Heavy rain",
-          71: "Slight snow", 73: "Moderate snow", 75: "Heavy snow",
-          80: "Slight rain showers", 81: "Moderate rain showers", 82: "Violent rain showers",
-          95: "Thunderstorm", 96: "Thunderstorm with slight hail", 99: "Thunderstorm with heavy hail",
-        };
-
-        return {
-          weather: weatherCodes[weatherData.current?.weather_code] || "Unknown",
-          weatherDescription: weatherCodes[weatherData.current?.weather_code] || "Unknown",
-          temperature: `${Math.round(weatherData.current?.temperature_2m || 0)}°F`,
-          temperatureHigh: `${Math.round(weatherData.daily?.temperature_2m_max?.[0] || 0)}°F`,
-          temperatureLow: `${Math.round(weatherData.daily?.temperature_2m_min?.[0] || 0)}°F`,
-          humidity: `${weatherData.current?.relative_humidity_2m || 0}%`,
-          windSpeed: `${Math.round(weatherData.current?.wind_speed_10m || 0)} mph`,
-        };
-      }
-    } catch (error) {
-      console.error("Failed to fetch weather:", error);
+  useEffect(() => {
+    if (report?.notes) {
+      setNotes(report.notes);
     }
-    return {};
-  }
+  }, [report?.notes]);
+
+  const isCompleted = report?.status === 'completed';
 
   const createReportMutation = useMutation({
-    mutationFn: async (data: { reportDate: string }) => {
-      const weatherData = await fetchWeather();
-      const response = await apiRequest('POST', `/api/projects/${projectId}/reports`, {
-        ...data,
-        ...weatherData,
-      });
-      return (await response.json()) as DailyReport;
+    mutationFn: async (reportDate: string) => {
+      const res = await apiRequest("POST", `/api/projects/${projectId}/reports`, { reportDate });
+      return res.json();
     },
-    onSuccess: (newReport) => {
-      queryClient.invalidateQueries({ queryKey: ['/api/projects', projectId, 'reports'] });
-      setLocation(`/projects/${projectId}/reports/${newReport.id}`);
-      toast({ title: "Report created successfully" });
+    onSuccess: (data) => {
+      toast({ title: "Report created" });
+      setLocation(`/projects/${projectId}/reports/${data.id}`);
     },
-    onError: () => {
-      toast({ title: "Failed to create report", variant: "destructive" });
+    onError: (error: any) => {
+      if (error.message?.includes("409")) {
+        toast({ title: "A report for this date already exists", variant: "destructive" });
+      } else {
+        toast({ title: "Failed to create report", variant: "destructive" });
+      }
     },
   });
 
   const updateReportMutation = useMutation({
-    mutationFn: async (data: Partial<DailyReport>) => {
-      return apiRequest('PUT', `/api/reports/${reportId}`, data);
+    mutationFn: async (data: any) => {
+      return apiRequest("PUT", `/api/reports/${reportId}`, data);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/reports', reportId] });
-      queryClient.invalidateQueries({ queryKey: ['/api/projects', projectId, 'reports'] });
+      refetchReport();
     },
-  });
-
-  const createReportTaskMutation = useMutation({
-    mutationFn: async (data: { taskId: number; percentComplete: number }) => {
-      return apiRequest('POST', `/api/reports/${reportId}/tasks`, data);
-    },
-    onSuccess: () => {
-      refetchReportTasks();
-      toast({ title: "Task added to report" });
-    },
-  });
-
-  const updateReportTaskMutation = useMutation({
-    mutationFn: async ({ id, data }: { id: number; data: Partial<ReportTask> }) => {
-      return apiRequest('PUT', `/api/report-tasks/${id}`, data);
-    },
-    onSuccess: (_, variables) => {
-      refetchReportTasks();
-      if (variables.data.percentComplete !== undefined) {
-        const reportTask = reportTasks.find(rt => rt.id === variables.id);
-        if (reportTask) {
-          updateProjectTaskPercent(reportTask.taskId, variables.data.percentComplete);
-        }
+    onError: (error: any) => {
+      if (error.message?.includes("403")) {
+        toast({ title: "Cannot edit a completed report", variant: "destructive" });
+      } else {
+        toast({ title: "Failed to update report", variant: "destructive" });
       }
     },
   });
 
-  const deleteReportTaskMutation = useMutation({
+  const completeReportMutation = useMutation({
+    mutationFn: async (data: { signatureType: string; signatureValue: string; completedByName: string }) => {
+      return apiRequest("POST", `/api/reports/${reportId}/complete`, data);
+    },
+    onSuccess: () => {
+      toast({ title: "Report completed and signed" });
+      setShowSignatureDialog(false);
+      refetchReport();
+    },
+    onError: (error: any) => {
+      if (error.message?.includes("403")) {
+        toast({ title: "Report is already completed", variant: "destructive" });
+      } else {
+        toast({ title: "Failed to complete report", variant: "destructive" });
+      }
+    },
+  });
+
+  const createTaskEntryMutation = useMutation({
+    mutationFn: async (data: { taskId: number; taskTitleSnapshot: string }) => {
+      return apiRequest("POST", `/api/reports/${reportId}/task-entries`, data);
+    },
+    onSuccess: () => {
+      refetchReport();
+      setShowAddTaskDialog(false);
+      setSelectedTaskId(null);
+    },
+    onError: () => {
+      toast({ title: "Failed to add task", variant: "destructive" });
+    },
+  });
+
+  const updateTaskEntryMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: number; data: any }) => {
+      return apiRequest("PUT", `/api/daily-report-task-entries/${id}`, data);
+    },
+    onSuccess: () => {
+      refetchReport();
+    },
+  });
+
+  const deleteTaskEntryMutation = useMutation({
     mutationFn: async (id: number) => {
-      return apiRequest('DELETE', `/api/report-tasks/${id}`);
+      return apiRequest("DELETE", `/api/daily-report-task-entries/${id}`);
     },
     onSuccess: () => {
-      refetchReportTasks();
-      setDeleteTaskId(null);
-      toast({ title: "Task removed from report" });
+      refetchReport();
+      setDeleteTaskEntryId(null);
     },
   });
 
-  const createLaborEntryMutation = useMutation({
-    mutationFn: async (data: { reportTaskId: number; laborType: string; quantity: number; hours: number }) => {
-      return apiRequest('POST', `/api/report-tasks/${data.reportTaskId}/labor`, {
-        laborType: data.laborType,
-        quantity: data.quantity,
-        hours: data.hours,
-      });
+  const createLaborLineMutation = useMutation({
+    mutationFn: async ({ taskEntryId, data }: { taskEntryId: number; data: any }) => {
+      return apiRequest("POST", `/api/daily-report-task-entries/${taskEntryId}/labor-lines`, data);
     },
-    onSuccess: () => {
-      refetchReportTasks();
-      queryClient.invalidateQueries({ queryKey: ['laborEntries'] });
-    },
+    onSuccess: () => refetchReport(),
   });
 
-  const deleteLaborEntryMutation = useMutation({
+  const updateLaborLineMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: number; data: any }) => {
+      return apiRequest("PUT", `/api/daily-report-labor-lines/${id}`, data);
+    },
+    onSuccess: () => refetchReport(),
+  });
+
+  const deleteLaborLineMutation = useMutation({
     mutationFn: async (id: number) => {
-      return apiRequest('DELETE', `/api/labor/${id}`);
+      return apiRequest("DELETE", `/api/daily-report-labor-lines/${id}`);
     },
-    onSuccess: () => {
-      refetchReportTasks();
-      queryClient.invalidateQueries({ queryKey: ['laborEntries'] });
-    },
+    onSuccess: () => refetchReport(),
   });
 
-  const createEquipmentEntryMutation = useMutation({
-    mutationFn: async (data: { reportTaskId: number; equipmentType: string; quantity: number; hours: number }) => {
-      return apiRequest('POST', `/api/report-tasks/${data.reportTaskId}/equipment-entries`, {
-        equipmentType: data.equipmentType,
-        quantity: data.quantity,
-        hours: data.hours,
-      });
+  const createEquipmentLineMutation = useMutation({
+    mutationFn: async ({ taskEntryId, data }: { taskEntryId: number; data: any }) => {
+      return apiRequest("POST", `/api/daily-report-task-entries/${taskEntryId}/equipment-lines`, data);
     },
-    onSuccess: () => {
-      refetchReportTasks();
-      queryClient.invalidateQueries({ queryKey: ['equipmentEntries'] });
-    },
+    onSuccess: () => refetchReport(),
   });
 
-  const deleteEquipmentEntryMutation = useMutation({
+  const updateEquipmentLineMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: number; data: any }) => {
+      return apiRequest("PUT", `/api/daily-report-equipment-lines/${id}`, data);
+    },
+    onSuccess: () => refetchReport(),
+  });
+
+  const deleteEquipmentLineMutation = useMutation({
     mutationFn: async (id: number) => {
-      return apiRequest('DELETE', `/api/equipment-entries/${id}`);
+      return apiRequest("DELETE", `/api/daily-report-equipment-lines/${id}`);
     },
-    onSuccess: () => {
-      refetchReportTasks();
-      queryClient.invalidateQueries({ queryKey: ['equipmentEntries'] });
-    },
+    onSuccess: () => refetchReport(),
   });
 
   const createDeliveryMutation = useMutation({
-    mutationFn: async (data: Partial<Delivery>) => {
-      return apiRequest('POST', `/api/reports/${reportId}/deliveries`, data);
+    mutationFn: async () => {
+      return apiRequest("POST", `/api/reports/${reportId}/delivery-entries`, { vendor: "", allDelivered: true });
     },
-    onSuccess: () => {
-      refetchDeliveries();
-      toast({ title: "Delivery added" });
-    },
+    onSuccess: () => refetchReport(),
   });
 
   const updateDeliveryMutation = useMutation({
-    mutationFn: async ({ id, data }: { id: number; data: Partial<Delivery> }) => {
-      return apiRequest('PUT', `/api/deliveries/${id}`, data);
+    mutationFn: async ({ id, data }: { id: number; data: any }) => {
+      return apiRequest("PUT", `/api/daily-report-delivery-entries/${id}`, data);
     },
-    onSuccess: () => {
-      refetchDeliveries();
-    },
+    onSuccess: () => refetchReport(),
   });
 
   const deleteDeliveryMutation = useMutation({
     mutationFn: async (id: number) => {
-      return apiRequest('DELETE', `/api/deliveries/${id}`);
+      return apiRequest("DELETE", `/api/daily-report-delivery-entries/${id}`);
     },
     onSuccess: () => {
-      refetchDeliveries();
+      refetchReport();
       setDeleteDeliveryId(null);
-      toast({ title: "Delivery removed" });
     },
   });
 
-  async function updateProjectTaskPercent(taskId: number, percentComplete: number) {
-    try {
-      let status = 'in_progress';
-      if (percentComplete === 0) status = 'pending';
-      else if (percentComplete === 100) status = 'completed';
-
-      await apiRequest('PUT', `/api/tasks/${taskId}`, { percentComplete, status });
-      queryClient.invalidateQueries({ queryKey: ['/api/projects', projectId, 'tasks'] });
-    } catch (error) {
-      console.error("Failed to update task:", error);
+  const handleSaveAndClose = () => {
+    if (notes !== report?.notes) {
+      updateReportMutation.mutate({ notes });
     }
-  }
+    setLocation(`/projects/${projectId}`);
+  };
 
-  function handleSaveAndClose() {
-    toast({ title: "Report saved" });
-    setLocation(`/projects/${projectId}?tab=daily-reports`);
-  }
+  const handleCompleteAndSign = () => {
+    setShowSignatureDialog(true);
+  };
 
-  function handleBack() {
-    setLocation(`/projects/${projectId}?tab=daily-reports`);
-  }
+  const handleSignReport = () => {
+    if (!signerName.trim()) {
+      toast({ title: "Please enter your name", variant: "destructive" });
+      return;
+    }
 
-  function toggleTaskExpanded(taskId: number) {
-    const newExpanded = new Set(expandedTasks);
-    if (newExpanded.has(taskId)) {
-      newExpanded.delete(taskId);
+    let signatureValue = '';
+    if (signatureType === 'freehand') {
+      const canvas = canvasRef.current;
+      if (canvas) {
+        signatureValue = canvas.toDataURL('image/png');
+      }
     } else {
-      newExpanded.add(taskId);
+      signatureValue = typedSignature;
     }
-    setExpandedTasks(newExpanded);
-  }
 
-  function initCanvas() {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    ctx.fillStyle = 'white';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.strokeStyle = 'black';
-    ctx.lineWidth = 2;
-    ctx.lineCap = 'round';
-  }
+    if (!signatureValue) {
+      toast({ title: "Please provide a signature", variant: "destructive" });
+      return;
+    }
 
-  function startDrawing(e: React.MouseEvent | React.TouchEvent) {
+    completeReportMutation.mutate({
+      signatureType,
+      signatureValue,
+      completedByName: signerName,
+    });
+  };
+
+  // Canvas drawing handlers
+  const startDrawing = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
+    if (isCompleted) return;
     setIsDrawing(true);
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -361,198 +362,114 @@ export default function DailyReportPage() {
     if (!ctx) return;
     
     const rect = canvas.getBoundingClientRect();
-    const scaleX = canvas.width / rect.width;
-    const scaleY = canvas.height / rect.height;
-    
-    let x, y;
-    if ('touches' in e) {
-      x = (e.touches[0].clientX - rect.left) * scaleX;
-      y = (e.touches[0].clientY - rect.top) * scaleY;
-    } else {
-      x = (e.clientX - rect.left) * scaleX;
-      y = (e.clientY - rect.top) * scaleY;
-    }
+    const x = 'touches' in e ? e.touches[0].clientX - rect.left : e.clientX - rect.left;
+    const y = 'touches' in e ? e.touches[0].clientY - rect.top : e.clientY - rect.top;
     
     ctx.beginPath();
     ctx.moveTo(x, y);
-  }
+  };
 
-  function draw(e: React.MouseEvent | React.TouchEvent) {
-    if (!isDrawing) return;
+  const draw = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
+    if (!isDrawing || isCompleted) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
     
     const rect = canvas.getBoundingClientRect();
-    const scaleX = canvas.width / rect.width;
-    const scaleY = canvas.height / rect.height;
-    
-    let x, y;
-    if ('touches' in e) {
-      e.preventDefault();
-      x = (e.touches[0].clientX - rect.left) * scaleX;
-      y = (e.touches[0].clientY - rect.top) * scaleY;
-    } else {
-      x = (e.clientX - rect.left) * scaleX;
-      y = (e.clientY - rect.top) * scaleY;
-    }
+    const x = 'touches' in e ? e.touches[0].clientX - rect.left : e.clientX - rect.left;
+    const y = 'touches' in e ? e.touches[0].clientY - rect.top : e.clientY - rect.top;
     
     ctx.lineTo(x, y);
+    ctx.strokeStyle = '#000';
+    ctx.lineWidth = 2;
+    ctx.lineCap = 'round';
     ctx.stroke();
-  }
+  };
 
-  function stopDrawing() {
+  const stopDrawing = () => {
     setIsDrawing(false);
-  }
+  };
 
-  function clearCanvas() {
-    initCanvas();
-  }
+  const clearCanvas = () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+  };
 
-  async function handleSignAndSave() {
-    if (!signerName.trim()) {
-      toast({ title: "Please enter your name", variant: "destructive" });
-      return;
-    }
-
-    let signatureData = '';
-    if (signatureType === 'freehand') {
-      const canvas = canvasRef.current;
-      if (canvas) {
-        signatureData = canvas.toDataURL('image/png');
-      }
+  const toggleTaskExpanded = (taskEntryId: number) => {
+    const newExpanded = new Set(expandedTasks);
+    if (newExpanded.has(taskEntryId)) {
+      newExpanded.delete(taskEntryId);
     } else {
-      signatureData = typedSignature;
+      newExpanded.add(taskEntryId);
     }
+    setExpandedTasks(newExpanded);
+  };
 
-    if (!signatureData.trim()) {
-      toast({ title: "Please provide a signature", variant: "destructive" });
-      return;
-    }
+  const handleAddTask = () => {
+    if (!selectedTaskId) return;
+    const task = projectTasks.find(t => t.id === selectedTaskId);
+    if (!task) return;
+    createTaskEntryMutation.mutate({
+      taskId: task.id,
+      taskTitleSnapshot: task.title,
+    });
+  };
 
-    await updateReportMutation.mutateAsync({
-      isSigned: true,
-      signatureType,
-      signatureData,
-      signedByName: signerName,
-      signedAt: new Date(),
-    } as Partial<DailyReport>);
-
-    setShowSignatureDialog(false);
-    toast({ title: "Report signed and saved" });
-  }
-
-  useEffect(() => {
-    if (showSignatureDialog && signatureType === 'freehand') {
-      setTimeout(initCanvas, 100);
-    }
-  }, [showSignatureDialog, signatureType]);
+  // Get uncompleted tasks that haven't been added yet
+  const availableTasks = projectTasks.filter(t => 
+    t.status !== 'completed' && 
+    !report?.taskEntries?.some(te => te.taskId === t.id)
+  );
 
   if (!projectId) {
-    return <div className="p-8 text-black">Invalid project ID</div>;
+    return <div className="p-8 text-foreground">Invalid project</div>;
   }
 
-  if (reportLoading && !isNewReport) {
+  if (isNewReport) {
     return (
-      <div className="min-h-screen bg-white flex items-center justify-center">
-        <div className="text-black">Loading report...</div>
-      </div>
-    );
-  }
-
-  const isSigned = !!report?.isSigned;
-
-  return (
-    <div className="min-h-screen bg-white">
-      <header className="sticky top-0 z-50 bg-white border-b border-gray-200 shadow-sm">
-        <div className="flex items-center justify-between p-4">
-          <div className="flex items-center gap-3">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={handleBack}
-              className="text-black hover:bg-gray-100"
-              data-testid="button-back"
-            >
-              <ArrowLeft className="w-5 h-5" />
-            </Button>
-            <div>
-              <h1 className="text-lg font-semibold text-black">
-                {isNewReport ? 'New Daily Report' : 'Daily Report'}
-              </h1>
-              <p className="text-sm text-gray-600">{project?.name || 'Loading...'}</p>
+      <div className="min-h-screen bg-background">
+        <div className="sticky top-0 z-10 bg-card border-b">
+          <div className="flex items-center justify-between p-4">
+            <div className="flex items-center gap-3">
+              <Button variant="ghost" size="icon" onClick={() => setLocation(`/projects/${projectId}`)}>
+                <ArrowLeft className="h-5 w-5" />
+              </Button>
+              <div>
+                <h1 className="text-lg font-semibold text-foreground">New Daily Report</h1>
+                <p className="text-sm text-muted-foreground">{project?.name}</p>
+              </div>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            {!isNewReport && !isSigned && (
-              <>
-                <Button
-                  onClick={() => setShowSignatureDialog(true)}
-                  variant="outline"
-                  className="text-black border-gray-300"
-                  data-testid="button-complete-sign"
-                >
-                  <CheckCircle className="w-4 h-4 mr-2" />
-                  <span className="hidden sm:inline">Complete & Sign</span>
-                  <span className="sm:hidden">Sign</span>
-                </Button>
-                <Button
-                  onClick={handleSaveAndClose}
-                  className="bg-primary text-primary-foreground"
-                  data-testid="button-save"
-                >
-                  <Save className="w-4 h-4 mr-2" />
-                  <span className="hidden sm:inline">Save & Close</span>
-                  <span className="sm:hidden">Save</span>
-                </Button>
-              </>
-            )}
-            {isSigned && (
-              <div className="flex items-center gap-2 text-green-600">
-                <CheckCircle className="w-5 h-5" />
-                <span className="text-sm font-medium">Signed</span>
-              </div>
-            )}
-          </div>
         </div>
-      </header>
-
-      <main className="p-4 max-w-4xl mx-auto space-y-6">
-        {isNewReport ? (
-          <Card className="bg-white border-gray-200">
+        <div className="max-w-2xl mx-auto p-6">
+          <Card>
             <CardHeader>
-              <CardTitle className="text-black">Create New Report</CardTitle>
+              <CardTitle>Create New Report</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div>
-                <Label htmlFor="report-date" className="text-black">
-                  <span className="text-red-500">*</span> Report Date
+              <div className="space-y-2">
+                <Label htmlFor="report-date">
+                  <span className="text-destructive">*</span> Report Date
                 </Label>
                 <Input
                   id="report-date"
                   type="date"
                   value={newReportDate}
                   onChange={(e) => setNewReportDate(e.target.value)}
-                  className="bg-white text-black border-gray-300 mt-1"
-                  data-testid="input-report-date"
+                  data-testid="input-new-report-date"
                 />
               </div>
-              <p className="text-sm text-gray-600">
-                Weather information will be automatically fetched for the project location.
-              </p>
-              <div className="flex flex-col sm:flex-row gap-2">
-                <Button
-                  variant="outline"
-                  onClick={handleBack}
-                  className="text-black border-gray-300 w-full sm:w-auto"
-                >
+              <div className="flex gap-2 justify-end">
+                <Button variant="outline" onClick={() => setLocation(`/projects/${projectId}`)}>
                   Cancel
                 </Button>
                 <Button
-                  onClick={() => createReportMutation.mutate({ reportDate: newReportDate })}
+                  onClick={() => createReportMutation.mutate(newReportDate)}
                   disabled={createReportMutation.isPending}
-                  className="w-full sm:w-auto"
                   data-testid="button-submit-create-report"
                 >
                   {createReportMutation.isPending ? "Creating..." : "Create Report"}
@@ -560,630 +477,593 @@ export default function DailyReportPage() {
               </div>
             </CardContent>
           </Card>
-        ) : report && (
-          <>
-            <Card className="bg-white border-gray-200">
-              <CardHeader className="pb-2">
-                <CardTitle className="flex items-center gap-2 text-black">
-                  <Calendar className="w-5 h-5 flex-shrink-0" />
-                  {safeFormatDate(report.reportDate, 'EEEE, MMMM d, yyyy')}
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {report.weather && (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2 mb-4 p-3 bg-blue-50 rounded-lg text-sm">
-                    <div className="col-span-2 sm:col-span-3 md:col-span-6 flex items-center gap-2 mb-1">
-                      <Cloud className="w-5 h-5 text-blue-500 flex-shrink-0" />
-                      <span className="font-medium text-blue-900">{report.weather}</span>
-                    </div>
-                    {report.temperature && (
-                      <div className="text-blue-800">
-                        <span className="text-xs text-blue-600 block">Current</span>
-                        {report.temperature}
-                      </div>
-                    )}
-                    {report.temperatureHigh && (
-                      <div className="text-blue-800">
-                        <span className="text-xs text-blue-600 block">High</span>
-                        {report.temperatureHigh}
-                      </div>
-                    )}
-                    {report.temperatureLow && (
-                      <div className="text-blue-800">
-                        <span className="text-xs text-blue-600 block">Low</span>
-                        {report.temperatureLow}
-                      </div>
-                    )}
-                    {report.humidity && (
-                      <div className="text-blue-800">
-                        <span className="text-xs text-blue-600 block">Humidity</span>
-                        {report.humidity}
-                      </div>
-                    )}
-                    {report.windSpeed && (
-                      <div className="text-blue-800">
-                        <span className="text-xs text-blue-600 block">Wind</span>
-                        {report.windSpeed}
-                      </div>
-                    )}
-                  </div>
-                )}
-                
-                <div className="grid gap-2">
-                  <Label htmlFor="notes" className="text-black">Notes</Label>
-                  <Textarea
-                    id="notes"
-                    placeholder="General notes for this day..."
-                    value={report.notes || ''}
-                    onChange={(e) => updateReportMutation.mutate({ notes: e.target.value })}
-                    disabled={isSigned}
-                    className="bg-white text-black border-gray-300 min-h-[80px]"
-                    data-testid="textarea-report-notes"
-                  />
-                </div>
+        </div>
+      </div>
+    );
+  }
 
-                {isSigned && report.signedByName && (
-                  <div className="mt-4 p-4 bg-green-50 rounded-lg border border-green-200">
-                    <div className="flex items-center gap-2 text-green-700 mb-2">
-                      <CheckCircle className="w-5 h-5" />
-                      <span className="font-medium">Report Signed</span>
+  if (reportLoading || !report) {
+    return <div className="p-8 text-foreground">Loading report...</div>;
+  }
+
+  return (
+    <div className="min-h-screen bg-background">
+      {/* Header */}
+      <div className="sticky top-0 z-10 bg-card border-b">
+        <div className="flex items-center justify-between p-4">
+          <div className="flex items-center gap-3">
+            <Button variant="ghost" size="icon" onClick={() => setLocation(`/projects/${projectId}`)}>
+              <ArrowLeft className="h-5 w-5" />
+            </Button>
+            <div>
+              <div className="flex items-center gap-2">
+                <h1 className="text-lg font-semibold text-foreground">
+                  Daily Report - {safeFormatDate(report.reportDate, 'MMM d, yyyy')}
+                </h1>
+                {isCompleted && (
+                  <Badge variant="default" className="bg-green-600">
+                    <CheckCircle className="h-3 w-3 mr-1" /> Completed
+                  </Badge>
+                )}
+              </div>
+              <p className="text-sm text-muted-foreground">{project?.name}</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => window.open(`/api/reports/${reportId}/pdf`, "_blank")}
+              data-testid="button-download-pdf"
+            >
+              <Download className="h-4 w-4 mr-2" /> Download PDF
+            </Button>
+            {!isCompleted && (
+              <>
+                <Button
+                  variant="outline"
+                  onClick={handleSaveAndClose}
+                  data-testid="button-save"
+                >
+                  <Save className="h-4 w-4 mr-2" /> Save & Close
+                </Button>
+                <Button
+                  onClick={handleCompleteAndSign}
+                  data-testid="button-complete-sign"
+                >
+                  <PenLine className="h-4 w-4 mr-2" /> Complete & Sign
+                </Button>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div className="max-w-4xl mx-auto p-6 space-y-6">
+        {/* Weather Section */}
+        {report.weatherSummary && (
+          <Card className="bg-blue-50 dark:bg-blue-950 border-blue-200 dark:border-blue-800">
+            <CardContent className="py-4">
+              <div className="flex items-center gap-4">
+                <Cloud className="h-8 w-8 text-blue-500" />
+                <div>
+                  <p className="font-medium text-blue-800 dark:text-blue-200">{report.weatherSummary}</p>
+                  <div className="flex items-center gap-4 text-sm text-blue-600 dark:text-blue-300">
+                    {report.temperature && <span>Temp: {report.temperature}</span>}
+                    {report.temperatureHigh && <span>High: {report.temperatureHigh}</span>}
+                    {report.temperatureLow && <span>Low: {report.temperatureLow}</span>}
+                    {report.windSpeed && <span>Wind: {report.windSpeed}</span>}
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Completed Signature Block */}
+        {isCompleted && report.signatureValue && (
+          <Card className="bg-green-50 dark:bg-green-950 border-green-200 dark:border-green-800">
+            <CardContent className="py-4">
+              <div className="flex items-start gap-4">
+                <CheckCircle className="h-6 w-6 text-green-600 flex-shrink-0 mt-1" />
+                <div className="flex-1">
+                  <p className="font-medium text-green-800 dark:text-green-200">Report Completed & Signed</p>
+                  <p className="text-sm text-green-600 dark:text-green-300">
+                    Signed by {report.completedByName} on {report.completedAt ? format(new Date(report.completedAt), "MMM d, yyyy 'at' h:mm a") : 'N/A'}
+                  </p>
+                  {report.signatureType === 'freehand' && (
+                    <img src={report.signatureValue} alt="Signature" className="mt-2 max-h-20 bg-white rounded border p-2" />
+                  )}
+                  {report.signatureType === 'typed' && (
+                    <p className="mt-2 font-signature text-2xl text-green-800 dark:text-green-200 italic">
+                      {report.signatureValue}
+                    </p>
+                  )}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Daily Operations Section */}
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle className="text-foreground">Daily Operations</CardTitle>
+            {!isCompleted && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowAddTaskDialog(true)}
+                disabled={availableTasks.length === 0}
+                data-testid="button-add-task"
+              >
+                <Plus className="h-4 w-4 mr-2" /> Add Task
+              </Button>
+            )}
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {(!report.taskEntries || report.taskEntries.length === 0) ? (
+              <p className="text-muted-foreground text-center py-8">No tasks added yet. Click "Add Task" to get started.</p>
+            ) : (
+              report.taskEntries.map((taskEntry) => (
+                <Card key={taskEntry.id} className="border">
+                  <CardHeader 
+                    className="cursor-pointer py-3"
+                    onClick={() => toggleTaskExpanded(taskEntry.id)}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        {expandedTasks.has(taskEntry.id) ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                        <span className="font-medium text-foreground">{taskEntry.taskTitleSnapshot}</span>
+                        <Badge variant="secondary">{taskEntry.percentComplete}%</Badge>
+                      </div>
+                      {!isCompleted && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDeleteTaskEntryId(taskEntry.id);
+                          }}
+                          data-testid={`button-delete-task-entry-${taskEntry.id}`}
+                        >
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      )}
                     </div>
-                    {report.signatureType === 'freehand' && report.signatureData && (
-                      <div className="mb-2">
-                        <img 
-                          src={report.signatureData} 
-                          alt="Signature" 
-                          className="max-h-16 border border-gray-200 rounded bg-white"
+                  </CardHeader>
+                  
+                  {expandedTasks.has(taskEntry.id) && (
+                    <CardContent className="pt-0 space-y-4">
+                      {/* Progress Slider */}
+                      <div className="space-y-2">
+                        <Label>Progress: {taskEntry.percentComplete}%</Label>
+                        <Slider
+                          value={[taskEntry.percentComplete]}
+                          min={0}
+                          max={100}
+                          step={5}
+                          disabled={isCompleted}
+                          onValueChange={(value) => {
+                            updateTaskEntryMutation.mutate({
+                              id: taskEntry.id,
+                              data: { percentComplete: value[0] },
+                            });
+                          }}
                         />
                       </div>
-                    )}
-                    {report.signatureType === 'typed' && report.signatureData && (
-                      <div className="mb-2 font-serif italic text-2xl text-black">
-                        {report.signatureData}
-                      </div>
-                    )}
-                    <p className="text-sm text-green-800">
-                      Signed by: {report.signedByName}
-                      {report.signedAt && ` on ${format(new Date(report.signedAt), 'MMM d, yyyy h:mm a')}`}
-                    </p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
 
-            <Card className="bg-white border-gray-200">
-              <CardHeader>
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                  <CardTitle className="text-black">Daily Operations</CardTitle>
-                  {!isSigned && (
-                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-                      <Select
-                        onValueChange={(taskId) => {
-                          if (taskId && taskId !== "none") {
-                            const task = projectTasks.find(t => t.id === Number(taskId));
-                            createReportTaskMutation.mutate({
-                              taskId: Number(taskId),
-                              percentComplete: task?.percentComplete || 0,
+                      {/* Comments */}
+                      <div className="space-y-2">
+                        <Label>Comments</Label>
+                        <Textarea
+                          value={taskEntry.comments || ''}
+                          disabled={isCompleted}
+                          onChange={(e) => {
+                            updateTaskEntryMutation.mutate({
+                              id: taskEntry.id,
+                              data: { comments: e.target.value },
                             });
-                          }
-                        }}
-                      >
-                        <SelectTrigger className="w-full sm:w-48 bg-white text-black border-gray-300" data-testid="select-add-task">
-                          <SelectValue placeholder="Add task..." />
-                        </SelectTrigger>
-                        <SelectContent className="bg-white text-black border-gray-300">
-                          {availableTasksToAdd.length === 0 ? (
-                            <SelectItem value="none" disabled>No available tasks</SelectItem>
-                          ) : (
-                            availableTasksToAdd.map(task => (
-                              <SelectItem key={task.id} value={task.id.toString()}>
-                                {task.title}
-                              </SelectItem>
-                            ))
-                          )}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  )}
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {reportTasks.length === 0 ? (
-                  <p className="text-sm text-gray-500 text-center py-4">
-                    No tasks added yet. Select a task from the dropdown to add it to this report.
-                  </p>
-                ) : (
-                  reportTasks.map(reportTask => {
-                    const task = projectTasks.find(t => t.id === reportTask.taskId);
-                    const isExpanded = expandedTasks.has(reportTask.id);
-                    const laborEntries = laborEntriesMap[reportTask.id] || [];
-                    const equipmentEntries = equipmentEntriesMap[reportTask.id] || [];
+                          }}
+                          placeholder="Add comments about this task..."
+                        />
+                      </div>
 
-                    return (
-                      <Card key={reportTask.id} className="border border-gray-200" data-testid={`card-report-task-${reportTask.id}`}>
-                        <CardContent className="pt-4 space-y-3">
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2">
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  onClick={() => toggleTaskExpanded(reportTask.id)}
-                                  className="flex-shrink-0 text-black"
-                                  data-testid={`button-toggle-task-${reportTask.id}`}
-                                >
-                                  {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                                </Button>
-                                <h4 className="font-medium text-black truncate">{task?.title || 'Unknown Task'}</h4>
-                              </div>
-                            </div>
-                            {!isSigned && (
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => setDeleteTaskId(reportTask.id)}
-                                className="flex-shrink-0"
-                                data-testid={`button-delete-report-task-${reportTask.id}`}
-                              >
-                                <Trash2 className="w-4 h-4 text-destructive" />
-                              </Button>
-                            )}
-                          </div>
-
-                          <div>
-                            <Label className="text-sm text-black">Percent Complete: {reportTask.percentComplete}%</Label>
-                            <Slider
-                              value={[reportTask.percentComplete]}
-                              min={0}
-                              max={100}
-                              step={5}
-                              onValueChange={(value) => !isSigned && updateReportTaskMutation.mutate({ id: reportTask.id, data: { percentComplete: value[0] } })}
-                              disabled={isSigned}
-                              className="mt-2"
-                              data-testid={`slider-task-percent-${reportTask.id}`}
-                            />
-                          </div>
-
-                          {isExpanded && (
-                            <div className="space-y-4 mt-4 pt-4 border-t border-gray-200">
-                              <div>
-                                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-2">
-                                  <Label className="text-sm font-medium text-black">Labor</Label>
-                                  {!isSigned && (
-                                    <Select onValueChange={(type) => createLaborEntryMutation.mutate({
-                                      reportTaskId: reportTask.id,
-                                      laborType: type,
-                                      quantity: 1,
-                                      hours: 0,
-                                    })}>
-                                      <SelectTrigger className="w-full sm:w-40 bg-white text-black border-gray-300" data-testid={`select-add-labor-${reportTask.id}`}>
-                                        <SelectValue placeholder="Add labor..." />
-                                      </SelectTrigger>
-                                      <SelectContent className="bg-white text-black border-gray-300">
-                                        {LABOR_TYPES.map(type => (
-                                          <SelectItem key={type} value={type}>{type}</SelectItem>
-                                        ))}
-                                      </SelectContent>
-                                    </Select>
-                                  )}
-                                </div>
-                                {laborEntries.map(entry => (
-                                  <div key={entry.id} className="flex flex-wrap items-center gap-2 mb-2 p-2 bg-gray-50 rounded">
-                                    <span className="w-full sm:w-24 text-sm text-black font-medium">{entry.laborType}</span>
-                                    <div className="flex items-center gap-2 flex-1 min-w-0">
-                                      <Input
-                                        type="number"
-                                        value={entry.quantity}
-                                        disabled={isSigned}
-                                        className="w-16 bg-white text-black border-gray-300"
-                                        placeholder="Qty"
-                                      />
-                                      <span className="text-sm text-gray-600">x</span>
-                                      <Input
-                                        type="number"
-                                        value={entry.hours}
-                                        disabled={isSigned}
-                                        className="w-16 bg-white text-black border-gray-300"
-                                        placeholder="Hrs"
-                                      />
-                                      <span className="text-sm text-gray-600">hrs</span>
-                                    </div>
-                                    {!isSigned && (
-                                      <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        onClick={() => deleteLaborEntryMutation.mutate(entry.id)}
-                                        className="flex-shrink-0"
-                                      >
-                                        <X className="w-4 h-4" />
-                                      </Button>
-                                    )}
-                                  </div>
-                                ))}
-                              </div>
-
-                              <div>
-                                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-2">
-                                  <Label className="text-sm font-medium text-black">Equipment</Label>
-                                  {!isSigned && (
-                                    <Select onValueChange={(type) => createEquipmentEntryMutation.mutate({
-                                      reportTaskId: reportTask.id,
-                                      equipmentType: type,
-                                      quantity: 1,
-                                      hours: 0,
-                                    })}>
-                                      <SelectTrigger className="w-full sm:w-40 bg-white text-black border-gray-300" data-testid={`select-add-equipment-${reportTask.id}`}>
-                                        <SelectValue placeholder="Add equipment..." />
-                                      </SelectTrigger>
-                                      <SelectContent className="bg-white text-black border-gray-300">
-                                        {EQUIPMENT_TYPES.map(type => (
-                                          <SelectItem key={type} value={type}>{type}</SelectItem>
-                                        ))}
-                                      </SelectContent>
-                                    </Select>
-                                  )}
-                                </div>
-                                {equipmentEntries.map(entry => (
-                                  <div key={entry.id} className="flex flex-wrap items-center gap-2 mb-2 p-2 bg-gray-50 rounded">
-                                    <span className="w-full sm:w-24 text-sm text-black font-medium">{entry.equipmentType}</span>
-                                    <div className="flex items-center gap-2 flex-1 min-w-0">
-                                      <Input
-                                        type="number"
-                                        value={entry.quantity}
-                                        disabled={isSigned}
-                                        className="w-16 bg-white text-black border-gray-300"
-                                        placeholder="Qty"
-                                      />
-                                      <span className="text-sm text-gray-600">x</span>
-                                      <Input
-                                        type="number"
-                                        value={entry.hours}
-                                        disabled={isSigned}
-                                        className="w-16 bg-white text-black border-gray-300"
-                                        placeholder="Hrs"
-                                      />
-                                      <span className="text-sm text-gray-600">hrs</span>
-                                    </div>
-                                    {!isSigned && (
-                                      <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        onClick={() => deleteEquipmentEntryMutation.mutate(entry.id)}
-                                        className="flex-shrink-0"
-                                      >
-                                        <X className="w-4 h-4" />
-                                      </Button>
-                                    )}
-                                  </div>
-                                ))}
-                              </div>
-
-                              <div>
-                                <Label className="text-sm font-medium text-black">Comments</Label>
-                                <Textarea
-                                  value={reportTask.comments || ''}
-                                  onChange={(e) => updateReportTaskMutation.mutate({ id: reportTask.id, data: { comments: e.target.value } })}
-                                  disabled={isSigned}
-                                  placeholder="Add comments about this task..."
-                                  className="mt-1 bg-white text-black border-gray-300 min-h-[60px]"
-                                  data-testid={`textarea-task-comments-${reportTask.id}`}
-                                />
-                              </div>
-                            </div>
-                          )}
-                        </CardContent>
-                      </Card>
-                    );
-                  })
-                )}
-              </CardContent>
-            </Card>
-
-            <Card className="bg-white border-gray-200">
-              <CardHeader>
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                  <CardTitle className="flex items-center gap-2 text-black">
-                    <Truck className="w-5 h-5 flex-shrink-0" />
-                    Deliveries
-                  </CardTitle>
-                  {!isSigned && (
-                    <Button
-                      onClick={() => createDeliveryMutation.mutate({
-                        vendor: '',
-                        deliveryTime: '',
-                        description: '',
-                        allItemsDelivered: true,
-                      })}
-                      className="w-full sm:w-auto"
-                      data-testid="button-add-delivery"
-                    >
-                      <Plus className="w-4 h-4 mr-1" /> Add Delivery
-                    </Button>
-                  )}
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {deliveries.length === 0 ? (
-                  <p className="text-sm text-gray-500 text-center py-4">
-                    No deliveries recorded. Click "Add Delivery" to add one.
-                  </p>
-                ) : (
-                  deliveries.map(delivery => (
-                    <Card key={delivery.id} className="border border-gray-200" data-testid={`card-delivery-${delivery.id}`}>
-                      <CardContent className="pt-4 space-y-3">
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-3">
-                            <div>
-                              <Label className="text-sm text-black"><span className="text-red-500">*</span> Vendor</Label>
-                              <Input
-                                value={delivery.vendor || ''}
-                                onChange={(e) => updateDeliveryMutation.mutate({ id: delivery.id, data: { vendor: e.target.value } })}
-                                disabled={isSigned}
-                                placeholder="Vendor name"
-                                className="mt-1 bg-white text-black border-gray-300"
-                                data-testid={`input-delivery-vendor-${delivery.id}`}
-                              />
-                            </div>
-                            <div>
-                              <Label className="text-sm text-black">Delivery Time</Label>
-                              <Input
-                                type="time"
-                                value={delivery.deliveryTime || ''}
-                                onChange={(e) => updateDeliveryMutation.mutate({ id: delivery.id, data: { deliveryTime: e.target.value } })}
-                                disabled={isSigned}
-                                className="mt-1 bg-white text-black border-gray-300"
-                                data-testid={`input-delivery-time-${delivery.id}`}
-                              />
-                            </div>
-                          </div>
-                          {!isSigned && (
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => setDeleteDeliveryId(delivery.id)}
-                              className="flex-shrink-0"
-                              data-testid={`button-delete-delivery-${delivery.id}`}
-                            >
-                              <Trash2 className="w-4 h-4 text-destructive" />
-                            </Button>
-                          )}
-                        </div>
-
-                        <div>
-                          <Label className="text-sm text-black">Description</Label>
-                          <Textarea
-                            value={delivery.description || ''}
-                            onChange={(e) => updateDeliveryMutation.mutate({ id: delivery.id, data: { description: e.target.value } })}
-                            disabled={isSigned}
-                            placeholder="What was delivered..."
-                            className="mt-1 bg-white text-black border-gray-300 min-h-[60px]"
-                            data-testid={`textarea-delivery-description-${delivery.id}`}
-                          />
-                        </div>
-
-                        <div className="space-y-2">
-                          <Label className="text-sm text-black">All items on delivery slip delivered?</Label>
-                          <div className="flex gap-4">
-                            <label className="flex items-center gap-2 cursor-pointer">
-                              <input
-                                type="radio"
-                                name={`delivered-${delivery.id}`}
-                                checked={delivery.allItemsDelivered === true}
-                                onChange={() => !isSigned && updateDeliveryMutation.mutate({ id: delivery.id, data: { allItemsDelivered: true, missingItemsDetails: null } })}
-                                disabled={isSigned}
-                                className="accent-primary"
-                                data-testid={`radio-delivered-yes-${delivery.id}`}
-                              />
-                              <span className="text-sm text-black">Yes</span>
-                            </label>
-                            <label className="flex items-center gap-2 cursor-pointer">
-                              <input
-                                type="radio"
-                                name={`delivered-${delivery.id}`}
-                                checked={delivery.allItemsDelivered === false}
-                                onChange={() => !isSigned && updateDeliveryMutation.mutate({ id: delivery.id, data: { allItemsDelivered: false } })}
-                                disabled={isSigned}
-                                className="accent-primary"
-                                data-testid={`radio-delivered-no-${delivery.id}`}
-                              />
-                              <span className="text-sm text-black">No</span>
-                            </label>
-                          </div>
-                        </div>
-
-                        {delivery.allItemsDelivered === false && (
-                          <div>
-                            <Label className="text-sm text-black">Missing Items Details</Label>
-                            <Textarea
-                              value={delivery.missingItemsDetails || ''}
-                              onChange={(e) => updateDeliveryMutation.mutate({ id: delivery.id, data: { missingItemsDetails: e.target.value } })}
-                              disabled={isSigned}
-                              placeholder="Describe missing items..."
-                              className="mt-1 bg-white text-black border-gray-300 min-h-[60px]"
-                              data-testid={`textarea-missing-items-${delivery.id}`}
-                            />
-                          </div>
-                        )}
-
-                        {!isSigned && (
-                          <div className="pt-2">
+                      {/* Labor Lines */}
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <Label>Labor</Label>
+                          {!isCompleted && (
                             <Button
                               variant="outline"
                               size="sm"
-                              className="w-full sm:w-auto text-black border-gray-300"
-                              data-testid={`button-upload-delivery-photos-${delivery.id}`}
+                              onClick={() => createLaborLineMutation.mutate({ taskEntryId: taskEntry.id, data: {} })}
                             >
-                              <Upload className="w-4 h-4 mr-2" />
-                              Upload Photos
+                              <Plus className="h-3 w-3 mr-1" /> Add Labor
                             </Button>
+                          )}
+                        </div>
+                        {taskEntry.laborLines.map((labor) => (
+                          <div key={labor.id} className="flex items-center gap-2 p-2 bg-muted rounded">
+                            <Select
+                              value={labor.laborType}
+                              disabled={isCompleted}
+                              onValueChange={(value) => updateLaborLineMutation.mutate({ id: labor.id, data: { laborType: value } })}
+                            >
+                              <SelectTrigger className="w-32">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {LABOR_TYPES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                              </SelectContent>
+                            </Select>
+                            <Input
+                              type="number"
+                              min={1}
+                              value={labor.quantity}
+                              disabled={isCompleted}
+                              onChange={(e) => updateLaborLineMutation.mutate({ id: labor.id, data: { quantity: Number(e.target.value) } })}
+                              className="w-20"
+                              placeholder="Qty"
+                            />
+                            <Input
+                              type="number"
+                              min={0}
+                              value={labor.hours}
+                              disabled={isCompleted}
+                              onChange={(e) => updateLaborLineMutation.mutate({ id: labor.id, data: { hours: Number(e.target.value) } })}
+                              className="w-20"
+                              placeholder="Hours"
+                            />
+                            {!isCompleted && (
+                              <Button variant="ghost" size="icon" onClick={() => deleteLaborLineMutation.mutate(labor.id)}>
+                                <Trash2 className="h-4 w-4 text-destructive" />
+                              </Button>
+                            )}
                           </div>
-                        )}
-                      </CardContent>
-                    </Card>
-                  ))
-                )}
-              </CardContent>
-            </Card>
-          </>
-        )}
-      </main>
+                        ))}
+                      </div>
 
-      <Dialog open={showSignatureDialog} onOpenChange={setShowSignatureDialog}>
-        <DialogContent className="bg-white mx-4 max-w-md sm:max-w-lg">
+                      {/* Equipment Lines */}
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <Label>Equipment</Label>
+                          {!isCompleted && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => createEquipmentLineMutation.mutate({ taskEntryId: taskEntry.id, data: {} })}
+                            >
+                              <Plus className="h-3 w-3 mr-1" /> Add Equipment
+                            </Button>
+                          )}
+                        </div>
+                        {taskEntry.equipmentLines.map((equip) => (
+                          <div key={equip.id} className="flex items-center gap-2 p-2 bg-muted rounded">
+                            <Select
+                              value={equip.equipmentType}
+                              disabled={isCompleted}
+                              onValueChange={(value) => updateEquipmentLineMutation.mutate({ id: equip.id, data: { equipmentType: value } })}
+                            >
+                              <SelectTrigger className="w-32">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {EQUIPMENT_TYPES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                              </SelectContent>
+                            </Select>
+                            <Input
+                              type="number"
+                              min={1}
+                              value={equip.quantity}
+                              disabled={isCompleted}
+                              onChange={(e) => updateEquipmentLineMutation.mutate({ id: equip.id, data: { quantity: Number(e.target.value) } })}
+                              className="w-20"
+                              placeholder="Qty"
+                            />
+                            <Input
+                              type="number"
+                              min={0}
+                              value={equip.hours}
+                              disabled={isCompleted}
+                              onChange={(e) => updateEquipmentLineMutation.mutate({ id: equip.id, data: { hours: Number(e.target.value) } })}
+                              className="w-20"
+                              placeholder="Hours"
+                            />
+                            {!isCompleted && (
+                              <Button variant="ghost" size="icon" onClick={() => deleteEquipmentLineMutation.mutate(equip.id)}>
+                                <Trash2 className="h-4 w-4 text-destructive" />
+                              </Button>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  )}
+                </Card>
+              ))
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Deliveries Section */}
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle className="flex items-center gap-2 text-foreground">
+              <Truck className="h-5 w-5" /> Deliveries
+            </CardTitle>
+            {!isCompleted && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => createDeliveryMutation.mutate()}
+                data-testid="button-add-delivery"
+              >
+                <Plus className="h-4 w-4 mr-2" /> Add Delivery
+              </Button>
+            )}
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {(!report.deliveryEntries || report.deliveryEntries.length === 0) ? (
+              <p className="text-muted-foreground text-center py-8">No deliveries recorded.</p>
+            ) : (
+              report.deliveryEntries.map((delivery) => (
+                <Card key={delivery.id} className="border">
+                  <CardContent className="pt-4 space-y-4">
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label>Vendor</Label>
+                          <Input
+                            value={delivery.vendor || ''}
+                            disabled={isCompleted}
+                            onChange={(e) => updateDeliveryMutation.mutate({ id: delivery.id, data: { vendor: e.target.value } })}
+                            placeholder="Vendor name"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Delivery Time</Label>
+                          <Input
+                            type="time"
+                            value={delivery.deliveryTime || ''}
+                            disabled={isCompleted}
+                            onChange={(e) => updateDeliveryMutation.mutate({ id: delivery.id, data: { deliveryTime: e.target.value } })}
+                          />
+                        </div>
+                      </div>
+                      {!isCompleted && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => setDeleteDeliveryId(delivery.id)}
+                          data-testid={`button-delete-delivery-${delivery.id}`}
+                        >
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      )}
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Description</Label>
+                      <Textarea
+                        value={delivery.description || ''}
+                        disabled={isCompleted}
+                        onChange={(e) => updateDeliveryMutation.mutate({ id: delivery.id, data: { description: e.target.value } })}
+                        placeholder="What was delivered?"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Was everything delivered?</Label>
+                      <Select
+                        value={delivery.allDelivered ? "yes" : "no"}
+                        disabled={isCompleted}
+                        onValueChange={(value) => updateDeliveryMutation.mutate({ id: delivery.id, data: { allDelivered: value === "yes" } })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="yes">Yes</SelectItem>
+                          <SelectItem value="no">No</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    {delivery.allDelivered === false && (
+                      <div className="space-y-2">
+                        <Label className="text-destructive">
+                          <span className="text-destructive">*</span> Missing Items Details
+                        </Label>
+                        <Textarea
+                          value={delivery.missingItemsDetails || ''}
+                          disabled={isCompleted}
+                          onChange={(e) => updateDeliveryMutation.mutate({ id: delivery.id, data: { missingItemsDetails: e.target.value } })}
+                          placeholder="Describe what was missing..."
+                        />
+                      </div>
+                    )}
+                    <p className="text-sm text-muted-foreground">
+                      Please upload photos of the delivery slip and delivered items.
+                    </p>
+                  </CardContent>
+                </Card>
+              ))
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Notes Section */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-foreground">Notes</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Textarea
+              value={notes}
+              disabled={isCompleted}
+              onChange={(e) => setNotes(e.target.value)}
+              onBlur={() => {
+                if (notes !== report.notes) {
+                  updateReportMutation.mutate({ notes });
+                }
+              }}
+              placeholder="Additional notes about today's work..."
+              rows={4}
+            />
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Add Task Dialog */}
+      <Dialog open={showAddTaskDialog} onOpenChange={setShowAddTaskDialog}>
+        <DialogContent>
           <DialogHeader>
-            <DialogTitle className="text-black">Complete & Sign Report</DialogTitle>
-            <DialogDescription className="text-gray-600">
-              Once signed, this report can no longer be edited.
+            <DialogTitle>Add Task to Report</DialogTitle>
+            <DialogDescription>
+              Select a task from the project to add to this report.
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div>
-              <Label className="text-black"><span className="text-red-500">*</span> Your Name</Label>
-              <Input
-                value={signerName}
-                onChange={(e) => setSignerName(e.target.value)}
-                placeholder="Enter your full name"
-                className="mt-1 bg-white text-black border-gray-300"
-                data-testid="input-signer-name"
-              />
-            </div>
-
-            <div>
-              <Label className="text-black">Signature Type</Label>
-              <div className="flex gap-4 mt-2">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="signature-type"
-                    checked={signatureType === 'freehand'}
-                    onChange={() => setSignatureType('freehand')}
-                    className="accent-primary"
-                  />
-                  <span className="text-sm text-black">Draw Signature</span>
-                </label>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="signature-type"
-                    checked={signatureType === 'typed'}
-                    onChange={() => setSignatureType('typed')}
-                    className="accent-primary"
-                  />
-                  <span className="text-sm text-black">Type Signature</span>
-                </label>
-              </div>
-            </div>
-
-            {signatureType === 'freehand' ? (
-              <div className="space-y-2">
-                <Label className="text-black"><span className="text-red-500">*</span> Draw Your Signature</Label>
-                <div className="border border-gray-300 rounded-lg overflow-hidden bg-white">
-                  <canvas
-                    ref={canvasRef}
-                    width={400}
-                    height={150}
-                    className="w-full touch-none cursor-crosshair"
-                    onMouseDown={startDrawing}
-                    onMouseMove={draw}
-                    onMouseUp={stopDrawing}
-                    onMouseLeave={stopDrawing}
-                    onTouchStart={startDrawing}
-                    onTouchMove={draw}
-                    onTouchEnd={stopDrawing}
-                    data-testid="canvas-signature"
-                  />
-                </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={clearCanvas}
-                  className="text-black border-gray-300"
-                >
-                  Clear
-                </Button>
-              </div>
-            ) : (
-              <div>
-                <Label className="text-black"><span className="text-red-500">*</span> Type Your Signature</Label>
-                <Input
-                  value={typedSignature}
-                  onChange={(e) => setTypedSignature(e.target.value)}
-                  placeholder="Type your signature"
-                  className="mt-1 bg-white text-black border-gray-300 font-serif italic text-xl"
-                  data-testid="input-typed-signature"
-                />
-                {typedSignature && (
-                  <p className="mt-2 text-2xl font-serif italic text-black border-b border-black pb-1">
-                    {typedSignature}
-                  </p>
-                )}
-              </div>
-            )}
-
-            <p className="text-xs text-gray-500 mt-2">
-              {signerName && <span className="block">{signerName}</span>}
-              <span className="border-t border-gray-300 block w-48 mt-1 pt-1">Signature Line</span>
-            </p>
+          <div className="py-4">
+            <Select value={selectedTaskId?.toString() || ''} onValueChange={(v) => setSelectedTaskId(Number(v))}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select a task..." />
+              </SelectTrigger>
+              <SelectContent>
+                {availableTasks.map(task => (
+                  <SelectItem key={task.id} value={task.id.toString()}>
+                    {task.title}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
-          <DialogFooter className="flex-col sm:flex-row gap-2">
-            <Button
-              variant="outline"
-              onClick={() => setShowSignatureDialog(false)}
-              className="w-full sm:w-auto text-black border-gray-300"
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={handleSignAndSave}
-              disabled={updateReportMutation.isPending}
-              className="w-full sm:w-auto"
-              data-testid="button-sign-save"
-            >
-              <PenLine className="w-4 h-4 mr-2" />
-              {updateReportMutation.isPending ? "Signing..." : "Sign & Save"}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowAddTaskDialog(false)}>Cancel</Button>
+            <Button onClick={handleAddTask} disabled={!selectedTaskId || createTaskEntryMutation.isPending}>
+              Add Task
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      <AlertDialog open={!!deleteTaskId} onOpenChange={() => setDeleteTaskId(null)}>
-        <AlertDialogContent className="bg-white mx-4 max-w-sm sm:max-w-lg">
+      {/* Signature Dialog */}
+      <Dialog open={showSignatureDialog} onOpenChange={setShowSignatureDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Complete & Sign Report</DialogTitle>
+            <DialogDescription>
+              Sign below to complete and lock this report.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="signer-name">
+                <span className="text-destructive">*</span> Your Name
+              </Label>
+              <Input
+                id="signer-name"
+                value={signerName}
+                onChange={(e) => setSignerName(e.target.value)}
+                placeholder="Enter your name"
+                data-testid="input-signer-name"
+              />
+            </div>
+            
+            <div className="flex gap-2">
+              <Button
+                variant={signatureType === 'freehand' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setSignatureType('freehand')}
+              >
+                Freehand
+              </Button>
+              <Button
+                variant={signatureType === 'typed' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setSignatureType('typed')}
+              >
+                Typed
+              </Button>
+            </div>
+
+            {signatureType === 'freehand' ? (
+              <div className="space-y-2">
+                <Label>Draw your signature</Label>
+                <canvas
+                  ref={canvasRef}
+                  width={400}
+                  height={150}
+                  className="border rounded bg-white cursor-crosshair w-full"
+                  onMouseDown={startDrawing}
+                  onMouseMove={draw}
+                  onMouseUp={stopDrawing}
+                  onMouseLeave={stopDrawing}
+                  onTouchStart={startDrawing}
+                  onTouchMove={draw}
+                  onTouchEnd={stopDrawing}
+                  data-testid="canvas-signature"
+                />
+                <Button variant="outline" size="sm" onClick={clearCanvas}>
+                  Clear
+                </Button>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <Label>Type your signature</Label>
+                <Input
+                  value={typedSignature}
+                  onChange={(e) => setTypedSignature(e.target.value)}
+                  placeholder="Type your name as signature"
+                  className="font-signature text-xl italic"
+                />
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowSignatureDialog(false)}>Cancel</Button>
+            <Button onClick={handleSignReport} disabled={completeReportMutation.isPending} data-testid="button-sign-save">
+              <PenLine className="h-4 w-4 mr-2" />
+              {completeReportMutation.isPending ? "Signing..." : "Complete & Sign"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Task Entry Confirmation */}
+      <AlertDialog open={!!deleteTaskEntryId} onOpenChange={() => setDeleteTaskEntryId(null)}>
+        <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle className="text-black">Remove Task from Report?</AlertDialogTitle>
-            <AlertDialogDescription className="text-gray-600">
-              This will remove the task and its associated labor and equipment entries from this report.
+            <AlertDialogTitle>Delete Task?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will remove the task and all associated labor, equipment, and photos from this report.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter className="flex-col sm:flex-row gap-2">
-            <AlertDialogCancel className="w-full sm:w-auto text-black">Cancel</AlertDialogCancel>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              onClick={() => deleteTaskId && deleteReportTaskMutation.mutate(deleteTaskId)}
-              className="bg-destructive text-destructive-foreground w-full sm:w-auto"
-              data-testid="button-confirm-delete-task"
+              onClick={() => deleteTaskEntryId && deleteTaskEntryMutation.mutate(deleteTaskEntryId)}
+              className="bg-destructive text-destructive-foreground"
             >
-              Remove
+              Delete
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
 
+      {/* Delete Delivery Confirmation */}
       <AlertDialog open={!!deleteDeliveryId} onOpenChange={() => setDeleteDeliveryId(null)}>
-        <AlertDialogContent className="bg-white mx-4 max-w-sm sm:max-w-lg">
+        <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle className="text-black">Remove Delivery?</AlertDialogTitle>
-            <AlertDialogDescription className="text-gray-600">
-              This will remove the delivery record from this report.
+            <AlertDialogTitle>Delete Delivery?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will remove the delivery and all associated photos from this report.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter className="flex-col sm:flex-row gap-2">
-            <AlertDialogCancel className="w-full sm:w-auto text-black">Cancel</AlertDialogCancel>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
               onClick={() => deleteDeliveryId && deleteDeliveryMutation.mutate(deleteDeliveryId)}
-              className="bg-destructive text-destructive-foreground w-full sm:w-auto"
-              data-testid="button-confirm-delete-delivery"
+              className="bg-destructive text-destructive-foreground"
             >
-              Remove
+              Delete
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
