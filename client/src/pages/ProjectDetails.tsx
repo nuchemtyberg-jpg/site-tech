@@ -88,6 +88,7 @@ import { z } from "zod";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { AddressAutocomplete } from "@/components/AddressAutocomplete";
+import { DailyReportsTab } from "@/components/DailyReportsTab";
 
 const US_STATES = [
   "AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "FL", "GA",
@@ -976,6 +977,10 @@ export default function ProjectDetails() {
             <Camera className="w-4 h-4 mr-2" />
             Photos
           </TabsTrigger>
+          <TabsTrigger value="daily-reports" data-testid="tab-daily-reports">
+            <Calendar className="w-4 h-4 mr-2" />
+            Daily Reports
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="tasks" className="space-y-4">
@@ -1783,6 +1788,15 @@ export default function ProjectDetails() {
               </div>
             );
           })()}
+        </TabsContent>
+
+        <TabsContent value="daily-reports" className="space-y-4">
+          <DailyReportsTab 
+            projectId={Number(id)}
+            projectAddress={project?.streetAddress || undefined}
+            projectCity={project?.city || undefined}
+            projectState={project?.state || undefined}
+          />
         </TabsContent>
       </Tabs>
 

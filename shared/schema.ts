@@ -150,9 +150,9 @@ export const dailyReports = pgTable("daily_reports", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
-export const insertDailyReportSchema = createInsertSchema(dailyReports).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertDailyReportSchema = createInsertSchema(dailyReports).omit({ id: true, projectId: true, createdAt: true, updatedAt: true });
 export type DailyReport = typeof dailyReports.$inferSelect;
-export type InsertDailyReport = z.infer<typeof insertDailyReportSchema>;
+export type InsertDailyReport = z.infer<typeof insertDailyReportSchema> & { projectId: number };
 
 // Report Tasks - Tasks worked on in a daily report
 export const reportTasks = pgTable("report_tasks", {

@@ -10,6 +10,7 @@ Core features include:
 - **Dashboard**: Operational metrics and analytics charts
 - **Scheduling**: Calendar view with task scheduling and equipment/manpower allocation
 - **Equipment**: Inventory with location tracking, maintenance schedules, and repair logs
+- **Daily Reports**: Field reporting with weather integration, task tracking, labor/equipment resources, and deliveries
 
 ## User Preferences
 
@@ -187,3 +188,71 @@ The Photos tab provides a dedicated photo management experience for project phot
 - Previous/Next navigation buttons (ChevronLeft/ChevronRight)
 - Photo counter showing "X of Y"
 - Share, download, and close actions in bottom toolbar
+
+## Daily Reports
+
+Daily Reports provide field reporting capabilities for construction projects with weather integration, task tracking, labor/equipment resources, and deliveries.
+
+### Core Features
+- One report per day per project (with date conflict resolution)
+- Automatic weather fetching using Open-Meteo API (free, no key required)
+- Report list showing all reports sorted by date descending
+- Report date display formatted as "MM/DD/YYYY"
+- Component located at `client/src/components/DailyReportsTab.tsx`
+
+### Weather Integration
+- Uses Open-Meteo geocoding API to convert project address to coordinates
+- Fetches current weather conditions and daily min/max temperatures
+- Weather data includes: condition (sunny, cloudy, rainy, etc.), temperature, high, low
+- Falls back to default values if geocoding or weather fetch fails
+- Weather is auto-filled when creating a new report
+
+### Report Tasks
+- Can add tasks from the project's uncompleted tasks list
+- Task completion slider (0-100% in 5% increments) syncs bidirectionally with project Tasks tab
+- When task is marked 100%, status auto-updates to "completed"
+- When task is marked 0%, status auto-updates to "pending"
+- Status history tracking records all changes with user attribution
+
+### Labor Entries
+- Labor types: Foreman, Operator, Laborer
+- Fields: type, count, hours
+- Multiple labor entries per report
+
+### Equipment Entries
+- Equipment types: Mini Excavator, Excavator, Skidsteer, Compactor
+- Fields: type, hours, notes
+- Multiple equipment entries per report
+
+### Deliveries Section
+- Track deliveries for each report
+- Fields: description, vendor, time arrived, receiver name
+- Photo upload capability (placeholder - redirects to Photos tab)
+- Multiple deliveries per report
+
+### Data Model
+Tables defined in `shared/schema.ts`:
+- **dailyReports**: Main report table (id, projectId, reportDate, weather fields, workSummary, notes, timestamps)
+- **reportTasks**: Links reports to project tasks with current percent complete
+- **laborEntries**: Labor resources per report
+- **equipmentEntries**: Equipment resources per report
+- **reportTaskPhotos**: Photos for report tasks (placeholder)
+- **deliveries**: Delivery entries per report
+- **deliveryPhotos**: Photos for deliveries (placeholder)
+
+### API Endpoints
+- GET `/api/projects/:projectId/reports` - List all reports for a project
+- POST `/api/projects/:projectId/reports` - Create a new report
+- GET `/api/reports/:id` - Get a single report with all related data
+- PUT `/api/reports/:id` - Update a report
+- DELETE `/api/reports/:id` - Delete a report
+- POST `/api/reports/:reportId/tasks` - Add task to report
+- PUT `/api/report-tasks/:id` - Update report task (syncs with project task)
+- DELETE `/api/report-tasks/:id` - Remove task from report
+- POST `/api/reports/:reportId/labor` - Add labor entry
+- DELETE `/api/labor-entries/:id` - Delete labor entry
+- POST `/api/reports/:reportId/equipment` - Add equipment entry
+- DELETE `/api/equipment-entries/:id` - Delete equipment entry
+- POST `/api/reports/:reportId/deliveries` - Add delivery
+- PUT `/api/deliveries/:id` - Update delivery
+- DELETE `/api/deliveries/:id` - Delete delivery
