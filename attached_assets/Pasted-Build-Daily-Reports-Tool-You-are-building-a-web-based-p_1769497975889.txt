@@ -1,0 +1,346 @@
+Build Daily Reports Tool
+
+You are building a web-based project management application. Add a new feature inside each project called Daily Reports. Build this end-to-end, including database schema, API endpoints, validation, and web UI.
+
+If a stack already exists, integrate into it. If not, use:
+	•	Frontend: React (Vite or Next.js)
+	•	Backend: Node.js + Express
+	•	Database: PostgreSQL with Prisma
+	•	File uploads: Cloudinary or S3-compatible storage
+	•	Weather + Geocoding: any reliable API (OpenWeather or similar)
+
+1) Daily Reports Overview
+	•	Add a Daily Reports tab/section inside each project.
+	•	Daily Reports are tied to a specific project and date.
+	•	Only one report per project per date is allowed.
+
+2) Core Rules
+	•	Enforce unique (projectId, reportDate) at the database level.
+	•	Multiple users may create and edit the same report while it is in Draft status.
+	•	Once a report is Completed & Signed, it becomes locked and read-only.
+	•	Track audit fields on all reports:
+	•	createdBy, createdAt
+	•	updatedBy, updatedAt
+
+3) Report Lifecycle
+
+Each Daily Report has a status:
+	•	draft
+	•	completed
+
+Additional fields when completed:
+	•	completedAt
+	•	completedBy
+	•	signatureType (freehand or typed)
+	•	signatureValue (image data or typed text)
+
+Once a report is completed:
+	•	No further edits are allowed
+	•	All update APIs must reject changes with 403 Forbidden
+	•	UI must be fully read-only
+
+4) Create New Report Flow
+	•	Provide a Create New Report button.
+	•	Default report date = today.
+	•	Always show a date picker allowing selection of another date.
+
+Duplicate Date Handling
+
+When Create New Report is clicked:
+	•	Check if a report already exists for today’s date:
+	•	If yes, show a modal:
+	•	Message: “A report for today already exists.”
+	•	Buttons:
+	•	Edit Today’s Report
+	•	Create Report for Another Date
+
+5) Automatic Weather
+	•	On report creation (and when opening today’s report if weather is missing):
+	•	Use the project’s address
+	•	Geocode address → latitude/longitude
+	•	Fetch today’s weather
+	•	Save weather data into the report so it does not change later:
+	•	weatherSummary
+	•	optional: temperature, wind, icon, fetchedAt
+
+6) Daily Report Data Model
+
+DailyReport
+	•	id
+	•	projectId
+	•	reportDate (YYYY-MM-DD)
+	•	status
+	•	Weather fields
+	•	Signature fields (nullable until completed)
+	•	Audit fields
+
+Constraint: unique (projectId, reportDate)
+
+DailyReportTaskEntry
+	•	id
+	•	reportId
+	•	taskId (from Tasks tool)
+	•	taskTitleSnapshot
+	•	percentComplete (0–100)
+	•	comments
+
+DailyReportLaborLine
+	•	id
+	•	taskEntryId
+	•	laborType: Foreman | Operator | Laborer
+	•	quantity
+	•	hours
+
+DailyReportEquipmentLine
+	•	id
+	•	taskEntryId
+	•	equipmentType: Mini Excavator | Excavator | Skid Steer | Compactor
+	•	quantity
+	•	hours
+
+DailyReportDeliveryEntry
+	•	id
+	•	reportId
+	•	vendor
+	•	deliveryTime
+	•	description
+	•	allDelivered boolean
+	•	missingItemsDetails (required if allDelivered = false)
+
+DailyReportPhoto
+	•	id
+	•	reportId (nullable)
+	•	taskEntryId (nullable)
+	•	deliveryEntryId (nullable)
+	•	url
+	•	caption optional
+	•	createdAt, createdBy
+
+7) API Endpoints
+
+Reports
+	•	GET /projects/:projectId/daily-reports
+	•	GET /projects/:projectId/daily-reports/by-date?date=YYYY-MM-DD
+	•	POST /projects/:projectId/daily-reports
+	•	Enforce unique date
+	•	If duplicate, return 409 REPORT_EXISTS_FOR_DATE with existing reportId
+	•	GET /daily-reports/:reportId
+	•	PUT /daily-reports/:reportId
+	•	Reject edits if report status = completed
+
+Uploads
+	•	POST /uploads → returns { url }
+	•	Store returned URLs in DailyReportPhoto
+
+8) Web UI Requirements
+
+A) Daily Reports List Page
+	•	List/table showing:
+	•	Report Date
+	•	Weather summary
+	•	Last updated
+	•	Status (Draft / Completed)
+	•	Button: Create New Report
+
+B) Create / Edit Daily Report Page
+
+Header
+	•	Date picker (default today)
+	•	Weather display
+	•	Status indicator
+
+Action Buttons
+	•	Save
+	•	Saves progress
+	•	Closes page
+	•	Keeps report in Draft
+	•	Complete & Sign
+	•	Only visible in Draft status
+	•	Opens signature modal
+
+C) Signature Modal
+	•	Display user’s name (read-only)
+	•	Signature options:
+	•	Freehand signature (default)
+	•	Canvas drawing input
+	•	Typed signature
+	•	Text input
+	•	Toggle between freehand and typed
+	•	Button: Complete & Sign
+
+On confirmation:
+	•	Save report progress
+	•	Save signature
+	•	Set report status to completed
+	•	Lock the report
+	•	Close modal and page
+
+D) Daily Operations Section
+	•	Button: + Add Task
+Each task entry includes:
+
+	1.	Task Title Dropdown
+	•	Shows all uncompleted project tasks from Tasks tool
+	2.	Labor
+	•	Labor Type dropdown: Foreman, Operator, Laborer
+	•	Quantity
+	•	Hours
+	•	Button: + Add Labor Line
+	3.	Equipment
+	•	Equipment Type dropdown: Mini Excavator, Excavator, Skid Steer, Compactor
+	•	Quantity
+	•	Hours
+	•	Button: + Add Equipment Line
+	4.	Progress Slider (0–100)
+	•	Updates task percent complete
+	•	Syncs progress/status back to Tasks tool
+	5.	Comments
+	6.	Task Photos Upload
+	•	Multiple photos allowed
+
+E) Deliveries Section
+	•	Button: + Add Delivery
+Each delivery entry includes:
+	•	Vendor
+	•	Delivery time
+	•	Description
+	•	“Was everything delivered?” Yes / No
+	•	If No: require missing items details
+	•	Message:
+	•	“Please upload photos of the delivery slip and delivered items.”
+	•	Photo upload button (multiple)
+
+9) Validation Rules
+	•	reportDate required
+	•	(projectId, reportDate) must be unique
+	•	Each task entry requires a task selection
+	•	Missing delivery details required if not all delivered
+	•	Signature required to complete report
+	•	Completed reports cannot be edited
+
+10) Date Handling
+	•	Store reportDate as YYYY-MM-DD (not timestamps)
+	•	Determine “today” using user local time, then normalize
+
+11) Deliverables
+
+Implement:
+	•	Database schema and migrations
+	•	API routes with validation and error handling
+	•	Full web UI
+	•	File uploads
+	•	Weather auto-fill
+	•	Task progress synchronization
+	•	Signature capture and report locking
+
+Sure. Because nothing says “professional construction management” like screenshots and vibes. Add this PDF export chunk to the requirements.
+
+12) Professional PDF Download for Daily Reports
+
+A) PDF Download Access
+	•	Add a “Download PDF” button on:
+	•	Daily Reports List (per report row)
+	•	Daily Report View/Edit page (top right)
+	•	PDF must be available for both Draft and Completed reports.
+	•	Permission: only authorized project users can download.
+
+B) PDF Output Quality
+	•	Generate a professional, print-ready PDF:
+	•	Paper size: US Letter (8.5x11) by default
+	•	Also support A4 (optional setting)
+	•	Orientation: Portrait
+	•	Use clean typography, consistent spacing, and clear section headers.
+	•	Include page numbers and consistent headers/footers.
+	•	PDF should look like something you’d actually send to an owner/GC without shame.
+
+C) PDF Content Layout
+
+The PDF must include these sections, in this order:
+
+1) Header Block (Top of Page 1)
+	•	Company branding:
+	•	Company name (from app settings)
+	•	Optional logo (from app settings)
+	•	Document title: Daily Report
+	•	Project info:
+	•	Project name
+	•	Project address
+	•	Project ID (optional)
+	•	Report info:
+	•	Report date
+	•	Report status: Draft / Completed
+	•	Created by + timestamp
+	•	Last updated by + timestamp
+
+2) Weather Summary
+	•	Weather summary text saved in report (not “live”).
+	•	Optional weather fields if saved: temperature, wind, icon (icon optional for PDF).
+
+3) Daily Operations
+
+For each task entry:
+	•	Task title (with task ID optional)
+	•	Progress percent
+	•	Comments (if present)
+	•	Labor table:
+	•	Labor Type | Quantity | Hours
+	•	Equipment table:
+	•	Equipment Type | Quantity | Hours
+	•	Task photos:
+	•	Thumbnails in a grid
+	•	Each photo optionally captioned with upload timestamp/user (if stored)
+
+4) Deliveries
+
+For each delivery entry:
+	•	Vendor
+	•	Delivery time
+	•	Description
+	•	“All delivered?” Yes/No
+	•	Missing items details (only if No)
+	•	Delivery photos:
+	•	Delivery slip photos + delivered items photos shown in a grid
+
+5) Completion & Signature Block (if completed)
+
+Only show this section if status = completed:
+	•	Completed by (user name)
+	•	Completed date/time
+	•	Signature:
+	•	If freehand: render signature image clearly
+	•	If typed: render typed signature with a signature-style font (or plain if unavailable)
+	•	Optional line: “This report is locked after completion.”
+
+D) Draft Watermark (Required)
+	•	If report status is Draft, add a light diagonal watermark: DRAFT
+	•	If Completed, no watermark.
+
+E) Photos Handling Requirements
+	•	Photos must embed into the PDF (not just links).
+	•	Maintain aspect ratio, crop sensibly to avoid distortion.
+	•	If there are many photos:
+	•	Automatically paginate
+	•	Include a “Task Photos (continued)” / “Deliveries (continued)” label on subsequent pages as needed
+	•	Optimize for file size:
+	•	Compress images for PDF output (configurable target, e.g., 150–200 DPI equivalent)
+	•	Avoid generating a 200MB PDF because someone uploaded their entire camera roll.
+
+F) File Naming + Storage
+	•	PDF filename format:
+	•	DailyReport_<ProjectName>_<YYYY-MM-DD>.pdf
+	•	Sanitize project name for filenames
+	•	PDF generation approach:
+	•	Prefer server-side generation for consistent formatting and access control.
+	•	Provide an endpoint like: GET /daily-reports/:reportId/pdf
+	•	Response returns a downloadable PDF stream/file.
+
+G) Consistency & Lock Enforcement
+	•	PDF must reflect the saved report state.
+	•	If the report is completed, PDF must reflect the locked final content, including signature and completion timestamp.
+
+H) Enhancements 
+	•	Toggle before download:
+	•	“Include photos” (Yes/No) to generate a lightweight PDF quickly
+	
+
+Build this so it actually works, survives real users, and doesn’t fall apart the first time someone edits yesterday’s report at 11:59 PM.

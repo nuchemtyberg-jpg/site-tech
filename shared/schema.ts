@@ -131,35 +131,118 @@ export const insertMaintenanceLogSchema = createInsertSchema(maintenanceLogs).om
 export type MaintenanceLog = typeof maintenanceLogs.$inferSelect;
 export type InsertMaintenanceLog = z.infer<typeof insertMaintenanceLogSchema>;
 
-// Daily Reports - Enhanced with weather and multi-user support
+// Daily Reports - Enhanced with weather, multi-user support, and completion workflow
 export const dailyReports = pgTable("daily_reports", {
   id: serial("id").primaryKey(),
   projectId: integer("project_id").notNull(),
   reportDate: date("report_date").notNull(),
-  weather: text("weather"),
-  weatherDescription: text("weather_description"),
+  status: text("status").notNull().default("draft"), // draft, completed
+  // Weather fields (snapshot saved on creation)
+  weatherSummary: text("weather_summary"),
   temperature: text("temperature"),
   temperatureHigh: text("temperature_high"),
   temperatureLow: text("temperature_low"),
-  humidity: text("humidity"),
   windSpeed: text("wind_speed"),
+  weatherIcon: text("weather_icon"),
+  weatherFetchedAt: timestamp("weather_fetched_at"),
+  // Notes
   notes: text("notes"),
-  createdBy: text("created_by"),
-  lastModifiedBy: text("last_modified_by"),
-  isSigned: boolean("is_signed").default(false),
+  // Signature fields (set on completion)
   signatureType: text("signature_type"), // 'freehand' or 'typed'
-  signatureData: text("signature_data"), // base64 for freehand, text for typed
-  signedByName: text("signed_by_name"),
-  signedAt: timestamp("signed_at"),
+  signatureValue: text("signature_value"), // base64 for freehand, text for typed
+  // Audit fields
+  createdBy: text("created_by"),
+  createdByName: text("created_by_name"),
+  updatedBy: text("updated_by"),
+  updatedByName: text("updated_by_name"),
+  completedAt: timestamp("completed_at"),
+  completedBy: text("completed_by"),
+  completedByName: text("completed_by_name"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
-export const insertDailyReportSchema = createInsertSchema(dailyReports).omit({ id: true, projectId: true, createdAt: true, updatedAt: true });
+export const insertDailyReportSchema = createInsertSchema(dailyReports).omit({ id: true, createdAt: true, updatedAt: true });
 export type DailyReport = typeof dailyReports.$inferSelect;
-export type InsertDailyReport = z.infer<typeof insertDailyReportSchema> & { projectId: number };
+export type InsertDailyReport = z.infer<typeof insertDailyReportSchema>;
 
-// Report Tasks - Tasks worked on in a daily report
+// Daily Report Task Entries - Tasks worked on in a daily report
+export const dailyReportTaskEntries = pgTable("daily_report_task_entries", {
+  id: serial("id").primaryKey(),
+  reportId: integer("report_id").notNull(),
+  taskId: integer("task_id").notNull(),
+  taskTitleSnapshot: text("task_title_snapshot").notNull(), // Snapshot of task title at time of entry
+  percentComplete: integer("percent_complete").notNull().default(0), // 0-100
+  comments: text("comments"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertDailyReportTaskEntrySchema = createInsertSchema(dailyReportTaskEntries).omit({ id: true, createdAt: true });
+export type DailyReportTaskEntry = typeof dailyReportTaskEntries.$inferSelect;
+export type InsertDailyReportTaskEntry = z.infer<typeof insertDailyReportTaskEntrySchema>;
+
+// Daily Report Labor Lines - Labor used for a task entry
+export const dailyReportLaborLines = pgTable("daily_report_labor_lines", {
+  id: serial("id").primaryKey(),
+  taskEntryId: integer("task_entry_id").notNull(),
+  laborType: text("labor_type").notNull(), // Foreman, Operator, Laborer
+  quantity: integer("quantity").notNull().default(1),
+  hours: integer("hours").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertDailyReportLaborLineSchema = createInsertSchema(dailyReportLaborLines).omit({ id: true, createdAt: true });
+export type DailyReportLaborLine = typeof dailyReportLaborLines.$inferSelect;
+export type InsertDailyReportLaborLine = z.infer<typeof insertDailyReportLaborLineSchema>;
+
+// Daily Report Equipment Lines - Equipment used for a task entry
+export const dailyReportEquipmentLines = pgTable("daily_report_equipment_lines", {
+  id: serial("id").primaryKey(),
+  taskEntryId: integer("task_entry_id").notNull(),
+  equipmentType: text("equipment_type").notNull(), // Mini Excavator, Excavator, Skid Steer, Compactor
+  quantity: integer("quantity").notNull().default(1),
+  hours: integer("hours").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertDailyReportEquipmentLineSchema = createInsertSchema(dailyReportEquipmentLines).omit({ id: true, createdAt: true });
+export type DailyReportEquipmentLine = typeof dailyReportEquipmentLines.$inferSelect;
+export type InsertDailyReportEquipmentLine = z.infer<typeof insertDailyReportEquipmentLineSchema>;
+
+// Daily Report Delivery Entries - Deliveries recorded in a daily report
+export const dailyReportDeliveryEntries = pgTable("daily_report_delivery_entries", {
+  id: serial("id").primaryKey(),
+  reportId: integer("report_id").notNull(),
+  vendor: text("vendor"),
+  deliveryTime: text("delivery_time"),
+  description: text("description"),
+  allDelivered: boolean("all_delivered").default(true),
+  missingItemsDetails: text("missing_items_details"), // Required if allDelivered = false
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertDailyReportDeliveryEntrySchema = createInsertSchema(dailyReportDeliveryEntries).omit({ id: true, createdAt: true });
+export type DailyReportDeliveryEntry = typeof dailyReportDeliveryEntries.$inferSelect;
+export type InsertDailyReportDeliveryEntry = z.infer<typeof insertDailyReportDeliveryEntrySchema>;
+
+// Daily Report Photos - Flexible photo storage for reports, task entries, or deliveries
+export const dailyReportPhotos = pgTable("daily_report_photos", {
+  id: serial("id").primaryKey(),
+  reportId: integer("report_id"), // Optional - for general report photos
+  taskEntryId: integer("task_entry_id"), // Optional - for task photos
+  deliveryEntryId: integer("delivery_entry_id"), // Optional - for delivery photos
+  url: text("url").notNull(),
+  caption: text("caption"),
+  createdBy: text("created_by"),
+  createdByName: text("created_by_name"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertDailyReportPhotoSchema = createInsertSchema(dailyReportPhotos).omit({ id: true, createdAt: true });
+export type DailyReportPhoto = typeof dailyReportPhotos.$inferSelect;
+export type InsertDailyReportPhoto = z.infer<typeof insertDailyReportPhotoSchema>;
+
+// Legacy tables kept for backward compatibility (deprecated)
 export const reportTasks = pgTable("report_tasks", {
   id: serial("id").primaryKey(),
   reportId: integer("report_id").notNull(),
@@ -168,52 +251,34 @@ export const reportTasks = pgTable("report_tasks", {
   comments: text("comments"),
   createdAt: timestamp("created_at").defaultNow(),
 });
-
 export const insertReportTaskSchema = createInsertSchema(reportTasks).omit({ id: true, createdAt: true });
 export type ReportTask = typeof reportTasks.$inferSelect;
 export type InsertReportTask = z.infer<typeof insertReportTaskSchema>;
 
-// Labor Entries - Labor used for a report task
 export const laborEntries = pgTable("labor_entries", {
   id: serial("id").primaryKey(),
   reportTaskId: integer("report_task_id").notNull(),
-  laborType: text("labor_type").notNull(), // Foreman, Operator, Laborer
+  laborType: text("labor_type").notNull(),
   quantity: integer("quantity").notNull().default(1),
   hours: integer("hours").notNull().default(0),
   createdAt: timestamp("created_at").defaultNow(),
 });
-
 export const insertLaborEntrySchema = createInsertSchema(laborEntries).omit({ id: true, createdAt: true });
 export type LaborEntry = typeof laborEntries.$inferSelect;
 export type InsertLaborEntry = z.infer<typeof insertLaborEntrySchema>;
 
-// Equipment Entries - Equipment used for a report task
 export const equipmentEntries = pgTable("equipment_entries", {
   id: serial("id").primaryKey(),
   reportTaskId: integer("report_task_id").notNull(),
-  equipmentType: text("equipment_type").notNull(), // Mini Excavator, Excavator, Skidsteer, Compactor
+  equipmentType: text("equipment_type").notNull(),
   quantity: integer("quantity").notNull().default(1),
   hours: integer("hours").notNull().default(0),
   createdAt: timestamp("created_at").defaultNow(),
 });
-
 export const insertEquipmentEntrySchema = createInsertSchema(equipmentEntries).omit({ id: true, createdAt: true });
 export type EquipmentEntry = typeof equipmentEntries.$inferSelect;
 export type InsertEquipmentEntry = z.infer<typeof insertEquipmentEntrySchema>;
 
-// Report Task Photos - Photos for a report task
-export const reportTaskPhotos = pgTable("report_task_photos", {
-  id: serial("id").primaryKey(),
-  reportTaskId: integer("report_task_id").notNull(),
-  fileId: integer("file_id").notNull(),
-  createdAt: timestamp("created_at").defaultNow(),
-});
-
-export const insertReportTaskPhotoSchema = createInsertSchema(reportTaskPhotos).omit({ id: true, createdAt: true });
-export type ReportTaskPhoto = typeof reportTaskPhotos.$inferSelect;
-export type InsertReportTaskPhoto = z.infer<typeof insertReportTaskPhotoSchema>;
-
-// Deliveries - Deliveries recorded in a daily report
 export const deliveries = pgTable("deliveries", {
   id: serial("id").primaryKey(),
   reportId: integer("report_id").notNull(),
@@ -224,22 +289,29 @@ export const deliveries = pgTable("deliveries", {
   missingItemsDetails: text("missing_items_details"),
   createdAt: timestamp("created_at").defaultNow(),
 });
-
 export const insertDeliverySchema = createInsertSchema(deliveries).omit({ id: true, createdAt: true });
 export type Delivery = typeof deliveries.$inferSelect;
 export type InsertDelivery = z.infer<typeof insertDeliverySchema>;
 
-// Delivery Photos - Photos for a delivery
 export const deliveryPhotos = pgTable("delivery_photos", {
   id: serial("id").primaryKey(),
   deliveryId: integer("delivery_id").notNull(),
   fileId: integer("file_id").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
 });
-
 export const insertDeliveryPhotoSchema = createInsertSchema(deliveryPhotos).omit({ id: true, createdAt: true });
 export type DeliveryPhoto = typeof deliveryPhotos.$inferSelect;
 export type InsertDeliveryPhoto = z.infer<typeof insertDeliveryPhotoSchema>;
+
+export const reportTaskPhotos = pgTable("report_task_photos", {
+  id: serial("id").primaryKey(),
+  reportTaskId: integer("report_task_id").notNull(),
+  fileId: integer("file_id").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+export const insertReportTaskPhotoSchema = createInsertSchema(reportTaskPhotos).omit({ id: true, createdAt: true });
+export type ReportTaskPhoto = typeof reportTaskPhotos.$inferSelect;
+export type InsertReportTaskPhoto = z.infer<typeof insertReportTaskPhotoSchema>;
 
 // Customer Communications
 export const communications = pgTable("communications", {

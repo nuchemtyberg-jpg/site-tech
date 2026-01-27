@@ -1,12 +1,15 @@
 import {
   projects, tasks, equipment, allocations, folders, files, users, customers, dailyReports, maintenanceLogs, communications, taskStatusHistory, photoAlbums,
   reportTasks, laborEntries, equipmentEntries, reportTaskPhotos, deliveries, deliveryPhotos,
+  dailyReportTaskEntries, dailyReportLaborLines, dailyReportEquipmentLines, dailyReportDeliveryEntries, dailyReportPhotos,
   type InsertProject, type InsertTask, type InsertEquipment, type InsertAllocation, type InsertFolder, type InsertFileMetadata,
   type InsertCustomer, type InsertDailyReport, type InsertMaintenanceLog, type InsertCommunication, type InsertTaskStatusHistory, type InsertPhotoAlbum,
   type InsertReportTask, type InsertLaborEntry, type InsertEquipmentEntry, type InsertReportTaskPhoto, type InsertDelivery, type InsertDeliveryPhoto,
+  type InsertDailyReportTaskEntry, type InsertDailyReportLaborLine, type InsertDailyReportEquipmentLine, type InsertDailyReportDeliveryEntry, type InsertDailyReportPhoto,
   type Project, type Task, type Equipment, type Allocation, type Folder, type FileMetadata,
   type Customer, type DailyReport, type MaintenanceLog, type Communication, type TaskStatusHistory, type PhotoAlbum,
   type ReportTask, type LaborEntry, type EquipmentEntry, type ReportTaskPhoto, type Delivery, type DeliveryPhoto,
+  type DailyReportTaskEntry, type DailyReportLaborLine, type DailyReportEquipmentLine, type DailyReportDeliveryEntry, type DailyReportPhoto,
   type User, type UpsertUser
 } from "@shared/schema";
 import { db } from "./db";
@@ -128,6 +131,37 @@ export interface IStorage {
   createPhotoAlbum(album: InsertPhotoAlbum): Promise<PhotoAlbum>;
   updatePhotoAlbum(id: number, album: Partial<InsertPhotoAlbum>): Promise<PhotoAlbum>;
   deletePhotoAlbum(id: number): Promise<void>;
+
+  // New Daily Report Task Entries
+  getDailyReportTaskEntries(reportId: number): Promise<DailyReportTaskEntry[]>;
+  getDailyReportTaskEntry(id: number): Promise<DailyReportTaskEntry | undefined>;
+  createDailyReportTaskEntry(entry: InsertDailyReportTaskEntry): Promise<DailyReportTaskEntry>;
+  updateDailyReportTaskEntry(id: number, entry: Partial<InsertDailyReportTaskEntry>): Promise<DailyReportTaskEntry>;
+  deleteDailyReportTaskEntry(id: number): Promise<void>;
+
+  // New Daily Report Labor Lines
+  getDailyReportLaborLines(taskEntryId: number): Promise<DailyReportLaborLine[]>;
+  createDailyReportLaborLine(line: InsertDailyReportLaborLine): Promise<DailyReportLaborLine>;
+  updateDailyReportLaborLine(id: number, line: Partial<InsertDailyReportLaborLine>): Promise<DailyReportLaborLine>;
+  deleteDailyReportLaborLine(id: number): Promise<void>;
+
+  // New Daily Report Equipment Lines
+  getDailyReportEquipmentLines(taskEntryId: number): Promise<DailyReportEquipmentLine[]>;
+  createDailyReportEquipmentLine(line: InsertDailyReportEquipmentLine): Promise<DailyReportEquipmentLine>;
+  updateDailyReportEquipmentLine(id: number, line: Partial<InsertDailyReportEquipmentLine>): Promise<DailyReportEquipmentLine>;
+  deleteDailyReportEquipmentLine(id: number): Promise<void>;
+
+  // New Daily Report Delivery Entries
+  getDailyReportDeliveryEntries(reportId: number): Promise<DailyReportDeliveryEntry[]>;
+  getDailyReportDeliveryEntry(id: number): Promise<DailyReportDeliveryEntry | undefined>;
+  createDailyReportDeliveryEntry(entry: InsertDailyReportDeliveryEntry): Promise<DailyReportDeliveryEntry>;
+  updateDailyReportDeliveryEntry(id: number, entry: Partial<InsertDailyReportDeliveryEntry>): Promise<DailyReportDeliveryEntry>;
+  deleteDailyReportDeliveryEntry(id: number): Promise<void>;
+
+  // New Daily Report Photos
+  getDailyReportPhotos(reportId?: number, taskEntryId?: number, deliveryEntryId?: number): Promise<DailyReportPhoto[]>;
+  createDailyReportPhoto(photo: InsertDailyReportPhoto): Promise<DailyReportPhoto>;
+  deleteDailyReportPhoto(id: number): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -533,6 +567,104 @@ export class DatabaseStorage implements IStorage {
   }
   async deletePhotoAlbum(id: number): Promise<void> {
     await db.delete(photoAlbums).where(eq(photoAlbums.id, id));
+  }
+
+  // New Daily Report Task Entries
+  async getDailyReportTaskEntries(reportId: number): Promise<DailyReportTaskEntry[]> {
+    return await db.select().from(dailyReportTaskEntries).where(eq(dailyReportTaskEntries.reportId, reportId));
+  }
+  async getDailyReportTaskEntry(id: number): Promise<DailyReportTaskEntry | undefined> {
+    const [entry] = await db.select().from(dailyReportTaskEntries).where(eq(dailyReportTaskEntries.id, id));
+    return entry;
+  }
+  async createDailyReportTaskEntry(entry: InsertDailyReportTaskEntry): Promise<DailyReportTaskEntry> {
+    const [record] = await db.insert(dailyReportTaskEntries).values(entry).returning();
+    return record;
+  }
+  async updateDailyReportTaskEntry(id: number, updates: Partial<InsertDailyReportTaskEntry>): Promise<DailyReportTaskEntry> {
+    const [record] = await db.update(dailyReportTaskEntries).set(updates).where(eq(dailyReportTaskEntries.id, id)).returning();
+    return record;
+  }
+  async deleteDailyReportTaskEntry(id: number): Promise<void> {
+    // Delete associated labor and equipment lines first
+    await db.delete(dailyReportLaborLines).where(eq(dailyReportLaborLines.taskEntryId, id));
+    await db.delete(dailyReportEquipmentLines).where(eq(dailyReportEquipmentLines.taskEntryId, id));
+    await db.delete(dailyReportPhotos).where(eq(dailyReportPhotos.taskEntryId, id));
+    await db.delete(dailyReportTaskEntries).where(eq(dailyReportTaskEntries.id, id));
+  }
+
+  // New Daily Report Labor Lines
+  async getDailyReportLaborLines(taskEntryId: number): Promise<DailyReportLaborLine[]> {
+    return await db.select().from(dailyReportLaborLines).where(eq(dailyReportLaborLines.taskEntryId, taskEntryId));
+  }
+  async createDailyReportLaborLine(line: InsertDailyReportLaborLine): Promise<DailyReportLaborLine> {
+    const [record] = await db.insert(dailyReportLaborLines).values(line).returning();
+    return record;
+  }
+  async updateDailyReportLaborLine(id: number, updates: Partial<InsertDailyReportLaborLine>): Promise<DailyReportLaborLine> {
+    const [record] = await db.update(dailyReportLaborLines).set(updates).where(eq(dailyReportLaborLines.id, id)).returning();
+    return record;
+  }
+  async deleteDailyReportLaborLine(id: number): Promise<void> {
+    await db.delete(dailyReportLaborLines).where(eq(dailyReportLaborLines.id, id));
+  }
+
+  // New Daily Report Equipment Lines
+  async getDailyReportEquipmentLines(taskEntryId: number): Promise<DailyReportEquipmentLine[]> {
+    return await db.select().from(dailyReportEquipmentLines).where(eq(dailyReportEquipmentLines.taskEntryId, taskEntryId));
+  }
+  async createDailyReportEquipmentLine(line: InsertDailyReportEquipmentLine): Promise<DailyReportEquipmentLine> {
+    const [record] = await db.insert(dailyReportEquipmentLines).values(line).returning();
+    return record;
+  }
+  async updateDailyReportEquipmentLine(id: number, updates: Partial<InsertDailyReportEquipmentLine>): Promise<DailyReportEquipmentLine> {
+    const [record] = await db.update(dailyReportEquipmentLines).set(updates).where(eq(dailyReportEquipmentLines.id, id)).returning();
+    return record;
+  }
+  async deleteDailyReportEquipmentLine(id: number): Promise<void> {
+    await db.delete(dailyReportEquipmentLines).where(eq(dailyReportEquipmentLines.id, id));
+  }
+
+  // New Daily Report Delivery Entries
+  async getDailyReportDeliveryEntries(reportId: number): Promise<DailyReportDeliveryEntry[]> {
+    return await db.select().from(dailyReportDeliveryEntries).where(eq(dailyReportDeliveryEntries.reportId, reportId));
+  }
+  async getDailyReportDeliveryEntry(id: number): Promise<DailyReportDeliveryEntry | undefined> {
+    const [entry] = await db.select().from(dailyReportDeliveryEntries).where(eq(dailyReportDeliveryEntries.id, id));
+    return entry;
+  }
+  async createDailyReportDeliveryEntry(entry: InsertDailyReportDeliveryEntry): Promise<DailyReportDeliveryEntry> {
+    const [record] = await db.insert(dailyReportDeliveryEntries).values(entry).returning();
+    return record;
+  }
+  async updateDailyReportDeliveryEntry(id: number, updates: Partial<InsertDailyReportDeliveryEntry>): Promise<DailyReportDeliveryEntry> {
+    const [record] = await db.update(dailyReportDeliveryEntries).set(updates).where(eq(dailyReportDeliveryEntries.id, id)).returning();
+    return record;
+  }
+  async deleteDailyReportDeliveryEntry(id: number): Promise<void> {
+    await db.delete(dailyReportPhotos).where(eq(dailyReportPhotos.deliveryEntryId, id));
+    await db.delete(dailyReportDeliveryEntries).where(eq(dailyReportDeliveryEntries.id, id));
+  }
+
+  // New Daily Report Photos
+  async getDailyReportPhotos(reportId?: number, taskEntryId?: number, deliveryEntryId?: number): Promise<DailyReportPhoto[]> {
+    if (taskEntryId) {
+      return await db.select().from(dailyReportPhotos).where(eq(dailyReportPhotos.taskEntryId, taskEntryId));
+    }
+    if (deliveryEntryId) {
+      return await db.select().from(dailyReportPhotos).where(eq(dailyReportPhotos.deliveryEntryId, deliveryEntryId));
+    }
+    if (reportId) {
+      return await db.select().from(dailyReportPhotos).where(eq(dailyReportPhotos.reportId, reportId));
+    }
+    return [];
+  }
+  async createDailyReportPhoto(photo: InsertDailyReportPhoto): Promise<DailyReportPhoto> {
+    const [record] = await db.insert(dailyReportPhotos).values(photo).returning();
+    return record;
+  }
+  async deleteDailyReportPhoto(id: number): Promise<void> {
+    await db.delete(dailyReportPhotos).where(eq(dailyReportPhotos.id, id));
   }
 }
 
