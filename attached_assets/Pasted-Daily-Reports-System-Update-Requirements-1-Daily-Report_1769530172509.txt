@@ -1,0 +1,178 @@
+Daily Reports & System Update Requirements
+1) Daily Reports List Sorting (Latest on Top)
+
+The Daily Reports List must be sorted with the most recent reports at the top.
+
+Sorting rules:
+
+Primary sort: reportDate descending (newest date first)
+
+Secondary sort (tie-breaker): updatedAt descending
+
+This sorting must apply consistently:
+
+On initial page load
+
+After creating, editing, or completing a report
+
+After returning to the list from any other page
+
+2) New Report Creation: Calendar Date Picker
+
+When clicking Create New Report, the popup/modal must include a calendar date picker UI.
+
+Manual date typing is not allowed.
+
+Behavior:
+
+Default selected date = today
+
+User may select another date from the calendar
+
+System must still enforce one report per project per date
+
+If today’s report already exists, keep existing logic:
+
+Message: “A report for today already exists”
+
+Options to edit today’s report or pick another date via the calendar picker
+
+3) Bi-Directional Task Progress Sync (Daily Report ↔ Tasks Tool)
+
+The Percent Done slider on a Daily Report task must always stay synchronized with the Project Tasks tool.
+
+Requirements:
+
+When a task is selected in a Daily Report, the slider must initialize to the current percent complete from the Tasks tool.
+
+Updating the slider in the Daily Report must update the task’s percent complete in the Tasks tool.
+
+Updating the task percent in the Tasks tool must reflect in Daily Reports when the report is opened or refreshed.
+
+No mismatches between task progress values are acceptable.
+
+4) Task Progress Slider UX Improvements
+
+Fix the progress slider on the Report Create/Edit page:
+
+Eliminate jumpiness and finicky behavior
+
+Improve touch and mouse interaction reliability
+
+Improve visibility:
+
+High-contrast track and thumb
+
+Adequate size for mouse and touch
+
+Always display the numeric percentage (e.g., “72%”) next to the slider
+
+5) Completed Report View: Close Button
+
+When viewing a Completed Daily Report:
+
+Display a Close button.
+
+Clicking Close must return the user to the Daily Reports List page for the project.
+
+6) Unsaved Changes Protection on Navigation
+
+If a user has unsaved changes on the Report Create/Edit page and attempts to leave using:
+
+browser back button, or
+
+in-app back navigation
+
+Show a confirmation modal:
+
+“Do you want to save changes before leaving?”
+
+Options:
+
+Save and Exit
+
+Don’t Save
+
+Cancel
+
+After exiting (save or not), user must land on the Daily Reports List page.
+
+7) Global Navigation Rule
+
+Implement a system-wide navigation rule:
+
+Exiting any page must return the user to the previous page.
+
+Daily Reports exception (explicit rule):
+
+Exiting the Report Create/Edit page by any method must always return to the Daily Reports List page.
+
+8) Photo Upload & Visibility Enhancements
+
+On the Report Create/Edit page:
+
+Each task entry must include an Upload Photos button.
+
+Each delivery entry must include an Upload Photos button.
+
+Uploaded photos must be:
+
+Visible within their respective task or delivery sections (thumbnail grid)
+
+Included in the generated PDF
+
+Photos may be removed only while the report is in Draft status.
+
+9) Project Photos Tool Integration
+
+Any photo uploaded to a Daily Report (task or delivery) must automatically appear in the Project Photos tool.
+
+Photos must retain contextual metadata:
+
+report ID and date
+
+associated task or delivery (if applicable)
+
+10) Weather Data Display Fix
+
+Weather data must display correctly on:
+
+Report Create/Edit page
+
+Daily Reports List page
+
+PDF output
+
+Fix cases where:
+
+weather is not shown on Create/Edit
+
+list/PDF shows “no weather data recorded”
+
+Weather must be fetched using project address and saved to the report, then immediately reflected in UI.
+
+11) Freeform Text Input Performance
+
+Fix slow typing behavior in all freeform text fields, including:
+
+Task comments
+
+Delivery descriptions
+
+Missing items details
+
+Text input must be responsive with no noticeable lag during normal typing.
+
+12) Global Dropdown Styling
+
+All dropdown menus across the entire system must use:
+
+black text on white background
+
+Applies to:
+
+dropdown lists
+
+selected values
+
+placeholder text (must remain clearly readable)

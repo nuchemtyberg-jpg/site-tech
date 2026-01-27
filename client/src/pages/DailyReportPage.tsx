@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useRoute, useLocation } from "wouter";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -35,6 +35,20 @@ import type { Task, Project } from "@shared/schema";
 
 const LABOR_TYPES = ["Foreman", "Operator", "Laborer"];
 const EQUIPMENT_TYPES = ["Mini Excavator", "Excavator", "Skid Steer", "Compactor"];
+
+// Debounce hook for text inputs
+function useDebouncedCallback<T extends (...args: any[]) => void>(callback: T, delay: number) {
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  
+  return useCallback((...args: Parameters<T>) => {
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+    }
+    timeoutRef.current = setTimeout(() => {
+      callback(...args);
+    }, delay);
+  }, [callback, delay]) as T;
+}
 
 interface TaskEntryWithDetails {
   id: number;
@@ -138,6 +152,16 @@ export default function DailyReportPage() {
   const [isDrawing, setIsDrawing] = useState(false);
   const [showAddTaskDialog, setShowAddTaskDialog] = useState(false);
   const [selectedTaskId, setSelectedTaskId] = useState<number | null>(null);
+  
+  // Local state for text fields to improve performance (debounced sync)
+  const [localTaskComments, setLocalTaskComments] = useState<Record<number, string>>({});
+  const [localTaskPercents, setLocalTaskPercents] = useState<Record<number, number>>({});
+  const [localDeliveryDescriptions, setLocalDeliveryDescriptions] = useState<Record<number, string>>({});
+  const [localDeliveryMissing, setLocalDeliveryMissing] = useState<Record<number, string>>({});
+  
+  // Unsaved changes protection
+  const [showLeaveDialog, setShowLeaveDialog] = useState(false);
+  const [pendingNavigation, setPendingNavigation] = useState<string | null>(null);
 
   const { data: project } = useQuery<Project>({
     queryKey: ['/api/projects', projectId],
@@ -161,6 +185,134 @@ export default function DailyReportPage() {
   }, [report?.notes]);
 
   const isCompleted = report?.status === 'completed';
+  
+  // Check if there are unsaved changes
+  const hasUnsavedChanges = useCallback(() => {
+    if (isCompleted) return false;
+    // Check if notes have changed
+    if (notes !== (report?.notes ?? '')) return true;
+    
+    // Check local task percentages - compare with actual server values
+    for (const [id, percent] of Object.entries(localTaskPercents)) {
+      const taskEntry = report?.taskEntries?.find(te => te.id === Number(id));
+      if (taskEntry && percent !== taskEntry.percentComplete) return true;
+    }
+    
+    // Check local task comments - compare with actual server values
+    for (const [id, comment] of Object.entries(localTaskComments)) {
+      const taskEntry = report?.taskEntries?.find(te => te.id === Number(id));
+      if (taskEntry && comment !== (taskEntry.comments ?? '')) return true;
+    }
+    
+    // Check local delivery descriptions - compare with actual server values
+    for (const [id, description] of Object.entries(localDeliveryDescriptions)) {
+      const delivery = report?.deliveryEntries?.find(d => d.id === Number(id));
+      if (delivery && description !== (delivery.description ?? '')) return true;
+    }
+    
+    // Check local missing items - compare with actual server values
+    for (const [id, missingDetails] of Object.entries(localDeliveryMissing)) {
+      const delivery = report?.deliveryEntries?.find(d => d.id === Number(id));
+      if (delivery && missingDetails !== (delivery.missingItemsDetails ?? '')) return true;
+    }
+    
+    return false;
+  }, [notes, report?.notes, localTaskPercents, localTaskComments, localDeliveryDescriptions, localDeliveryMissing, isCompleted, report?.taskEntries, report?.deliveryEntries]);
+  
+  // Warn on browser navigation (back button, close tab, etc.)
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (hasUnsavedChanges()) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+    
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [hasUnsavedChanges]);
+  
+  // Handle navigation with confirmation
+  const navigateWithCheck = (path: string) => {
+    if (hasUnsavedChanges()) {
+      setPendingNavigation(path);
+      setShowLeaveDialog(true);
+    } else {
+      setLocation(path);
+    }
+  };
+  
+  const handleSaveAndLeave = async () => {
+    // Save any pending changes
+    const savePromises: Promise<any>[] = [];
+    
+    // Save notes if changed
+    if (notes !== (report?.notes ?? '')) {
+      savePromises.push(updateReportMutation.mutateAsync({ notes }));
+    }
+    
+    // Save all pending task percentages
+    for (const [id, percent] of Object.entries(localTaskPercents)) {
+      const taskEntry = report?.taskEntries?.find(te => te.id === Number(id));
+      if (taskEntry && percent !== taskEntry.percentComplete) {
+        savePromises.push(updateTaskEntryMutation.mutateAsync({ id: Number(id), data: { percentComplete: percent } }));
+      }
+    }
+    
+    // Save all pending task comments
+    for (const [id, comment] of Object.entries(localTaskComments)) {
+      const taskEntry = report?.taskEntries?.find(te => te.id === Number(id));
+      if (taskEntry && comment !== (taskEntry.comments ?? '')) {
+        savePromises.push(updateTaskEntryMutation.mutateAsync({ id: Number(id), data: { comments: comment } }));
+      }
+    }
+    
+    // Save all pending delivery descriptions
+    for (const [id, description] of Object.entries(localDeliveryDescriptions)) {
+      const delivery = report?.deliveryEntries?.find(d => d.id === Number(id));
+      if (delivery && description !== (delivery.description ?? '')) {
+        savePromises.push(updateDeliveryMutation.mutateAsync({ id: Number(id), data: { description } }));
+      }
+    }
+    
+    // Save all pending missing items details
+    for (const [id, missingDetails] of Object.entries(localDeliveryMissing)) {
+      const delivery = report?.deliveryEntries?.find(d => d.id === Number(id));
+      if (delivery && missingDetails !== (delivery.missingItemsDetails ?? '')) {
+        savePromises.push(updateDeliveryMutation.mutateAsync({ id: Number(id), data: { missingItemsDetails: missingDetails } }));
+      }
+    }
+    
+    // Wait for all saves to complete
+    await Promise.all(savePromises);
+    
+    // Clear local state
+    setLocalTaskPercents({});
+    setLocalTaskComments({});
+    setLocalDeliveryDescriptions({});
+    setLocalDeliveryMissing({});
+    
+    setShowLeaveDialog(false);
+    if (pendingNavigation) {
+      setLocation(pendingNavigation);
+    } else {
+      setLocation(`/projects/${projectId}?tab=daily-reports`);
+    }
+  };
+  
+  const handleDontSaveAndLeave = () => {
+    setShowLeaveDialog(false);
+    // Clear local state
+    setLocalTaskPercents({});
+    setLocalTaskComments({});
+    setLocalDeliveryDescriptions({});
+    setLocalDeliveryMissing({});
+    if (pendingNavigation) {
+      setLocation(pendingNavigation);
+    } else {
+      setLocation(`/projects/${projectId}?tab=daily-reports`);
+    }
+  };
 
   const createReportMutation = useMutation({
     mutationFn: async (reportDate: string) => {
@@ -219,11 +371,13 @@ export default function DailyReportPage() {
   });
 
   const createTaskEntryMutation = useMutation({
-    mutationFn: async (data: { taskId: number; taskTitleSnapshot: string }) => {
+    mutationFn: async (data: { taskId: number; taskTitleSnapshot: string; percentComplete: number }) => {
       return apiRequest("POST", `/api/reports/${reportId}/task-entries`, data);
     },
     onSuccess: () => {
       refetchReport();
+      // Also invalidate project tasks to reflect any sync changes
+      queryClient.invalidateQueries({ queryKey: ['/api/projects', projectId, 'tasks'] });
       setShowAddTaskDialog(false);
       setSelectedTaskId(null);
     },
@@ -238,6 +392,10 @@ export default function DailyReportPage() {
     },
     onSuccess: () => {
       refetchReport();
+      // Invalidate project tasks so changes sync bi-directionally
+      if (projectId) {
+        queryClient.invalidateQueries({ queryKey: ['/api/projects', projectId, 'tasks'] });
+      }
     },
   });
 
@@ -317,11 +475,56 @@ export default function DailyReportPage() {
     },
   });
 
-  const handleSaveAndClose = () => {
-    if (notes !== report?.notes) {
-      updateReportMutation.mutate({ notes });
+  const handleSaveAndClose = async () => {
+    const savePromises: Promise<any>[] = [];
+    
+    // Save notes if changed
+    if (notes !== (report?.notes ?? '')) {
+      savePromises.push(updateReportMutation.mutateAsync({ notes }));
     }
-    setLocation(`/projects/${projectId}`);
+    
+    // Save all pending task percentages
+    for (const [id, percent] of Object.entries(localTaskPercents)) {
+      const taskEntry = report?.taskEntries?.find(te => te.id === Number(id));
+      if (taskEntry && percent !== taskEntry.percentComplete) {
+        savePromises.push(updateTaskEntryMutation.mutateAsync({ id: Number(id), data: { percentComplete: percent } }));
+      }
+    }
+    
+    // Save all pending task comments
+    for (const [id, comment] of Object.entries(localTaskComments)) {
+      const taskEntry = report?.taskEntries?.find(te => te.id === Number(id));
+      if (taskEntry && comment !== (taskEntry.comments ?? '')) {
+        savePromises.push(updateTaskEntryMutation.mutateAsync({ id: Number(id), data: { comments: comment } }));
+      }
+    }
+    
+    // Save all pending delivery descriptions
+    for (const [id, description] of Object.entries(localDeliveryDescriptions)) {
+      const delivery = report?.deliveryEntries?.find(d => d.id === Number(id));
+      if (delivery && description !== (delivery.description ?? '')) {
+        savePromises.push(updateDeliveryMutation.mutateAsync({ id: Number(id), data: { description } }));
+      }
+    }
+    
+    // Save all pending missing items details
+    for (const [id, missingDetails] of Object.entries(localDeliveryMissing)) {
+      const delivery = report?.deliveryEntries?.find(d => d.id === Number(id));
+      if (delivery && missingDetails !== (delivery.missingItemsDetails ?? '')) {
+        savePromises.push(updateDeliveryMutation.mutateAsync({ id: Number(id), data: { missingItemsDetails: missingDetails } }));
+      }
+    }
+    
+    // Wait for all saves to complete
+    await Promise.all(savePromises);
+    
+    // Clear local state
+    setLocalTaskPercents({});
+    setLocalTaskComments({});
+    setLocalDeliveryDescriptions({});
+    setLocalDeliveryMissing({});
+    
+    setLocation(`/projects/${projectId}?tab=daily-reports`);
   };
 
   const handleCompleteAndSign = () => {
@@ -420,6 +623,7 @@ export default function DailyReportPage() {
     createTaskEntryMutation.mutate({
       taskId: task.id,
       taskTitleSnapshot: task.title,
+      percentComplete: task.percentComplete || 0,
     });
   };
 
@@ -496,7 +700,7 @@ export default function DailyReportPage() {
       <div className="sticky top-0 z-10 bg-card border-b">
         <div className="flex items-center justify-between p-4">
           <div className="flex items-center gap-3">
-            <Button variant="ghost" size="icon" onClick={() => setLocation(`/projects/${projectId}`)}>
+            <Button variant="ghost" size="icon" onClick={() => isCompleted ? setLocation(`/projects/${projectId}?tab=daily-reports`) : navigateWithCheck(`/projects/${projectId}?tab=daily-reports`)}>
               <ArrowLeft className="h-5 w-5" />
             </Button>
             <div>
@@ -522,7 +726,15 @@ export default function DailyReportPage() {
             >
               <Download className="h-4 w-4 mr-2" /> Download PDF
             </Button>
-            {!isCompleted && (
+            {isCompleted ? (
+              <Button
+                variant="outline"
+                onClick={() => setLocation(`/projects/${projectId}?tab=daily-reports`)}
+                data-testid="button-close-report"
+              >
+                Close
+              </Button>
+            ) : (
               <>
                 <Button
                   variant="outline"
@@ -640,36 +852,54 @@ export default function DailyReportPage() {
                   {expandedTasks.has(taskEntry.id) && (
                     <CardContent className="pt-0 space-y-4">
                       {/* Progress Slider */}
-                      <div className="space-y-2">
-                        <Label>Progress: {taskEntry.percentComplete}%</Label>
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <Label>Progress</Label>
+                          <Badge variant="outline" className="text-lg font-bold px-3 py-1">
+                            {localTaskPercents[taskEntry.id] ?? taskEntry.percentComplete}%
+                          </Badge>
+                        </div>
                         <Slider
-                          value={[taskEntry.percentComplete]}
+                          value={[localTaskPercents[taskEntry.id] ?? taskEntry.percentComplete]}
                           min={0}
                           max={100}
                           step={5}
                           disabled={isCompleted}
+                          className="h-6"
                           onValueChange={(value) => {
-                            updateTaskEntryMutation.mutate({
-                              id: taskEntry.id,
-                              data: { percentComplete: value[0] },
-                            });
+                            setLocalTaskPercents(prev => ({ ...prev, [taskEntry.id]: value[0] }));
                           }}
+                          data-testid={`slider-percent-${taskEntry.id}`}
                         />
+                        <div className="flex justify-between text-xs text-muted-foreground">
+                          <span>0%</span>
+                          <span>25%</span>
+                          <span>50%</span>
+                          <span>75%</span>
+                          <span>100%</span>
+                        </div>
                       </div>
 
                       {/* Comments */}
                       <div className="space-y-2">
                         <Label>Comments</Label>
                         <Textarea
-                          value={taskEntry.comments || ''}
+                          value={localTaskComments[taskEntry.id] ?? taskEntry.comments ?? ''}
                           disabled={isCompleted}
                           onChange={(e) => {
-                            updateTaskEntryMutation.mutate({
-                              id: taskEntry.id,
-                              data: { comments: e.target.value },
-                            });
+                            setLocalTaskComments(prev => ({ ...prev, [taskEntry.id]: e.target.value }));
+                          }}
+                          onBlur={(e) => {
+                            const newValue = e.target.value;
+                            if (newValue !== (taskEntry.comments ?? '')) {
+                              updateTaskEntryMutation.mutate({
+                                id: taskEntry.id,
+                                data: { comments: newValue },
+                              });
+                            }
                           }}
                           placeholder="Add comments about this task..."
+                          data-testid={`textarea-comments-${taskEntry.id}`}
                         />
                       </div>
 
@@ -849,10 +1079,17 @@ export default function DailyReportPage() {
                     <div className="space-y-2">
                       <Label>Description</Label>
                       <Textarea
-                        value={delivery.description || ''}
+                        value={localDeliveryDescriptions[delivery.id] ?? delivery.description ?? ''}
                         disabled={isCompleted}
-                        onChange={(e) => updateDeliveryMutation.mutate({ id: delivery.id, data: { description: e.target.value } })}
+                        onChange={(e) => setLocalDeliveryDescriptions(prev => ({ ...prev, [delivery.id]: e.target.value }))}
+                        onBlur={(e) => {
+                          const newValue = e.target.value;
+                          if (newValue !== (delivery.description ?? '')) {
+                            updateDeliveryMutation.mutate({ id: delivery.id, data: { description: newValue } });
+                          }
+                        }}
                         placeholder="What was delivered?"
+                        data-testid={`textarea-delivery-desc-${delivery.id}`}
                       />
                     </div>
                     <div className="space-y-2">
@@ -877,10 +1114,17 @@ export default function DailyReportPage() {
                           <span className="text-destructive">*</span> Missing Items Details
                         </Label>
                         <Textarea
-                          value={delivery.missingItemsDetails || ''}
+                          value={localDeliveryMissing[delivery.id] ?? delivery.missingItemsDetails ?? ''}
                           disabled={isCompleted}
-                          onChange={(e) => updateDeliveryMutation.mutate({ id: delivery.id, data: { missingItemsDetails: e.target.value } })}
+                          onChange={(e) => setLocalDeliveryMissing(prev => ({ ...prev, [delivery.id]: e.target.value }))}
+                          onBlur={(e) => {
+                            const newValue = e.target.value;
+                            if (newValue !== (delivery.missingItemsDetails ?? '')) {
+                              updateDeliveryMutation.mutate({ id: delivery.id, data: { missingItemsDetails: newValue } });
+                            }
+                          }}
                           placeholder="Describe what was missing..."
+                          data-testid={`textarea-missing-items-${delivery.id}`}
                         />
                       </div>
                     )}
@@ -1072,6 +1316,29 @@ export default function DailyReportPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      
+      {/* Leave Confirmation Dialog */}
+      <Dialog open={showLeaveDialog} onOpenChange={setShowLeaveDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Unsaved Changes</DialogTitle>
+            <DialogDescription>
+              You have unsaved changes. What would you like to do?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="flex-col sm:flex-row gap-2">
+            <Button variant="outline" onClick={() => setShowLeaveDialog(false)} className="w-full sm:w-auto">
+              Cancel
+            </Button>
+            <Button variant="outline" onClick={handleDontSaveAndLeave} className="w-full sm:w-auto">
+              Don't Save
+            </Button>
+            <Button onClick={handleSaveAndLeave} className="w-full sm:w-auto" data-testid="button-save-and-exit">
+              Save and Exit
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

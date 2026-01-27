@@ -7,6 +7,65 @@ import { setupAuth, registerAuthRoutes } from "./replit_integrations/auth";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
 import type { User } from "@shared/schema";
 
+// Weather fetch helper using Open-Meteo API
+async function fetchWeatherData(address: string, city: string, state: string): Promise<{
+  weatherSummary: string;
+  temperature: string;
+  temperatureHigh: string;
+  temperatureLow: string;
+  windSpeed: string;
+} | null> {
+  try {
+    // Geocode the address using OpenStreetMap Nominatim
+    const locationQuery = `${address || ''} ${city || ''} ${state || ''}`.trim();
+    if (!locationQuery) return null;
+    
+    const geocodeUrl = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(locationQuery)}&format=json&limit=1`;
+    const geocodeRes = await fetch(geocodeUrl, {
+      headers: { 'User-Agent': 'SiteTech-Construction-App/1.0' }
+    });
+    
+    if (!geocodeRes.ok) return null;
+    const geocodeData = await geocodeRes.json();
+    if (!geocodeData.length) return null;
+    
+    const { lat, lon } = geocodeData[0];
+    
+    // Fetch weather from Open-Meteo
+    const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,wind_speed_10m,weather_code&daily=temperature_2m_max,temperature_2m_min&temperature_unit=fahrenheit&wind_speed_unit=mph&timezone=auto&forecast_days=1`;
+    const weatherRes = await fetch(weatherUrl);
+    
+    if (!weatherRes.ok) return null;
+    const weatherData = await weatherRes.json();
+    
+    // Map WMO weather codes to descriptions
+    const weatherCodes: Record<number, string> = {
+      0: 'Clear sky',
+      1: 'Mainly clear', 2: 'Partly cloudy', 3: 'Overcast',
+      45: 'Foggy', 48: 'Depositing rime fog',
+      51: 'Light drizzle', 53: 'Moderate drizzle', 55: 'Dense drizzle',
+      61: 'Slight rain', 63: 'Moderate rain', 65: 'Heavy rain',
+      71: 'Slight snow', 73: 'Moderate snow', 75: 'Heavy snow',
+      80: 'Slight rain showers', 81: 'Moderate rain showers', 82: 'Violent rain showers',
+      95: 'Thunderstorm', 96: 'Thunderstorm with slight hail', 99: 'Thunderstorm with heavy hail',
+    };
+    
+    const weatherCode = weatherData.current?.weather_code || 0;
+    const weatherSummary = weatherCodes[weatherCode] || 'Unknown';
+    
+    return {
+      weatherSummary,
+      temperature: weatherData.current?.temperature_2m?.toFixed(0) || '',
+      temperatureHigh: weatherData.daily?.temperature_2m_max?.[0]?.toFixed(0) || '',
+      temperatureLow: weatherData.daily?.temperature_2m_min?.[0]?.toFixed(0) || '',
+      windSpeed: weatherData.current?.wind_speed_10m?.toFixed(0) || '',
+    };
+  } catch (err) {
+    console.error('Weather fetch error:', err);
+    return null;
+  }
+}
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
@@ -340,11 +399,30 @@ export async function registerRoutes(
         });
       }
       
+      // Fetch weather data using project address
+      const project = await storage.getProject(projectId);
+      let weatherData: Awaited<ReturnType<typeof fetchWeatherData>> = null;
+      if (project) {
+        weatherData = await fetchWeatherData(
+          project.streetAddress || '',
+          project.city || '',
+          project.state || ''
+        );
+      }
+      
       const report = await storage.createDailyReport({
         ...rest,
         reportDate,
         projectId,
         status: 'draft',
+        ...(weatherData && {
+          weatherSummary: weatherData.weatherSummary,
+          temperature: weatherData.temperature,
+          temperatureHigh: weatherData.temperatureHigh,
+          temperatureLow: weatherData.temperatureLow,
+          windSpeed: weatherData.windSpeed,
+          weatherFetchedAt: new Date(),
+        }),
       });
       res.status(201).json(report);
     } catch (err) {

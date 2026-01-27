@@ -5,8 +5,8 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Calendar } from "@/components/ui/calendar";
 import {
   Dialog,
   DialogContent,
@@ -33,7 +33,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Plus, Trash2, Calendar, Cloud, CloudRain, Sun, Download, FileText } from "lucide-react";
+import { Plus, Trash2, Calendar as CalendarIcon, Cloud, CloudRain, Sun, Download, FileText } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import type { DailyReport, Project } from "@shared/schema";
@@ -60,7 +60,7 @@ export function DailyReportsTab({ project }: DailyReportsTabProps) {
   const [showNewReportDialog, setShowNewReportDialog] = useState(false);
   const [showDuplicateModal, setShowDuplicateModal] = useState(false);
   const [duplicateReportId, setDuplicateReportId] = useState<number | null>(null);
-  const [selectedDate, setSelectedDate] = useState(format(new Date(), "yyyy-MM-dd"));
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
 
   const { data: reports = [], isLoading: reportsLoading } = useQuery<DailyReport[]>({
     queryKey: ['/api/projects', project.id, 'reports'],
@@ -114,7 +114,8 @@ export function DailyReportsTab({ project }: DailyReportsTabProps) {
   });
 
   const handleCreateReport = () => {
-    createReportMutation.mutate(selectedDate);
+    const dateStr = format(selectedDate, "yyyy-MM-dd");
+    createReportMutation.mutate(dateStr);
   };
 
   const handleEditExistingReport = () => {
@@ -240,26 +241,27 @@ export function DailyReportsTab({ project }: DailyReportsTabProps) {
 
       {/* New Report Dialog */}
       <Dialog open={showNewReportDialog} onOpenChange={setShowNewReportDialog}>
-        <DialogContent>
+        <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Create New Daily Report</DialogTitle>
             <DialogDescription>
               Select a date for the new report. Default is today.
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="report-date">
-                <span className="text-destructive">*</span> Report Date
-              </Label>
-              <Input
-                id="report-date"
-                type="date"
-                value={selectedDate}
-                onChange={(e) => setSelectedDate(e.target.value)}
-                data-testid="input-report-date"
-              />
-            </div>
+          <div className="flex flex-col items-center py-4">
+            <Label className="self-start mb-2">
+              <span className="text-destructive">*</span> Report Date
+            </Label>
+            <Calendar
+              mode="single"
+              selected={selectedDate}
+              onSelect={(date) => date && setSelectedDate(date)}
+              className="rounded-md border"
+              data-testid="calendar-report-date"
+            />
+            <p className="text-sm text-muted-foreground mt-2">
+              Selected: {format(selectedDate, "MMMM d, yyyy")}
+            </p>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowNewReportDialog(false)}>
@@ -282,7 +284,7 @@ export function DailyReportsTab({ project }: DailyReportsTabProps) {
           <DialogHeader>
             <DialogTitle>Report Already Exists</DialogTitle>
             <DialogDescription>
-              A report for {safeFormatDate(selectedDate, 'MMM d, yyyy')} already exists.
+              A report for {format(selectedDate, 'MMM d, yyyy')} already exists.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="flex-col sm:flex-row gap-2">

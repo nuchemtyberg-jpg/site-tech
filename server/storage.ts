@@ -364,7 +364,7 @@ export class DatabaseStorage implements IStorage {
 
   // Daily Reports
   async getDailyReports(projectId: number): Promise<DailyReport[]> {
-    return await db.select().from(dailyReports).where(eq(dailyReports.projectId, projectId)).orderBy(desc(dailyReports.reportDate));
+    return await db.select().from(dailyReports).where(eq(dailyReports.projectId, projectId)).orderBy(desc(dailyReports.reportDate), desc(dailyReports.updatedAt));
   }
   async getDailyReport(id: number): Promise<DailyReport | undefined> {
     const [report] = await db.select().from(dailyReports).where(eq(dailyReports.id, id));
