@@ -305,11 +305,23 @@ export async function registerRoutes(
 
   app.put(api.dailyReports.update.path, async (req, res) => {
     try {
-      const input = api.dailyReports.update.input.parse(req.body);
+      const body = { ...req.body };
+      if (body.signedAt && typeof body.signedAt === 'string') {
+        body.signedAt = new Date(body.signedAt);
+      }
+      const input = api.dailyReports.update.input.parse(body);
       const report = await storage.updateDailyReport(Number(req.params.id), input);
+      if (!report) {
+        return res.status(404).json({ message: "Report not found" });
+      }
       res.json(report);
     } catch (err) {
-      return res.status(404).json({ message: "Report not found" });
+      if (err instanceof z.ZodError) {
+        console.error("Validation error:", err.errors);
+        return res.status(400).json({ message: err.errors[0].message });
+      }
+      console.error("Update report error:", err);
+      return res.status(500).json({ message: "Failed to update report" });
     }
   });
 

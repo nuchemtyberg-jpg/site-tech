@@ -18,6 +18,7 @@ import Equipment from "@/pages/Equipment";
 import EquipmentDetails from "@/pages/EquipmentDetails";
 import AuthPage from "@/pages/AuthPage";
 import PDFViewerPage from "@/pages/PDFViewerPage";
+import DailyReportPage from "@/pages/DailyReportPage";
 import NotFound from "@/pages/not-found";
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
@@ -67,6 +68,8 @@ function Router() {
       <Route path="/projects" component={() => <ProtectedRoute component={Projects} />} />
       <Route path="/projects/:id" component={() => <ProtectedRoute component={ProjectDetails} />} />
       <Route path="/projects/:projectId/pdf/:fileId" component={() => <ProtectedFullScreenRoute component={PDFViewerPage} />} />
+      <Route path="/projects/:projectId/reports/new" component={() => <ProtectedFullScreenRoute component={DailyReportPage} />} />
+      <Route path="/projects/:projectId/reports/:reportId" component={() => <ProtectedFullScreenRoute component={DailyReportPage} />} />
       <Route path="/customers" component={() => <ProtectedRoute component={Customers} />} />
       <Route path="/customers/:id" component={() => <ProtectedRoute component={CustomerDetails} />} />
       <Route path="/schedule" component={() => <ProtectedRoute component={Schedule} />} />

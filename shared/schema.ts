@@ -146,6 +146,11 @@ export const dailyReports = pgTable("daily_reports", {
   notes: text("notes"),
   createdBy: text("created_by"),
   lastModifiedBy: text("last_modified_by"),
+  isSigned: boolean("is_signed").default(false),
+  signatureType: text("signature_type"), // 'freehand' or 'typed'
+  signatureData: text("signature_data"), // base64 for freehand, text for typed
+  signedByName: text("signed_by_name"),
+  signedAt: timestamp("signed_at"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
