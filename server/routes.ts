@@ -355,16 +355,33 @@ export async function registerRoutes(
     const report = await storage.getDailyReport(Number(req.params.id));
     if (!report) return res.status(404).json({ message: "Report not found" });
     
+    // Check if this is the latest report for the project
+    const latestReport = await storage.getLatestDailyReportForProject(report.projectId);
+    const isLatestReport = latestReport?.id === report.id;
+    
     // Fetch related data
     const taskEntries = await storage.getDailyReportTaskEntries(report.id);
     const deliveryEntries = await storage.getDailyReportDeliveryEntries(report.id);
     
-    // For each task entry, get labor lines, equipment lines, and photos
+    // For each task entry, get labor lines, equipment lines, photos, and snapshot bounds
     const taskEntriesWithDetails = await Promise.all(taskEntries.map(async (entry) => {
       const laborLines = await storage.getDailyReportLaborLines(entry.id);
       const equipmentLines = await storage.getDailyReportEquipmentLines(entry.id);
       const photos = await storage.getDailyReportPhotos(undefined, entry.id, undefined);
-      return { ...entry, laborLines, equipmentLines, photos };
+      const bounds = await storage.getTaskSnapshotBounds(
+        report.projectId,
+        entry.taskId,
+        report.id,
+        new Date(report.reportDate)
+      );
+      return { 
+        ...entry, 
+        laborLines, 
+        equipmentLines, 
+        photos,
+        allowedMin: bounds.prevSnapshot,
+        allowedMax: bounds.nextSnapshot
+      };
     }));
     
     // For each delivery entry, get photos
@@ -375,6 +392,7 @@ export async function registerRoutes(
     
     res.json({
       ...report,
+      isLatestReport,
       taskEntries: taskEntriesWithDetails,
       deliveryEntries: deliveryEntriesWithPhotos,
     });
@@ -829,21 +847,47 @@ export async function registerRoutes(
       if (!entry) return res.status(404).json({ message: "Task entry not found" });
       
       const report = await storage.getDailyReport(entry.reportId);
-      if (report?.status === 'completed') return res.status(403).json({ message: "Cannot edit a completed report" });
+      if (!report) return res.status(404).json({ message: "Report not found" });
+      if (report.status === 'completed') return res.status(403).json({ code: "REPORT_LOCKED", message: "Cannot edit a completed report" });
+      
+      // Validate monotonic constraint for percentComplete changes
+      if (req.body.percentComplete !== undefined) {
+        const newPercent = req.body.percentComplete;
+        const bounds = await storage.getTaskSnapshotBounds(
+          report.projectId, 
+          entry.taskId, 
+          report.id, 
+          new Date(report.reportDate)
+        );
+        
+        if (newPercent < bounds.prevSnapshot || newPercent > bounds.nextSnapshot) {
+          return res.status(409).json({
+            code: "SNAPSHOT_OUT_OF_RANGE",
+            message: `Value must be between ${bounds.prevSnapshot}% (previous report) and ${bounds.nextSnapshot}% (later report).`,
+            allowedMin: bounds.prevSnapshot,
+            allowedMax: bounds.nextSnapshot
+          });
+        }
+      }
       
       const updated = await storage.updateDailyReportTaskEntry(entryId, req.body);
       
-      // Sync progress back to the main task
+      // Only sync progress to the main task if this is the latest report for the project
       if (req.body.percentComplete !== undefined) {
-        const task = await storage.getTask(entry.taskId);
-        if (task) {
-          const newStatus = req.body.percentComplete === 0 ? 'pending' 
-            : req.body.percentComplete === 100 ? 'completed' 
-            : 'in_progress';
-          await storage.updateTask(entry.taskId, { 
-            percentComplete: req.body.percentComplete,
-            status: newStatus
-          });
+        const latestReport = await storage.getLatestDailyReportForProject(report.projectId);
+        const isLatestReport = latestReport?.id === report.id;
+        
+        if (isLatestReport) {
+          const task = await storage.getTask(entry.taskId);
+          if (task) {
+            const newStatus = req.body.percentComplete === 0 ? 'pending' 
+              : req.body.percentComplete === 100 ? 'completed' 
+              : 'in_progress';
+            await storage.updateTask(entry.taskId, { 
+              percentComplete: req.body.percentComplete,
+              status: newStatus
+            });
+          }
         }
       }
       

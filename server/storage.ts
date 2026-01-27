@@ -138,6 +138,10 @@ export interface IStorage {
   createDailyReportTaskEntry(entry: InsertDailyReportTaskEntry): Promise<DailyReportTaskEntry>;
   updateDailyReportTaskEntry(id: number, entry: Partial<InsertDailyReportTaskEntry>): Promise<DailyReportTaskEntry>;
   deleteDailyReportTaskEntry(id: number): Promise<void>;
+  
+  // Snapshot validation helpers
+  getLatestDailyReportForProject(projectId: number): Promise<DailyReport | undefined>;
+  getTaskSnapshotBounds(projectId: number, taskId: number, currentReportId: number, currentReportDate: Date): Promise<{ prevSnapshot: number; nextSnapshot: number }>;
 
   // New Daily Report Labor Lines
   getDailyReportLaborLines(taskEntryId: number): Promise<DailyReportLaborLine[]>;
@@ -665,6 +669,65 @@ export class DatabaseStorage implements IStorage {
   }
   async deleteDailyReportPhoto(id: number): Promise<void> {
     await db.delete(dailyReportPhotos).where(eq(dailyReportPhotos.id, id));
+  }
+
+  // Snapshot validation helpers
+  async getLatestDailyReportForProject(projectId: number): Promise<DailyReport | undefined> {
+    // Get the latest report by reportDate, then by updatedAt as tie-breaker
+    const [report] = await db
+      .select()
+      .from(dailyReports)
+      .where(eq(dailyReports.projectId, projectId))
+      .orderBy(desc(dailyReports.reportDate), desc(dailyReports.updatedAt))
+      .limit(1);
+    return report;
+  }
+
+  async getTaskSnapshotBounds(
+    projectId: number, 
+    taskId: number, 
+    currentReportId: number, 
+    currentReportDate: Date
+  ): Promise<{ prevSnapshot: number; nextSnapshot: number }> {
+    // Get all reports for this project containing this task, ordered by date
+    const reportsWithTask = await db
+      .select({
+        reportId: dailyReports.id,
+        reportDate: dailyReports.reportDate,
+        updatedAt: dailyReports.updatedAt,
+        percentComplete: dailyReportTaskEntries.percentComplete,
+      })
+      .from(dailyReports)
+      .innerJoin(dailyReportTaskEntries, eq(dailyReportTaskEntries.reportId, dailyReports.id))
+      .where(
+        and(
+          eq(dailyReports.projectId, projectId),
+          eq(dailyReportTaskEntries.taskId, taskId)
+        )
+      )
+      .orderBy(dailyReports.reportDate, dailyReports.updatedAt);
+
+    // Find bounds based on time ordering
+    let prevSnapshot = 0;
+    let nextSnapshot = 100;
+
+    for (let i = 0; i < reportsWithTask.length; i++) {
+      const report = reportsWithTask[i];
+      if (report.reportId === currentReportId) continue;
+
+      const reportTime = new Date(report.reportDate).getTime();
+      const currentTime = new Date(currentReportDate).getTime();
+      
+      if (reportTime < currentTime || (reportTime === currentTime && new Date(report.updatedAt!).getTime() < new Date(currentReportDate).getTime())) {
+        // This is an earlier report
+        prevSnapshot = Math.max(prevSnapshot, report.percentComplete);
+      } else {
+        // This is a later report
+        nextSnapshot = Math.min(nextSnapshot, report.percentComplete);
+      }
+    }
+
+    return { prevSnapshot, nextSnapshot };
   }
 }
 
