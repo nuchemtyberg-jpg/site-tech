@@ -204,6 +204,10 @@ export default function DailyReportPage() {
       toast({ title: "Report completed and signed" });
       setShowSignatureDialog(false);
       refetchReport();
+      // Invalidate the reports list so the status updates on the list page
+      if (projectId) {
+        queryClient.invalidateQueries({ queryKey: ['/api/projects', projectId, 'reports'] });
+      }
     },
     onError: (error: any) => {
       if (error.message?.includes("403")) {
