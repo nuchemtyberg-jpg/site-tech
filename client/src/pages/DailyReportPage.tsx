@@ -28,9 +28,11 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { ArrowLeft, Save, Plus, Trash2, Cloud, Truck, ChevronDown, ChevronUp, CheckCircle, PenLine, Download } from "lucide-react";
+import { ArrowLeft, Save, Plus, Trash2, Cloud, Truck, ChevronDown, ChevronUp, CheckCircle, PenLine, Download, Camera, X } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
+import { ObjectUploader } from "@/components/ObjectUploader";
+import { useUpload } from "@/hooks/use-upload";
 import type { Task, Project } from "@shared/schema";
 
 const LABOR_TYPES = ["Foreman", "Operator", "Laborer"];
@@ -475,6 +477,23 @@ export default function DailyReportPage() {
     },
   });
 
+  // Photo mutations
+  const { getUploadParameters } = useUpload();
+  
+  const createPhotoMutation = useMutation({
+    mutationFn: async (data: { taskEntryId?: number; deliveryEntryId?: number; url: string }) => {
+      return apiRequest("POST", `/api/daily-report-photos`, data);
+    },
+    onSuccess: () => refetchReport(),
+  });
+
+  const deletePhotoMutation = useMutation({
+    mutationFn: async (id: number) => {
+      return apiRequest("DELETE", `/api/daily-report-photos/${id}`);
+    },
+    onSuccess: () => refetchReport(),
+  });
+
   const handleSaveAndClose = async () => {
     const savePromises: Promise<any>[] = [];
     
@@ -643,7 +662,7 @@ export default function DailyReportPage() {
         <div className="sticky top-0 z-10 bg-card border-b">
           <div className="flex items-center justify-between p-4">
             <div className="flex items-center gap-3">
-              <Button variant="ghost" size="icon" onClick={() => setLocation(`/projects/${projectId}`)}>
+              <Button variant="ghost" size="icon" onClick={() => setLocation(`/projects/${projectId}?tab=daily-reports`)}>
                 <ArrowLeft className="h-5 w-5" />
               </Button>
               <div>
@@ -672,7 +691,7 @@ export default function DailyReportPage() {
                 />
               </div>
               <div className="flex gap-2 justify-end">
-                <Button variant="outline" onClick={() => setLocation(`/projects/${projectId}`)}>
+                <Button variant="outline" onClick={() => setLocation(`/projects/${projectId}?tab=daily-reports`)}>
                   Cancel
                 </Button>
                 <Button
@@ -1012,6 +1031,56 @@ export default function DailyReportPage() {
                           </div>
                         ))}
                       </div>
+
+                      {/* Photos Section */}
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <Label>Photos</Label>
+                          {!isCompleted && (
+                            <ObjectUploader
+                              maxNumberOfFiles={5}
+                              onGetUploadParameters={getUploadParameters}
+                              onComplete={(result) => {
+                                result.successful?.forEach((file) => {
+                                  const uploadUrl = file.uploadURL;
+                                  if (uploadUrl) {
+                                    const objectPath = uploadUrl.split('?')[0];
+                                    createPhotoMutation.mutate({ taskEntryId: taskEntry.id, url: objectPath });
+                                  }
+                                });
+                              }}
+                            >
+                              <Camera className="h-3 w-3 mr-1" /> Upload Photos
+                            </ObjectUploader>
+                          )}
+                        </div>
+                        {taskEntry.photos && taskEntry.photos.length > 0 && (
+                          <div className="grid grid-cols-3 gap-2">
+                            {taskEntry.photos.map((photo) => (
+                              <div key={photo.id} className="relative group">
+                                <img
+                                  src={photo.url}
+                                  alt={photo.caption || "Task photo"}
+                                  className="w-full h-24 object-cover rounded border"
+                                />
+                                {!isCompleted && (
+                                  <Button
+                                    variant="destructive"
+                                    size="icon"
+                                    className="absolute top-1 right-1 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+                                    onClick={() => deletePhotoMutation.mutate(photo.id)}
+                                  >
+                                    <X className="h-3 w-3" />
+                                  </Button>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {(!taskEntry.photos || taskEntry.photos.length === 0) && (
+                          <p className="text-sm text-muted-foreground">No photos uploaded.</p>
+                        )}
+                      </div>
                     </CardContent>
                   )}
                 </Card>
@@ -1128,9 +1197,58 @@ export default function DailyReportPage() {
                         />
                       </div>
                     )}
-                    <p className="text-sm text-muted-foreground">
-                      Please upload photos of the delivery slip and delivered items.
-                    </p>
+
+                    {/* Photos Section */}
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <Label>Photos</Label>
+                        {!isCompleted && (
+                          <ObjectUploader
+                            maxNumberOfFiles={5}
+                            onGetUploadParameters={getUploadParameters}
+                            onComplete={(result) => {
+                              result.successful?.forEach((file) => {
+                                const uploadUrl = file.uploadURL;
+                                if (uploadUrl) {
+                                  const objectPath = uploadUrl.split('?')[0];
+                                  createPhotoMutation.mutate({ deliveryEntryId: delivery.id, url: objectPath });
+                                }
+                              });
+                            }}
+                          >
+                            <Camera className="h-3 w-3 mr-1" /> Upload Photos
+                          </ObjectUploader>
+                        )}
+                      </div>
+                      {delivery.photos && delivery.photos.length > 0 && (
+                        <div className="grid grid-cols-3 gap-2">
+                          {delivery.photos.map((photo) => (
+                            <div key={photo.id} className="relative group">
+                              <img
+                                src={photo.url}
+                                alt={photo.caption || "Delivery photo"}
+                                className="w-full h-24 object-cover rounded border"
+                              />
+                              {!isCompleted && (
+                                <Button
+                                  variant="destructive"
+                                  size="icon"
+                                  className="absolute top-1 right-1 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+                                  onClick={() => deletePhotoMutation.mutate(photo.id)}
+                                >
+                                  <X className="h-3 w-3" />
+                                </Button>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {(!delivery.photos || delivery.photos.length === 0) && (
+                        <p className="text-sm text-muted-foreground">
+                          Please upload photos of the delivery slip and delivered items.
+                        </p>
+                      )}
+                    </div>
                   </CardContent>
                 </Card>
               ))

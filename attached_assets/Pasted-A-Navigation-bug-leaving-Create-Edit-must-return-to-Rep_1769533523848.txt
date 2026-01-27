@@ -1,0 +1,233 @@
+A) Navigation bug: leaving Create/Edit must return to Report List (not Project main)
+Requirement
+
+From DailyReportCreateOrEditPage, any exit path must land on Daily Reports List for that project:
+
+Save (save + close)
+
+Complete & Sign (save + close)
+
+Close button (if you have it)
+
+Back button (browser or in-app)
+
+URL change / route navigation away (guarded if dirty)
+
+Implementation rules
+
+Do not use “go back” generically (navigate(-1)), because your history stack can land you on the project main page.
+
+Use an explicit route target:
+
+navigate(/projects/${projectId}/daily-reports) after any exit.
+
+Dirty form guard:
+
+If dirty and user tries to leave via back/nav, show modal:
+
+Save & Exit → save → navigate to list
+
+Don’t Save → navigate to list
+
+Cancel → stay
+
+Acceptance criteria
+
+Reproduce your bug scenario: enter report from project main, hit back → must land on Daily Reports List, always.
+
+B) Missing upload photo buttons on Create/Edit page
+Requirement
+
+On the Create/Edit page:
+
+Each Task Entry must display an Upload Photos button.
+
+Each Delivery Entry must display an Upload Photos button.
+
+Uploaded photos must immediately appear in the correct section:
+
+Task photos show inside that task entry (thumbnail grid)
+
+Delivery photos show inside that delivery entry (thumbnail grid)
+
+Implementation rules
+
+UI placement:
+
+Task Entry header area: “Photos” + Upload button
+
+Delivery Entry header area: “Photos” + Upload button
+
+Upload flow:
+
+User selects files
+
+Upload to /uploads → returns URL(s)
+
+Create DailyReportPhoto rows linking taskEntryId or deliveryEntryId
+
+Refresh that entry’s photo list
+
+Acceptance criteria
+
+You can upload photos for every task and delivery without leaving the page, and they show instantly.
+
+C) Task % slider not updating Tasks tool (and the “multiple reports per task” conflict)
+
+You’re right: if every report can set task percent independently, you’ve created a paradox:
+
+One task has one real percent complete
+
+But you’re storing many report snapshots of progress for the same task
+
+So we need to define “truth” vs “history.”
+
+Updated model: Task progress is authoritative; Daily Reports store snapshots
+
+The Tasks tool holds the authoritative task.percentComplete.
+
+Each Daily Report Task Entry stores percentCompleteSnapshot for that date.
+
+Two-way sync should be restricted to avoid conflicting “history rewrites.”
+
+New Rules for Progress Sync + Validation
+1) Sync rule: Two-way sync applies ONLY to the latest report for that project
+Requirement
+
+Only the latest daily report (by reportDate, tie-break by updatedAt) is allowed to push changes to the Tasks tool.
+
+When editing the latest report:
+
+Changing the slider updates:
+
+the report task entry snapshot, AND
+
+the task’s authoritative percent in the Tasks tool
+
+When editing any older report:
+
+Changing the slider updates only the snapshot in that report
+
+It must NOT update the Tasks tool
+
+UI requirement
+
+On non-latest reports, the slider must show a clear indicator:
+
+“Historical snapshot (does not update task progress)” or similar.
+
+2) Monotonic constraint across reports for the same task
+
+You also asked for this:
+
+no earlier report can be updated with a value bigger than a later report or lower than a previous report
+
+That’s a monotonic time-series rule. Good. It prevents nonsense.
+
+Requirement
+
+For each (projectId, taskId), snapshots across reports must be non-decreasing over time:
+
+If report A is earlier than report B, then:
+
+snapshotA <= snapshotB
+
+Editing constraints
+
+When editing a report’s snapshot for a given task:
+
+Determine:
+
+prevSnapshot = snapshot from the nearest earlier report containing that task (or 0 if none)
+
+nextSnapshot = snapshot from the nearest later report containing that task (or 100 if none)
+
+Enforce:
+
+newSnapshot >= prevSnapshot
+
+newSnapshot <= nextSnapshot
+
+Behavior
+
+If user attempts invalid value:
+
+Block save and show message:
+
+“Value must be between X% (previous report) and Y% (later report).”
+
+3) Relationship between the latest report and the Tasks tool
+
+Since the Tasks tool is authoritative, define this cleanly:
+
+Requirement
+
+For the latest report only:
+
+Setting snapshot also sets task.percentComplete to the same value (immediate or on save).
+
+For older reports:
+
+Snapshot updates are constrained (monotonic), but never push to task.
+
+Optional but smart
+
+When opening the latest report and selecting a task:
+
+Initialize slider to task.percentComplete (authoritative)
+
+Also update the snapshot to match, unless the report is completed/locked.
+
+Server-side rules (do not rely on UI)
+
+These constraints must be enforced on the backend.
+
+Endpoint behavior
+
+When updating a task entry snapshot:
+
+Identify whether this report is the project’s latest report.
+
+Enforce monotonic constraints using prev/next snapshots.
+
+If latest report:
+
+Also update Tasks tool percentComplete to newSnapshot
+
+If not latest:
+
+Do not touch Tasks tool
+
+Return explicit errors:
+
+409 SNAPSHOT_OUT_OF_RANGE with allowed min/max
+
+403 REPORT_LOCKED if completed
+
+Acceptance tests (the “prove it works” checklist)
+
+Navigation
+
+Back/close/save/complete all return to report list, never project main.
+
+Photos
+
+Upload buttons exist for task + delivery entries.
+
+Photos show in-page and on PDF.
+
+Latest-only sync
+
+Update slider in latest report → Tasks tool updates.
+
+Update slider in older report → Tasks tool does not update.
+
+Monotonic validation
+
+Try setting an older report above a later one → blocked.
+
+Try setting a middle report below an earlier one → blocked.
+
+Locked report
+
+Completed report cannot be edited, including snapshots and photos.
