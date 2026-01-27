@@ -1,6 +1,5 @@
 import { clsx, type ClassValue } from "clsx"
 import { twMerge } from "tailwind-merge"
-import ExifReader from "exifreader"
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
@@ -8,6 +7,8 @@ export function cn(...inputs: ClassValue[]) {
 
 export async function extractPhotoDate(file: File): Promise<string | null> {
   try {
+    // Dynamic import to avoid issues with module loading
+    const ExifReader = await import("exifreader");
     const arrayBuffer = await file.arrayBuffer();
     const tags = ExifReader.load(arrayBuffer, { expanded: true });
     
