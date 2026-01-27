@@ -85,6 +85,8 @@ export const taskStatusHistory = pgTable("task_status_history", {
   changedByUserId: text("changed_by_user_id").notNull(),
   changedByName: text("changed_by_name").notNull(),
   changedAt: timestamp("changed_at").defaultNow(),
+  source: text("source").default("task"),
+  dailyReportId: integer("daily_report_id"),
 });
 
 export const insertTaskStatusHistorySchema = createInsertSchema(taskStatusHistory).omit({ id: true, changedAt: true });

@@ -880,13 +880,53 @@ export async function registerRoutes(
         if (isLatestReport) {
           const task = await storage.getTask(entry.taskId);
           if (task) {
-            const newStatus = req.body.percentComplete === 0 ? 'pending' 
-              : req.body.percentComplete === 100 ? 'completed' 
+            const newPercent = req.body.percentComplete;
+            const newStatus = newPercent === 0 ? 'pending' 
+              : newPercent === 100 ? 'completed' 
               : 'in_progress';
+            
+            const statusChanged = newStatus !== task.status;
+            const percentChanged = newPercent !== task.percentComplete;
+            
             await storage.updateTask(entry.taskId, { 
-              percentComplete: req.body.percentComplete,
+              percentComplete: newPercent,
               status: newStatus
             });
+            
+            // Create status history entry for changes from Daily Report
+            if (statusChanged || percentChanged) {
+              try {
+                let changedByUserId = "unknown";
+                let changedByName = "Unknown User";
+                
+                if (req.user) {
+                  const user = req.user as User;
+                  if (user.id) {
+                    changedByUserId = user.id;
+                  }
+                  const fullName = [user.firstName, user.lastName].filter(Boolean).join(' ');
+                  if (fullName) {
+                    changedByName = fullName;
+                  } else if (user.email) {
+                    changedByName = user.email;
+                  }
+                }
+                
+                await storage.createTaskStatusHistory({
+                  taskId: entry.taskId,
+                  previousStatus: statusChanged ? task.status : null,
+                  newStatus: statusChanged ? newStatus : null,
+                  previousPercentComplete: percentChanged ? task.percentComplete : null,
+                  newPercentComplete: percentChanged ? newPercent : null,
+                  changedByUserId,
+                  changedByName,
+                  source: "daily_report",
+                  dailyReportId: report.id,
+                });
+              } catch (historyErr) {
+                console.error("Failed to create task status history from daily report:", historyErr);
+              }
+            }
           }
         }
       }

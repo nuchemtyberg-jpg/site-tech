@@ -3,6 +3,7 @@ import { useProject, useDeleteProject, useUpdateProject } from "@/hooks/use-proj
 import { useProjectTasks, useCreateTask, useDeleteTask, useUpdateTask, useTaskStatusHistory } from "@/hooks/use-tasks";
 import { useProjectFiles, useProjectFolders, useCreateFile, useDeleteFile, useCreateFolder, useDeleteFolder } from "@/hooks/use-files";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { 
   ArrowLeft, 
   MapPin, 
@@ -2165,7 +2166,14 @@ export default function ProjectDetails() {
                   taskStatusHistory.map((entry) => (
                     <div key={entry.id} className="text-xs bg-muted/50 p-2 rounded-md" data-testid={`history-entry-${entry.id}`}>
                       <div className="flex justify-between items-start gap-2">
-                        <span className="font-medium">{entry.changedByName}</span>
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium">{entry.changedByName}</span>
+                          {entry.source === "daily_report" && (
+                            <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                              via Daily Report
+                            </Badge>
+                          )}
+                        </div>
                         <span className="text-black dark:text-white whitespace-nowrap">
                           {entry.changedAt && new Date(entry.changedAt).toLocaleDateString()} {entry.changedAt && new Date(entry.changedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                         </span>
