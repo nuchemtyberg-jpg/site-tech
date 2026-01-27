@@ -538,6 +538,24 @@ export async function registerRoutes(
       const { PDFDocument, StandardFonts, rgb, degrees } = await import("pdf-lib");
       
       const reportId = Number(req.params.id);
+      const includePhotos = req.query.includePhotos === 'true';
+      
+      // Helper to convert photo URL to proxy path
+      const getProxyPath = (url: string): string => {
+        if (!url) return url;
+        if (url.startsWith('/objects/')) return url;
+        if (url.startsWith('/.private/uploads/')) return url.replace('/.private/uploads/', '/objects/uploads/');
+        if (url.startsWith('/uploads/')) return `/objects${url}`;
+        if (url.includes('storage.googleapis.com')) {
+          const match = url.match(/\/(?:\.private\/)?uploads\/([a-f0-9-]+)/);
+          if (match) return `/objects/uploads/${match[1]}`;
+        }
+        return url;
+      };
+      
+      // Get base URL for fetching photos
+      const baseUrl = `${req.protocol}://${req.get('host')}`;
+      
       const report = await storage.getDailyReport(reportId);
       if (!report) {
         return res.status(404).json({ message: "Report not found" });
@@ -547,12 +565,21 @@ export async function registerRoutes(
       const taskEntries = await storage.getDailyReportTaskEntries(reportId);
       const deliveryEntries = await storage.getDailyReportDeliveryEntries(reportId);
       
-      // Load labor and equipment lines for each task entry
+      // Load labor, equipment lines, and photos for each task entry
       const taskEntriesWithLines = await Promise.all(
         taskEntries.map(async (entry) => ({
           ...entry,
           laborLines: await storage.getDailyReportLaborLines(entry.id),
           equipmentLines: await storage.getDailyReportEquipmentLines(entry.id),
+          photos: includePhotos ? await storage.getDailyReportPhotos(undefined, entry.id, undefined) : [],
+        }))
+      );
+      
+      // Load photos for delivery entries if including photos
+      const deliveryEntriesWithPhotos = await Promise.all(
+        deliveryEntries.map(async (entry) => ({
+          ...entry,
+          photos: includePhotos ? await storage.getDailyReportPhotos(undefined, undefined, entry.id) : [],
         }))
       );
       
@@ -696,6 +723,61 @@ export async function registerRoutes(
               addNewPageIfNeeded();
             }
           }
+          
+          // Add photos for this task entry if any
+          if (entry.photos && entry.photos.length > 0) {
+            drawText("  Photos:", margin + 20, y, 9, true);
+            y -= lineHeight;
+            for (const photo of entry.photos) {
+              try {
+                // Convert URL to proxy path and fetch the image
+                const imagePath = getProxyPath(photo.url);
+                
+                // Fetch the image from the object storage proxy
+                const imageResponse = await fetch(`${baseUrl}${imagePath}`);
+                if (imageResponse.ok) {
+                  const imageBuffer = await imageResponse.arrayBuffer();
+                  const imageBytes = new Uint8Array(imageBuffer);
+                  
+                  // Try to embed as JPEG or PNG
+                  let embeddedImage;
+                  try {
+                    embeddedImage = await pdfDoc.embedJpg(imageBytes);
+                  } catch {
+                    try {
+                      embeddedImage = await pdfDoc.embedPng(imageBytes);
+                    } catch {
+                      // Skip if can't embed
+                      continue;
+                    }
+                  }
+                  
+                  // Calculate dimensions to fit within page
+                  const maxWidth = 150;
+                  const maxHeight = 100;
+                  const scale = Math.min(maxWidth / embeddedImage.width, maxHeight / embeddedImage.height);
+                  const imgWidth = embeddedImage.width * scale;
+                  const imgHeight = embeddedImage.height * scale;
+                  
+                  // Check if we need a new page
+                  if (y - imgHeight < 80) {
+                    page = pdfDoc.addPage([612, 792]);
+                    y = height - 50;
+                    if (report.status === 'draft') {
+                      page.drawText("DRAFT", { x: 200, y: 400, size: 80, font: boldFont, color: rgb(0.9, 0.9, 0.9), rotate: degrees(45) });
+                    }
+                  }
+                  
+                  page.drawImage(embeddedImage, { x: margin + 30, y: y - imgHeight, width: imgWidth, height: imgHeight });
+                  y -= imgHeight + 10;
+                }
+              } catch (err) {
+                // Skip photos that fail to load
+                console.error("Failed to embed task photo:", err);
+              }
+            }
+          }
+          
           y -= 5;
         }
       }
@@ -708,11 +790,11 @@ export async function registerRoutes(
       page.drawLine({ start: { x: margin, y: y + 6 }, end: { x: 562, y: y + 6 }, thickness: 0.5, color: rgb(0.7, 0.7, 0.7) });
       y -= 4;
       
-      if (deliveryEntries.length === 0) {
+      if (deliveryEntriesWithPhotos.length === 0) {
         drawText("No deliveries recorded", margin + 10, y, 10);
         y -= lineHeight;
       } else {
-        for (const delivery of deliveryEntries) {
+        for (const delivery of deliveryEntriesWithPhotos) {
           addNewPageIfNeeded();
           drawText(`• ${delivery.vendor || 'Unknown vendor'}`, margin + 10, y, 10, true);
           y -= lineHeight;
@@ -731,6 +813,61 @@ export async function registerRoutes(
             drawText(`  Missing: ${delivery.missingItemsDetails}`, margin + 20, y, 9);
             y -= lineHeight;
           }
+          
+          // Add photos for this delivery if any
+          if (delivery.photos && delivery.photos.length > 0) {
+            drawText("  Photos:", margin + 20, y, 9, true);
+            y -= lineHeight;
+            for (const photo of delivery.photos) {
+              try {
+                // Convert URL to proxy path and fetch the image
+                const imagePath = getProxyPath(photo.url);
+                
+                // Fetch the image from the object storage proxy
+                const imageResponse = await fetch(`${baseUrl}${imagePath}`);
+                if (imageResponse.ok) {
+                  const imageBuffer = await imageResponse.arrayBuffer();
+                  const imageBytes = new Uint8Array(imageBuffer);
+                  
+                  // Try to embed as JPEG or PNG
+                  let embeddedImage;
+                  try {
+                    embeddedImage = await pdfDoc.embedJpg(imageBytes);
+                  } catch {
+                    try {
+                      embeddedImage = await pdfDoc.embedPng(imageBytes);
+                    } catch {
+                      // Skip if can't embed
+                      continue;
+                    }
+                  }
+                  
+                  // Calculate dimensions to fit within page
+                  const maxWidth = 150;
+                  const maxHeight = 100;
+                  const scale = Math.min(maxWidth / embeddedImage.width, maxHeight / embeddedImage.height);
+                  const imgWidth = embeddedImage.width * scale;
+                  const imgHeight = embeddedImage.height * scale;
+                  
+                  // Check if we need a new page
+                  if (y - imgHeight < 80) {
+                    page = pdfDoc.addPage([612, 792]);
+                    y = height - 50;
+                    if (report.status === 'draft') {
+                      page.drawText("DRAFT", { x: 200, y: 400, size: 80, font: boldFont, color: rgb(0.9, 0.9, 0.9), rotate: degrees(45) });
+                    }
+                  }
+                  
+                  page.drawImage(embeddedImage, { x: margin + 30, y: y - imgHeight, width: imgWidth, height: imgHeight });
+                  y -= imgHeight + 10;
+                }
+              } catch (err) {
+                // Skip photos that fail to load
+                console.error("Failed to embed delivery photo:", err);
+              }
+            }
+          }
+          
           y -= 5;
           addNewPageIfNeeded();
         }

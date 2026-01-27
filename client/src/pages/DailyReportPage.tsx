@@ -29,7 +29,13 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { ArrowLeft, Save, Plus, Trash2, Cloud, Truck, ChevronDown, ChevronUp, CheckCircle, PenLine, Download, Camera, X } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { ArrowLeft, Save, Plus, Trash2, Cloud, Truck, ChevronDown, ChevronUp, CheckCircle, PenLine, Download, Camera, X, Image } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { ObjectUploader } from "@/components/ObjectUploader";
@@ -741,14 +747,34 @@ export default function DailyReportPage() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => window.open(`/api/reports/${reportId}/pdf`, "_blank")}
-              data-testid="button-download-pdf"
-            >
-              <Download className="h-4 w-4 mr-2" /> Download PDF
-            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  data-testid="button-download-pdf"
+                >
+                  <Download className="h-4 w-4 mr-2" /> Download PDF
+                  <ChevronDown className="h-3 w-3 ml-1" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem 
+                  onClick={() => window.open(`/api/reports/${reportId}/pdf`, "_blank")}
+                  data-testid="menu-download-without-photos"
+                >
+                  <Download className="h-4 w-4 mr-2" />
+                  Without Photos
+                </DropdownMenuItem>
+                <DropdownMenuItem 
+                  onClick={() => window.open(`/api/reports/${reportId}/pdf?includePhotos=true`, "_blank")}
+                  data-testid="menu-download-with-photos"
+                >
+                  <Image className="h-4 w-4 mr-2" />
+                  With Photos
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
             {isCompleted ? (
               <Button
                 variant="outline"
