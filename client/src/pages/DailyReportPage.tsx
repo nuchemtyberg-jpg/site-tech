@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useRoute, useLocation } from "wouter";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { getProxyUrl } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -484,7 +485,7 @@ export default function DailyReportPage() {
   const { getUploadParameters } = useUpload();
   
   const createPhotoMutation = useMutation({
-    mutationFn: async (data: { taskEntryId?: number; deliveryEntryId?: number; url: string }) => {
+    mutationFn: async (data: { taskEntryId?: number; deliveryEntryId?: number; url: string; objectPath?: string; fileName?: string }) => {
       return apiRequest("POST", `/api/daily-report-photos`, data);
     },
     onSuccess: () => refetchReport(),
@@ -1056,8 +1057,14 @@ export default function DailyReportPage() {
                                 result.successful?.forEach((file) => {
                                   const uploadUrl = file.uploadURL;
                                   if (uploadUrl) {
-                                    const objectPath = uploadUrl.split('?')[0];
-                                    createPhotoMutation.mutate({ taskEntryId: taskEntry.id, url: objectPath });
+                                    const fullUrl = uploadUrl.split('?')[0];
+                                    const objectPath = fullUrl.replace(/^https:\/\/storage\.googleapis\.com\/[^\/]+/, '');
+                                    createPhotoMutation.mutate({ 
+                                      taskEntryId: taskEntry.id, 
+                                      url: fullUrl,
+                                      objectPath,
+                                      fileName: file.name || undefined,
+                                    });
                                   }
                                 });
                               }}
@@ -1071,7 +1078,7 @@ export default function DailyReportPage() {
                             {taskEntry.photos.map((photo) => (
                               <div key={photo.id} className="relative group">
                                 <img
-                                  src={photo.url}
+                                  src={getProxyUrl(photo.url)}
                                   alt={photo.caption || "Task photo"}
                                   className="w-full h-24 object-cover rounded border"
                                 />
@@ -1222,8 +1229,14 @@ export default function DailyReportPage() {
                               result.successful?.forEach((file) => {
                                 const uploadUrl = file.uploadURL;
                                 if (uploadUrl) {
-                                  const objectPath = uploadUrl.split('?')[0];
-                                  createPhotoMutation.mutate({ deliveryEntryId: delivery.id, url: objectPath });
+                                  const fullUrl = uploadUrl.split('?')[0];
+                                  const objectPath = fullUrl.replace(/^https:\/\/storage\.googleapis\.com\/[^\/]+/, '');
+                                  createPhotoMutation.mutate({ 
+                                    deliveryEntryId: delivery.id, 
+                                    url: fullUrl,
+                                    objectPath,
+                                    fileName: file.name || undefined,
+                                  });
                                 }
                               });
                             }}
@@ -1237,7 +1250,7 @@ export default function DailyReportPage() {
                           {delivery.photos.map((photo) => (
                             <div key={photo.id} className="relative group">
                               <img
-                                src={photo.url}
+                                src={getProxyUrl(photo.url)}
                                 alt={photo.caption || "Delivery photo"}
                                 className="w-full h-24 object-cover rounded border"
                               />

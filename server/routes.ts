@@ -1073,14 +1073,14 @@ export async function registerRoutes(
   // Daily Report Photos
   app.post("/api/daily-report-photos", async (req, res) => {
     try {
-      const { reportId, taskEntryId, deliveryEntryId, url, caption, createdBy, createdByName } = req.body;
+      const { reportId, taskEntryId, deliveryEntryId, url, caption, createdBy, createdByName, objectPath, fileName } = req.body;
       
       // Validate that at least one reference is provided
       if (!reportId && !taskEntryId && !deliveryEntryId) {
         return res.status(400).json({ message: "Must provide reportId, taskEntryId, or deliveryEntryId" });
       }
       
-      // Check report is not completed
+      // Get the report and check if it's completed
       let checkReportId = reportId;
       if (taskEntryId) {
         const entry = await storage.getDailyReportTaskEntry(taskEntryId);
@@ -1091,8 +1091,9 @@ export async function registerRoutes(
         if (entry) checkReportId = entry.reportId;
       }
       
+      let report = null;
       if (checkReportId) {
-        const report = await storage.getDailyReport(checkReportId);
+        report = await storage.getDailyReport(checkReportId);
         if (report?.status === 'completed') {
           return res.status(403).json({ message: "Cannot add photos to a completed report" });
         }
@@ -1107,6 +1108,23 @@ export async function registerRoutes(
         createdBy,
         createdByName,
       });
+      
+      // Also add the photo to the "Daily Report Photos" album in Project Photos
+      if (report && objectPath) {
+        try {
+          const album = await storage.getOrCreateDailyReportAlbum(report.projectId);
+          await storage.createFile({
+            projectId: report.projectId,
+            albumId: album.id,
+            name: fileName || `daily-report-photo-${photo.id}`,
+            objectPath: objectPath,
+            contentType: 'image/jpeg',
+          });
+        } catch (albumErr) {
+          console.error("Failed to add photo to album:", albumErr);
+        }
+      }
+      
       res.status(201).json(photo);
     } catch (err) {
       console.error("Create photo error:", err);

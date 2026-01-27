@@ -128,6 +128,8 @@ export interface IStorage {
   // Photo Albums
   getPhotoAlbums(projectId: number): Promise<PhotoAlbum[]>;
   getPhotoAlbum(id: number): Promise<PhotoAlbum | undefined>;
+  getPhotoAlbumByName(projectId: number, name: string): Promise<PhotoAlbum | undefined>;
+  getOrCreateDailyReportAlbum(projectId: number): Promise<PhotoAlbum>;
   createPhotoAlbum(album: InsertPhotoAlbum): Promise<PhotoAlbum>;
   updatePhotoAlbum(id: number, album: Partial<InsertPhotoAlbum>): Promise<PhotoAlbum>;
   deletePhotoAlbum(id: number): Promise<void>;
@@ -559,6 +561,19 @@ export class DatabaseStorage implements IStorage {
   }
   async getPhotoAlbum(id: number): Promise<PhotoAlbum | undefined> {
     const [album] = await db.select().from(photoAlbums).where(eq(photoAlbums.id, id));
+    return album;
+  }
+  async getPhotoAlbumByName(projectId: number, name: string): Promise<PhotoAlbum | undefined> {
+    const [album] = await db.select().from(photoAlbums)
+      .where(and(eq(photoAlbums.projectId, projectId), eq(photoAlbums.name, name)));
+    return album;
+  }
+  async getOrCreateDailyReportAlbum(projectId: number): Promise<PhotoAlbum> {
+    const albumName = "Daily Report Photos";
+    let album = await this.getPhotoAlbumByName(projectId, albumName);
+    if (!album) {
+      album = await this.createPhotoAlbum({ projectId, name: albumName });
+    }
     return album;
   }
   async createPhotoAlbum(insertAlbum: InsertPhotoAlbum): Promise<PhotoAlbum> {
