@@ -28,7 +28,7 @@ export function useProjectFolders(projectId: number) {
 
 export function useCreateFile(projectId: number) {
   return useMutation({
-    mutationFn: async (data: { name: string; objectPath: string; folderId?: number | null; contentType?: string; size?: number }) => {
+    mutationFn: async (data: { name: string; objectPath: string; folderId?: number | null; albumId?: number | null; contentType?: string; size?: number; takenAt?: string | null }) => {
       return apiRequest("POST", `/api/projects/${projectId}/files`, data);
     },
     onSuccess: () => {

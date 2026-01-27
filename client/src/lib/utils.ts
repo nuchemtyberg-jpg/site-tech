@@ -1,8 +1,38 @@
 import { clsx, type ClassValue } from "clsx"
 import { twMerge } from "tailwind-merge"
+import ExifReader from "exifreader"
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
+}
+
+export async function extractPhotoDate(file: File): Promise<string | null> {
+  try {
+    const arrayBuffer = await file.arrayBuffer();
+    const tags = ExifReader.load(arrayBuffer, { expanded: true });
+    
+    // Try to get DateTimeOriginal (when photo was taken)
+    const dateTimeOriginal = tags.exif?.DateTimeOriginal?.description;
+    if (dateTimeOriginal) {
+      // EXIF date format is "YYYY:MM:DD HH:MM:SS"
+      const [datePart, timePart] = dateTimeOriginal.split(' ');
+      const isoDate = datePart.replace(/:/g, '-') + 'T' + timePart;
+      return new Date(isoDate).toISOString();
+    }
+    
+    // Try DateTime as fallback
+    const dateTime = tags.exif?.DateTime?.description;
+    if (dateTime) {
+      const [datePart, timePart] = dateTime.split(' ');
+      const isoDate = datePart.replace(/:/g, '-') + 'T' + timePart;
+      return new Date(isoDate).toISOString();
+    }
+    
+    return null;
+  } catch (error) {
+    console.error("Failed to extract EXIF date:", error);
+    return null;
+  }
 }
 
 export function getProxyUrl(url: string): string {

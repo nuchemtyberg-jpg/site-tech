@@ -78,7 +78,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { insertTaskSchema, type InsertTask, type FileMetadata, type Task } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
-import { cn, getProxyUrl } from "@/lib/utils";
+import { cn, getProxyUrl, extractPhotoDate } from "@/lib/utils";
 import { ObjectUploader } from "@/components/ObjectUploader";
 import { PDFViewer } from "@/components/PDFViewer";
 import { useQuery, useMutation } from "@tanstack/react-query";
@@ -304,6 +304,7 @@ export default function ProjectDetails() {
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const currentFolderIdRef = useRef<number | null>(null);
   const uploadedFilePathsRef = useRef<Map<string, string>>(new Map());
+  const uploadedFilesRef = useRef<Map<string, File>>(new Map());  // Store original files for EXIF extraction
   
   // Photo tool state
   const [photoTileSize, setPhotoTileSize] = useState<'small' | 'medium' | 'large'>('medium');
@@ -593,6 +594,49 @@ export default function ProjectDetails() {
     
     if (successCount > 0) {
       toast({ title: "Upload Complete", description: `${successCount} file(s) uploaded successfully.` });
+    }
+  };
+
+  const handlePhotoUploadComplete = async (result: any) => {
+    const successfulUploads = result.successful || [];
+    let successCount = 0;
+    
+    for (const file of successfulUploads) {
+      const objectPath = uploadedFilePathsRef.current.get(file.id) || file.meta?.objectPath || "";
+      const originalFile = uploadedFilesRef.current.get(file.id);
+      
+      if (!objectPath) {
+        console.error("Missing objectPath for file:", file.name);
+        continue;
+      }
+      
+      try {
+        // Extract EXIF date if we have the original file
+        let takenAt: string | null = null;
+        if (originalFile) {
+          takenAt = await extractPhotoDate(originalFile);
+        }
+        
+        await createFileMutation.mutateAsync({
+          name: file.name,
+          objectPath: objectPath,
+          contentType: file.type,
+          size: file.size,
+          albumId: currentAlbumId,  // Use album instead of folder for photos
+          takenAt: takenAt,
+        });
+        successCount++;
+      } catch (err) {
+        console.error("Failed to save photo metadata:", err);
+        toast({ title: "Error", description: `Failed to save ${file.name}`, variant: "destructive" });
+      }
+    }
+    
+    uploadedFilePathsRef.current = new Map();
+    uploadedFilesRef.current = new Map();
+    
+    if (successCount > 0) {
+      toast({ title: "Upload Complete", description: `${successCount} photo(s) uploaded successfully.` });
     }
   };
 
@@ -1577,13 +1621,17 @@ export default function ProjectDetails() {
                 });
                 const { uploadURL, objectPath } = await res.json();
                 uploadedFilePathsRef.current.set(file.id, objectPath);
+                // Store the original file for EXIF extraction
+                if (file.data && file.data instanceof File) {
+                  uploadedFilesRef.current.set(file.id, file.data as File);
+                }
                 return {
                   method: "PUT",
                   url: uploadURL,
                   headers: { "Content-Type": file.type || "application/octet-stream" },
                 };
               }}
-              onComplete={handleUploadComplete}
+              onComplete={handlePhotoUploadComplete}
             >
               <Camera className="w-4 h-4 mr-2" /> Upload
             </ObjectUploader>
@@ -1657,15 +1705,18 @@ export default function ProjectDetails() {
             }
 
             // Sort by date descending and group by date
+            // Use takenAt (photo timestamp) if available, otherwise fall back to createdAt (upload date)
+            const getPhotoDate = (photo: FileMetadata) => new Date(photo.takenAt || photo.createdAt || 0);
+            
             const sortedPhotos = [...photoFiles].sort((a, b) => 
-              new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+              getPhotoDate(b).getTime() - getPhotoDate(a).getTime()
             );
 
             // Group by month - store actual Date for proper formatting
             const monthDataMap: Map<string, { monthDate: Date; days: { date: string; photos: FileMetadata[] }[] }> = new Map();
             
             sortedPhotos.forEach(photo => {
-              const date = new Date(photo.createdAt || 0);
+              const date = getPhotoDate(photo);
               const monthKey = format(date, "MMMM yyyy");
               const dateKey = format(date, "EEEE, MMMM d, yyyy");
               

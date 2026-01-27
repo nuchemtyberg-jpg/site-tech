@@ -386,6 +386,7 @@ export const files = pgTable("files", {
   objectPath: text("object_path").notNull(),
   contentType: text("content_type"),
   size: integer("size"),
+  takenAt: timestamp("taken_at"),  // Photo timestamp from EXIF data
   createdAt: timestamp("created_at").defaultNow(),
 });
 

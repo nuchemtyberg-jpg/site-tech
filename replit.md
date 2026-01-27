@@ -62,7 +62,7 @@ Key entities are defined in `shared/schema.ts`:
 - **Address Autocomplete**: Utilizes OpenStreetMap's Nominatim API for address lookup in project creation, featuring debounced search and race condition handling.
 - **PDF Viewer**: Renders PDFs using an iframe and canvas overlay, offering annotation tools (pen, highlighter, shapes, text) with configurable properties. Annotations are stored in `localStorage` and can be exported to PDF.
 - **Document Management**: Supports grid and list views for documents, with automatic folder generation for new projects (e.g., Office/, Field/).
-- **Photo Management**: Organizes photos into albums, offers variable tile sizes, multi-select for bulk actions (download, share, delete), and date-based grouping.
+- **Photo Management**: Organizes photos into albums, offers variable tile sizes, multi-select for bulk actions (download, share, delete), and date-based grouping. Photos are sorted by their taken date (from EXIF metadata) when available, falling back to upload date otherwise.
 - **Daily Report Weather Integration**: Integrates with Open-Meteo geocoding API to fetch and display local weather conditions for daily reports.
 - **Signature Capture**: Enables freehand (canvas-based) or typed signatures for completing daily reports, rendering them read-only.
 
