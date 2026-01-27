@@ -7,8 +7,15 @@ export function cn(...inputs: ClassValue[]) {
 
 export async function extractPhotoDate(file: File): Promise<string | null> {
   try {
-    // Dynamic import to avoid issues with module loading
-    const ExifReader = await import("exifreader");
+    // Dynamic import with default export handling
+    const exifreaderModule = await import("exifreader");
+    const ExifReader = exifreaderModule.default || exifreaderModule;
+    
+    if (!ExifReader || typeof ExifReader.load !== 'function') {
+      console.warn("ExifReader not properly loaded");
+      return null;
+    }
+    
     const arrayBuffer = await file.arrayBuffer();
     const tags = ExifReader.load(arrayBuffer, { expanded: true });
     
@@ -31,7 +38,7 @@ export async function extractPhotoDate(file: File): Promise<string | null> {
     
     return null;
   } catch (error) {
-    console.error("Failed to extract EXIF date:", error);
+    console.warn("EXIF extraction not available:", error);
     return null;
   }
 }

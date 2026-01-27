@@ -1621,8 +1621,8 @@ export default function ProjectDetails() {
                 });
                 const { uploadURL, objectPath } = await res.json();
                 uploadedFilePathsRef.current.set(file.id, objectPath);
-                // Store the original file for EXIF extraction
-                if (file.data && file.data instanceof File) {
+                // Store the original file for EXIF extraction (use duck typing instead of instanceof)
+                if (file.data && typeof (file.data as any).arrayBuffer === 'function') {
                   uploadedFilesRef.current.set(file.id, file.data as File);
                 }
                 return {
