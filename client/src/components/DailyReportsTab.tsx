@@ -33,7 +33,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Plus, Trash2, Calendar as CalendarIcon, Cloud, CloudRain, Sun, Download, FileText } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Plus, Trash2, Calendar as CalendarIcon, Cloud, CloudRain, Sun, Download, FileText, Image, ChevronDown } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import type { DailyReport, Project } from "@shared/schema";
@@ -211,14 +217,33 @@ export function DailyReportsTab({ project }: DailyReportsTabProps) {
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-2" onClick={(e) => e.stopPropagation()}>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => window.open(`/api/reports/${report.id}/pdf`, "_blank")}
-                          data-testid={`button-download-pdf-${report.id}`}
-                        >
-                          <Download className="h-4 w-4" />
-                        </Button>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              data-testid={`button-download-pdf-${report.id}`}
+                            >
+                              <Download className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem 
+                              onClick={() => window.open(`/api/reports/${report.id}/pdf`, "_blank")}
+                              data-testid={`menu-download-without-photos-${report.id}`}
+                            >
+                              <Download className="h-4 w-4 mr-2" />
+                              Without Photos
+                            </DropdownMenuItem>
+                            <DropdownMenuItem 
+                              onClick={() => window.open(`/api/reports/${report.id}/pdf?includePhotos=true`, "_blank")}
+                              data-testid={`menu-download-with-photos-${report.id}`}
+                            >
+                              <Image className="h-4 w-4 mr-2" />
+                              With Photos
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                         {report.status !== "completed" && (
                           <Button
                             variant="ghost"
