@@ -873,15 +873,22 @@ export default function DailyReportPage() {
                       {/* Progress Slider */}
                       <div className="space-y-3">
                         <div className="flex items-center justify-between">
-                          <Label>Progress</Label>
+                          <div className="flex items-center gap-2">
+                            <Label>Progress</Label>
+                            {!report.isLatestReport && (
+                              <Badge variant="secondary" className="text-xs">
+                                Historical snapshot
+                              </Badge>
+                            )}
+                          </div>
                           <Badge variant="outline" className="text-lg font-bold px-3 py-1">
                             {localTaskPercents[taskEntry.id] ?? taskEntry.percentComplete}%
                           </Badge>
                         </div>
                         <Slider
                           value={[localTaskPercents[taskEntry.id] ?? taskEntry.percentComplete]}
-                          min={0}
-                          max={100}
+                          min={taskEntry.allowedMin ?? 0}
+                          max={taskEntry.allowedMax ?? 100}
                           step={5}
                           disabled={isCompleted}
                           className="h-6"
@@ -891,12 +898,14 @@ export default function DailyReportPage() {
                           data-testid={`slider-percent-${taskEntry.id}`}
                         />
                         <div className="flex justify-between text-xs text-muted-foreground">
-                          <span>0%</span>
-                          <span>25%</span>
-                          <span>50%</span>
-                          <span>75%</span>
-                          <span>100%</span>
+                          <span>{taskEntry.allowedMin ?? 0}%</span>
+                          <span>{taskEntry.allowedMax ?? 100}%</span>
                         </div>
+                        {!report.isLatestReport && (
+                          <p className="text-xs text-muted-foreground italic">
+                            Does not update task progress. Allowed range: {taskEntry.allowedMin ?? 0}% - {taskEntry.allowedMax ?? 100}%
+                          </p>
+                        )}
                       </div>
 
                       {/* Comments */}
