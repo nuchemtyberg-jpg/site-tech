@@ -2,15 +2,18 @@
 
 ## Overview
 
-SiteTech is a comprehensive web-based sitework management platform for construction companies, built with React, Express, and PostgreSQL. It provides tools for managing construction projects through their full lifecycle (from bidding to completion), customer relationships, equipment inventory, and scheduling.
+SiteTech is a comprehensive web-based sitework management platform designed for construction companies. It facilitates the management of construction projects through their entire lifecycle, from bidding to completion, and includes robust tools for customer relationship management, equipment inventory tracking, and scheduling. The platform aims to streamline operations, enhance project oversight, and improve efficiency in the construction industry.
 
-Core features include:
-- **Projects**: Full lifecycle management from bidding to completion with customer linking
-- **Customers**: Database with contact info and communication history
-- **Dashboard**: Operational metrics and analytics charts
-- **Scheduling**: Calendar view with task scheduling and equipment/manpower allocation
-- **Equipment**: Inventory with location tracking, maintenance schedules, and repair logs
-- **Daily Reports**: Field reporting with weather integration, task tracking, labor/equipment resources, and deliveries
+Key capabilities include:
+- **Project Lifecycle Management**: End-to-end management of projects, integrated with customer data.
+- **Customer Relationship Management**: Centralized database for customer information and communication history.
+- **Operational Dashboard**: Provides key metrics and analytical insights into ongoing operations.
+- **Resource Scheduling**: Calendar-based scheduling for tasks, equipment, and manpower allocation.
+- **Equipment Management**: Inventory tracking, location monitoring, and maintenance scheduling for equipment.
+- **Daily Reporting**: Field reporting features with weather integration, task tracking, labor/equipment resource logging, and delivery management.
+- **Document Management**: Organized storage and retrieval of project-related documents with distinct view modes.
+- **Photo Management**: Dedicated tab for organizing project photos into albums, with various viewing options and multi-select functionality.
+- **PDF Viewer with Annotation**: Professional-grade PDF viewing with markup tools for annotations, persistence, and export.
 
 ## User Preferences
 
@@ -23,255 +26,68 @@ Preferred communication style: Simple, everyday language.
 ## System Architecture
 
 ### Frontend Architecture
-- **Framework**: React 18 with TypeScript
-- **Routing**: Wouter for client-side routing
-- **State Management**: TanStack React Query for server state, with custom hooks per domain (projects, tasks, equipment)
-- **Styling**: Tailwind CSS with custom CSS variables for theming, shadcn/ui component library using Radix UI primitives
-- **Build Tool**: Vite with hot module replacement
-
-The frontend follows a feature-based organization with pages in `client/src/pages/`, reusable hooks in `client/src/hooks/`, and UI components in `client/src/components/ui/`. The design uses a dark slate blue theme with safety orange accents appropriate for construction software.
+- **Framework**: React 18 with TypeScript.
+- **Routing**: Wouter for client-side navigation.
+- **State Management**: TanStack React Query for server state, complemented by custom hooks for specific domains.
+- **Styling**: Tailwind CSS for utility-first styling, custom CSS variables for theming, and shadcn/ui component library built on Radix UI primitives.
+- **Build Tool**: Vite, providing fast development with Hot Module Replacement.
+- **Design Theme**: Dark slate blue with safety orange accents, suitable for industrial applications.
 
 ### Backend Architecture
-- **Framework**: Express.js with TypeScript
-- **API Design**: RESTful API with typed routes defined in `shared/routes.ts` using Zod schemas for validation
-- **Database**: PostgreSQL with Drizzle ORM
-- **Session Management**: Express sessions with PostgreSQL session store (connect-pg-simple)
-
-The server uses a storage abstraction layer (`server/storage.ts`) implementing the `IStorage` interface for database operations, making it testable and allowing for potential storage backend changes.
+- **Framework**: Express.js with TypeScript.
+- **API Design**: RESTful API with typed routes defined using Zod schemas for robust validation.
+- **Database**: PostgreSQL, accessed via Drizzle ORM for type-safe interactions.
+- **Session Management**: Express sessions with a PostgreSQL-backed store (`connect-pg-simple`).
+- **Storage Layer**: An abstraction layer (`server/storage.ts`) implementing an `IStorage` interface to ensure modularity and testability.
 
 ### Authentication
-- **Provider**: Replit Auth (OpenID Connect)
-- **Session Storage**: PostgreSQL-backed sessions
-- **User Management**: Automatic user upsert on authentication via `authStorage`
-
-Authentication is handled through `server/replit_integrations/auth/` with Passport.js and OpenID Connect strategy. Protected routes use the `isAuthenticated` middleware.
+- **Provider**: Replit Auth (OpenID Connect).
+- **Implementation**: Passport.js with OpenID Connect strategy, secured with `isAuthenticated` middleware for protected routes.
+- **User Management**: Automatic user upsertion upon successful authentication.
 
 ### Data Models
-Main entities defined in `shared/schema.ts`:
-- **Projects**: Core entity with projectNumber (auto-generated S-1000+), name, streetAddress, city, state, customerId, status, notes, and color
-  - Status options: new, bidding, takeoff_done, proposal_sent, active, completed, bid_lost, archive
-- **Tasks**: Belong to projects with title, description, dates, status, priority, and percentComplete (0-100%)
-  - Percent complete uses 5% increments in the UI slider
-  - Status auto-updates based on percent: 0% = pending, 1-99% = in_progress, 100% = completed
-- **TaskStatusHistory**: Audit trail for task status and percent changes
-  - Tracks previousStatus, newStatus, previousPercentComplete, newPercentComplete
-  - Records changedByUserId and changedByName for attribution
-  - API: GET /api/tasks/:id/history returns history entries ordered by date descending
-- **Equipment**: Inventory items with type, status, and notes
-- **Allocations**: Link equipment to projects for scheduling
-- **Customers**: Customer information with name, company, contact details
+Key entities are defined in `shared/schema.ts`:
+- **Projects**: Manages project details, status (e.g., bidding, active, completed), and customer association.
+- **Tasks**: Project-specific tasks with status (pending, in_progress, completed) and percent complete tracking, updated in 5% increments.
+- **TaskStatusHistory**: Audits changes to task status and progress, including user attribution.
+- **Equipment**: Inventory details including type, status, and notes.
+- **Allocations**: Links equipment to specific projects for scheduling.
+- **Customers**: Stores customer contact and company information.
+- **DailyReports**: Comprehensive daily field reports including weather data, task entries, labor and equipment logs, and delivery information. Reports transition from `draft` to `completed` with signature capture.
+- **DailyReportTaskEntries**: Records tasks associated with daily reports, including a snapshot of the task title and progress.
+- **DailyReportLaborLines / DailyReportEquipmentLines**: Detailed logs of labor and equipment usage per task entry within daily reports.
+- **DailyReportDeliveryEntries**: Tracks deliveries, including vendor, time, description, and status (all delivered/missing items).
 
-### Address Autocomplete
-The project creation form includes address autocomplete using OpenStreetMap's Nominatim API:
-- Component: `client/src/components/AddressAutocomplete.tsx`
-- No API key required (free service)
-- Debounced search with AbortController for race condition handling
-- Parses addresses into streetAddress, city, and state (with full state name to abbreviation conversion)
+### Specific Features
+- **Address Autocomplete**: Utilizes OpenStreetMap's Nominatim API for address lookup in project creation, featuring debounced search and race condition handling.
+- **PDF Viewer**: Renders PDFs using an iframe and canvas overlay, offering annotation tools (pen, highlighter, shapes, text) with configurable properties. Annotations are stored in `localStorage` and can be exported to PDF.
+- **Document Management**: Supports grid and list views for documents, with automatic folder generation for new projects (e.g., Office/, Field/).
+- **Photo Management**: Organizes photos into albums, offers variable tile sizes, multi-select for bulk actions (download, share, delete), and date-based grouping.
+- **Daily Report Weather Integration**: Integrates with Open-Meteo geocoding API to fetch and display local weather conditions for daily reports.
+- **Signature Capture**: Enables freehand (canvas-based) or typed signatures for completing daily reports, rendering them read-only.
 
 ### Build System
-- **Development**: Vite dev server with HMR proxied through Express
-- **Production**: esbuild for server bundling, Vite for client build
-- **Database Migrations**: Drizzle Kit with `db:push` command
+- **Development**: Vite dev server with HMR, proxied via Express.
+- **Production**: esbuild for server bundling, Vite for client-side build.
+- **Database Migrations**: Drizzle Kit for schema management.
 
 ## External Dependencies
 
 ### Database
-- **PostgreSQL**: Primary database accessed via `DATABASE_URL` environment variable
-- **Drizzle ORM**: Type-safe database queries and schema management
+- **PostgreSQL**: The primary relational database.
+- **Drizzle ORM**: Used for interacting with the PostgreSQL database.
 
 ### Authentication Services
-- **Replit Auth**: OpenID Connect provider using `ISSUER_URL` environment variable
-- **Session Secret**: Required `SESSION_SECRET` environment variable
+- **Replit Auth**: OpenID Connect provider for user authentication.
 
-### Key Libraries
-- **@tanstack/react-query**: Server state management and caching
-- **recharts**: Dashboard analytics charts
-- **date-fns**: Date formatting and manipulation
-- **react-day-picker**: Calendar component for scheduling
-- **zod**: Runtime type validation for API inputs/outputs
-- **drizzle-zod**: Integration between Drizzle schemas and Zod validation
-- **pdf-lib**: PDF manipulation for exporting annotated PDFs
-- **@uppy/core**, **@uppy/react**, **@uppy/xhr-upload**: File upload with drag-and-drop (max 50 files, 50MB each)
-
-## PDF Viewer Architecture
-
-The PDF viewer (`client/src/components/PDFViewer.tsx`) provides professional markup capabilities:
-
-### Core Features
-- **Rendering**: iframe + canvas overlay approach (not react-pdf or PDF.js)
-- **Gestures**: Pinch-to-zoom (0.5x-6x), pan, double-tap to reset
-- **Tools**: Pen, highlighter, rectangle, arrow, line, text annotation, eraser
-- **Color/Thickness**: Configurable for all markup tools
-
-### Annotation Persistence
-- Annotations stored in localStorage keyed by PDF URL
-- Auto-save on close via beforeunload handler
-- Data structure: `{ paths: DrawPath[], shapes: ShapeAnnotation[], texts: TextAnnotation[] }`
-
-### Undo/Redo Implementation
-- Uses refs (`pathsRef`, `shapesRef`, `textsRef`, `historyRef`, `historyIndexRef`) to avoid stale closures
-- Centralized `applyAnnotationChange` function handles all state mutations
-- `isRestoringRef` prevents history recording during undo/redo operations
-- All operations read from refs and update refs synchronously before setState
-
-### PDF Export
-- Uses pdf-lib to embed annotations into downloadable PDF
-- Converts canvas drawings to image and overlays on PDF pages
-
-### Limitations
-- Annotations currently limited to first page only (multi-page support not implemented)
-- Text annotations use native browser prompt for input
-
-## Document Management
-
-### Default Folder Structure
-When a new project is created, the following folder structure is automatically generated:
-- **Office/** (root folder)
-  - Takeoffs
-  - Proposals
-  - **Billing/** (subfolder)
-    - Change Orders
-    - SOV
-    - REQs & Invoices
-- **Field/** (root folder)
-  - Drawings
-  - Permits & Legal
-  - Submittals
-  - RFI's
-
-### View Modes
-Documents can be displayed in two view modes (toggle available in Documents tab):
-- **Grid View**: Files displayed as thumbnail cards grouped by upload date
-  - Images show actual thumbnails
-  - PDFs show red PDF icon with "PDF" label
-  - Other files show generic file icon with file extension
-  - File names displayed at bottom of each card
-- **List View**: Files displayed in a traditional list format with icon, name, date, and size
-
-### File Types
-- **Images**: Displayed with actual image thumbnail in grid view, green image icon in list view
-- **PDFs**: Opens in browser's native PDF viewer in new tab
-- **Other files**: Download prompt with file info
-
-## Photos Tab
-
-The Photos tab provides a dedicated photo management experience for project photos with the following features:
-
-### Photo Albums
-- Create and delete albums to organize photos
-- Album selector dropdown to filter photos by album
-- Delete album confirmation dialog (photos are preserved, only album association removed)
-- API endpoints: GET/POST `/api/projects/:projectId/albums`, PUT/DELETE `/api/albums/:id`
-
-### View Options
-- **Tile Size Toggle**: Three size options (small/medium/large) with grid icons
-  - Small: 8 columns on large screens
-  - Medium: 5 columns on large screens
-  - Large: 3 columns on large screens
-
-### Multi-Select Mode
-- Toggle select mode with "Select" button
-- Click photos to select/deselect (checkbox overlay appears)
-- Selection actions bar appears when photos are selected:
-  - Download: Downloads all selected photos
-  - Share: Copies photo URLs to clipboard
-  - Delete: Batch delete with confirmation dialog
-
-### Date-Based Organization
-- Photos sorted by date descending (newest first)
-- Grouped by month with sticky month headers
-- Grouped by day within each month
-- Vertical date slider for quick month navigation (uses actual Date objects for locale-safe formatting)
-
-### Photo Viewer
-- Fullscreen viewer with dark overlay
-- Previous/Next navigation buttons (ChevronLeft/ChevronRight)
-- Photo counter showing "X of Y"
-- Share, download, and close actions in bottom toolbar
-
-## Daily Reports
-
-Daily Reports provide field reporting capabilities for construction projects with weather integration, task tracking, labor/equipment resources, and deliveries.
-
-### Core Features
-- One report per day per project (409 conflict if duplicate date)
-- Status workflow: draft (editable) → completed (read-only with signature)
-- Full-screen report editor page at `/projects/:projectId/reports/:reportId`
-- Report list with table view showing date, weather, last updated, and status badge
-- Signature capture (freehand drawing or typed) to complete and lock reports
-- Component located at `client/src/components/DailyReportsTab.tsx` and `client/src/pages/DailyReportPage.tsx`
-
-### Weather Integration
-- Uses Open-Meteo geocoding API to convert project address to coordinates
-- Fetches current weather conditions and daily min/max temperatures
-- Weather data includes: summary, temperature, temperatureHigh, temperatureLow, windSpeed
-- Falls back to default values if geocoding or weather fetch fails
-- Weather is auto-filled when creating a new report
-
-### Task Entries
-- Add tasks from the project's uncompleted tasks list
-- Task title stored as snapshot for historical accuracy
-- Progress slider (0-100% in 5% increments)
-- Progress syncs back to main project task when updated
-- Each task entry has its own labor lines and equipment lines
-
-### Labor Lines (per task entry)
-- Labor types: Foreman, Operator, Laborer
-- Fields: laborType, quantity, hours
-- Multiple labor lines per task entry
-
-### Equipment Lines (per task entry)
-- Equipment types: Mini Excavator, Excavator, Skid Steer, Compactor
-- Fields: equipmentType, quantity, hours
-- Multiple equipment lines per task entry
-
-### Delivery Entries
-- Track deliveries for each report
-- Fields: vendor, deliveryTime, description, allDelivered (boolean), missingItemsDetails
-- Missing items details required when allDelivered is false
-- Photo upload capability for delivery slips
-- Multiple delivery entries per report
-
-### Signature Capture
-- Two signature types: freehand (canvas drawing) or typed
-- Canvas supports mouse and touch input
-- Signature stored as Base64 data URL (freehand) or text string (typed)
-- Completing report requires signer name and signature
-- Once completed, report becomes read-only
-
-### Data Model
-Tables defined in `shared/schema.ts`:
-- **dailyReports**: Main report table with status (draft/completed), weather fields, signature data, audit fields
-- **dailyReportTaskEntries**: Links reports to project tasks with taskTitleSnapshot, percentComplete, comments
-- **dailyReportLaborLines**: Labor resources per task entry (type, quantity, hours)
-- **dailyReportEquipmentLines**: Equipment resources per task entry (type, quantity, hours)
-- **dailyReportDeliveryEntries**: Delivery entries with vendor, time, description, allDelivered, missingItemsDetails
-- **dailyReportPhotos**: Flexible photo storage linked to report, task entry, or delivery entry
-
-### API Endpoints
-- GET `/api/projects/:projectId/reports` - List all reports for a project
-- POST `/api/projects/:projectId/reports` - Create new report (409 if date exists)
-- GET `/api/reports/:id` - Get report with nested taskEntries and deliveryEntries
-- PUT `/api/reports/:id` - Update report (403 if completed)
-- DELETE `/api/reports/:id` - Delete report (403 if completed)
-- POST `/api/reports/:id/complete` - Complete and sign report
-- POST `/api/reports/:reportId/task-entries` - Add task entry
-- PUT `/api/daily-report-task-entries/:id` - Update task entry (syncs progress to main task)
-- DELETE `/api/daily-report-task-entries/:id` - Remove task entry
-- POST `/api/daily-report-task-entries/:taskEntryId/labor-lines` - Add labor line
-- PUT `/api/daily-report-labor-lines/:id` - Update labor line
-- DELETE `/api/daily-report-labor-lines/:id` - Delete labor line
-- POST `/api/daily-report-task-entries/:taskEntryId/equipment-lines` - Add equipment line
-- PUT `/api/daily-report-equipment-lines/:id` - Update equipment line
-- DELETE `/api/daily-report-equipment-lines/:id` - Delete equipment line
-- POST `/api/reports/:reportId/delivery-entries` - Add delivery entry
-- PUT `/api/daily-report-delivery-entries/:id` - Update delivery entry
-- DELETE `/api/daily-report-delivery-entries/:id` - Delete delivery entry
-
-### Mobile UI/UX
-- Responsive layout using `flex-col sm:flex-row` patterns
-- Full-width buttons on mobile using `w-full sm:w-auto`
-- Collapsible task entries with expand/collapse toggle
-- Text contrast uses `text-foreground` semantic class consistently
-- Weather section uses explicit colors `text-blue-800 dark:text-blue-200` for legibility
-- `safeFormatDate` helper function prevents runtime errors on invalid dates
+### Key Libraries & APIs
+- **@tanstack/react-query**: For server state management and data caching.
+- **recharts**: For rendering analytical charts on the dashboard.
+- **date-fns**: Comprehensive utility library for date manipulation.
+- **react-day-picker**: A flexible calendar component.
+- **zod**: Schema declaration and validation library.
+- **drizzle-zod**: Integration between Drizzle ORM and Zod for type validation.
+- **pdf-lib**: For programmatic PDF creation and modification (used for embedding annotations).
+- **@uppy/core, @uppy/react, @uppy/xhr-upload**: Libraries for robust file uploading with features like drag-and-drop.
+- **Open-Meteo Geocoding API**: For converting addresses to geographical coordinates (used in daily reports).
+- **Open-Meteo Weather API**: For fetching weather information (used in daily reports).
