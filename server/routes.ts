@@ -1246,52 +1246,6 @@ export async function registerRoutes(
         createdByName,
       });
       
-      // Also add the photo to the "Daily Report Photos" album in Project Photos
-      if (report && objectPath) {
-        try {
-          const album = await storage.getOrCreateDailyReportAlbum(report.projectId);
-          // Convert objectPath to proxy format for consistent access
-          let proxyPath = objectPath;
-          
-          // Already a proxy URL
-          if (objectPath.startsWith('/objects/')) {
-            proxyPath = objectPath;
-          }
-          // Full GCS URL with .private
-          else if (objectPath.includes('storage.googleapis.com') && objectPath.includes('/.private/uploads/')) {
-            const match = objectPath.match(/\/.private\/uploads\/([a-f0-9-]+)/);
-            if (match) {
-              proxyPath = `/objects/uploads/${match[1]}`;
-            }
-          }
-          // Full GCS URL without .private
-          else if (objectPath.includes('storage.googleapis.com') && objectPath.includes('/uploads/')) {
-            const match = objectPath.match(/\/uploads\/([a-f0-9-]+)/);
-            if (match) {
-              proxyPath = `/objects/uploads/${match[1]}`;
-            }
-          }
-          // Relative path with .private
-          else if (objectPath.startsWith('/.private/uploads/')) {
-            proxyPath = objectPath.replace('/.private/uploads/', '/objects/uploads/');
-          }
-          // Relative path without .private
-          else if (objectPath.startsWith('/uploads/')) {
-            proxyPath = `/objects${objectPath}`;
-          }
-          
-          await storage.createFile({
-            projectId: report.projectId,
-            albumId: album.id,
-            name: fileName || `daily-report-photo-${photo.id}`,
-            objectPath: proxyPath,
-            contentType: 'image/jpeg',
-          });
-        } catch (albumErr) {
-          console.error("Failed to add photo to album:", albumErr);
-        }
-      }
-      
       res.status(201).json(photo);
     } catch (err) {
       console.error("Create photo error:", err);
