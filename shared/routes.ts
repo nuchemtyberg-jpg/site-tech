@@ -2,8 +2,9 @@ import { z } from 'zod';
 import { 
   insertProjectSchema, insertTaskSchema, insertEquipmentSchema, insertAllocationSchema,
   insertCustomerSchema, insertDailyReportSchema, insertMaintenanceLogSchema, insertCommunicationSchema,
-  insertPhotoAlbumSchema,
-  projects, tasks, equipment, allocations, customers, dailyReports, maintenanceLogs, communications, photoAlbums
+  insertPhotoAlbumSchema, insertReportTaskSchema, insertLaborEntrySchema, insertEquipmentEntrySchema, insertDeliverySchema,
+  projects, tasks, equipment, allocations, customers, dailyReports, maintenanceLogs, communications, photoAlbums,
+  reportTasks, laborEntries, equipmentEntries, deliveries
 } from './schema';
 
 export const errorSchemas = {
@@ -431,6 +432,154 @@ export const api = {
     delete: {
       method: 'DELETE' as const,
       path: '/api/albums/:id',
+      responses: {
+        204: z.void(),
+        404: errorSchemas.notFound,
+      },
+    },
+  },
+
+  // Report Tasks
+  reportTasks: {
+    list: {
+      method: 'GET' as const,
+      path: '/api/reports/:reportId/tasks',
+      responses: {
+        200: z.array(z.custom<typeof reportTasks.$inferSelect>()),
+      },
+    },
+    create: {
+      method: 'POST' as const,
+      path: '/api/reports/:reportId/tasks',
+      input: insertReportTaskSchema.omit({ reportId: true }),
+      responses: {
+        201: z.custom<typeof reportTasks.$inferSelect>(),
+        400: errorSchemas.validation,
+      },
+    },
+    update: {
+      method: 'PUT' as const,
+      path: '/api/report-tasks/:id',
+      input: insertReportTaskSchema.partial(),
+      responses: {
+        200: z.custom<typeof reportTasks.$inferSelect>(),
+        400: errorSchemas.validation,
+        404: errorSchemas.notFound,
+      },
+    },
+    delete: {
+      method: 'DELETE' as const,
+      path: '/api/report-tasks/:id',
+      responses: {
+        204: z.void(),
+        404: errorSchemas.notFound,
+      },
+    },
+  },
+
+  // Labor Entries
+  laborEntries: {
+    list: {
+      method: 'GET' as const,
+      path: '/api/report-tasks/:reportTaskId/labor',
+      responses: {
+        200: z.array(z.custom<typeof laborEntries.$inferSelect>()),
+      },
+    },
+    create: {
+      method: 'POST' as const,
+      path: '/api/report-tasks/:reportTaskId/labor',
+      input: insertLaborEntrySchema.omit({ reportTaskId: true }),
+      responses: {
+        201: z.custom<typeof laborEntries.$inferSelect>(),
+        400: errorSchemas.validation,
+      },
+    },
+    update: {
+      method: 'PUT' as const,
+      path: '/api/labor/:id',
+      input: insertLaborEntrySchema.partial(),
+      responses: {
+        200: z.custom<typeof laborEntries.$inferSelect>(),
+        400: errorSchemas.validation,
+      },
+    },
+    delete: {
+      method: 'DELETE' as const,
+      path: '/api/labor/:id',
+      responses: {
+        204: z.void(),
+      },
+    },
+  },
+
+  // Equipment Entries
+  equipmentEntriesApi: {
+    list: {
+      method: 'GET' as const,
+      path: '/api/report-tasks/:reportTaskId/equipment-entries',
+      responses: {
+        200: z.array(z.custom<typeof equipmentEntries.$inferSelect>()),
+      },
+    },
+    create: {
+      method: 'POST' as const,
+      path: '/api/report-tasks/:reportTaskId/equipment-entries',
+      input: insertEquipmentEntrySchema.omit({ reportTaskId: true }),
+      responses: {
+        201: z.custom<typeof equipmentEntries.$inferSelect>(),
+        400: errorSchemas.validation,
+      },
+    },
+    update: {
+      method: 'PUT' as const,
+      path: '/api/equipment-entries/:id',
+      input: insertEquipmentEntrySchema.partial(),
+      responses: {
+        200: z.custom<typeof equipmentEntries.$inferSelect>(),
+        400: errorSchemas.validation,
+      },
+    },
+    delete: {
+      method: 'DELETE' as const,
+      path: '/api/equipment-entries/:id',
+      responses: {
+        204: z.void(),
+      },
+    },
+  },
+
+  // Deliveries
+  deliveriesApi: {
+    list: {
+      method: 'GET' as const,
+      path: '/api/reports/:reportId/deliveries',
+      responses: {
+        200: z.array(z.custom<typeof deliveries.$inferSelect>()),
+      },
+    },
+    create: {
+      method: 'POST' as const,
+      path: '/api/reports/:reportId/deliveries',
+      input: insertDeliverySchema.omit({ reportId: true }),
+      responses: {
+        201: z.custom<typeof deliveries.$inferSelect>(),
+        400: errorSchemas.validation,
+      },
+    },
+    update: {
+      method: 'PUT' as const,
+      path: '/api/deliveries/:id',
+      input: insertDeliverySchema.partial(),
+      responses: {
+        200: z.custom<typeof deliveries.$inferSelect>(),
+        400: errorSchemas.validation,
+        404: errorSchemas.notFound,
+      },
+    },
+    delete: {
+      method: 'DELETE' as const,
+      path: '/api/deliveries/:id',
       responses: {
         204: z.void(),
         404: errorSchemas.notFound,

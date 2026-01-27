@@ -485,5 +485,172 @@ export async function registerRoutes(
     }
   });
 
+  // Check if report exists for a specific date
+  app.get('/api/projects/:projectId/reports/by-date/:date', async (req, res) => {
+    const report = await storage.getDailyReportByDate(Number(req.params.projectId), req.params.date);
+    if (!report) return res.status(404).json({ message: "No report for this date" });
+    res.json(report);
+  });
+
+  // Report Tasks
+  app.get(api.reportTasks.list.path, async (req, res) => {
+    const tasks = await storage.getReportTasks(Number(req.params.reportId));
+    res.json(tasks);
+  });
+
+  app.post(api.reportTasks.create.path, async (req, res) => {
+    try {
+      const input = api.reportTasks.create.input.parse(req.body);
+      const task = await storage.createReportTask({
+        ...input,
+        reportId: Number(req.params.reportId),
+      });
+      res.status(201).json(task);
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0].message });
+      }
+      throw err;
+    }
+  });
+
+  app.put(api.reportTasks.update.path, async (req, res) => {
+    try {
+      const input = api.reportTasks.update.input.parse(req.body);
+      const task = await storage.updateReportTask(Number(req.params.id), input);
+      res.json(task);
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0].message });
+      }
+      throw err;
+    }
+  });
+
+  app.delete(api.reportTasks.delete.path, async (req, res) => {
+    await storage.deleteReportTask(Number(req.params.id));
+    res.status(204).send();
+  });
+
+  // Labor Entries
+  app.get(api.laborEntries.list.path, async (req, res) => {
+    const entries = await storage.getLaborEntries(Number(req.params.reportTaskId));
+    res.json(entries);
+  });
+
+  app.post(api.laborEntries.create.path, async (req, res) => {
+    try {
+      const input = api.laborEntries.create.input.parse(req.body);
+      const entry = await storage.createLaborEntry({
+        ...input,
+        reportTaskId: Number(req.params.reportTaskId),
+      });
+      res.status(201).json(entry);
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0].message });
+      }
+      throw err;
+    }
+  });
+
+  app.put(api.laborEntries.update.path, async (req, res) => {
+    try {
+      const input = api.laborEntries.update.input.parse(req.body);
+      const entry = await storage.updateLaborEntry(Number(req.params.id), input);
+      res.json(entry);
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0].message });
+      }
+      throw err;
+    }
+  });
+
+  app.delete(api.laborEntries.delete.path, async (req, res) => {
+    await storage.deleteLaborEntry(Number(req.params.id));
+    res.status(204).send();
+  });
+
+  // Equipment Entries
+  app.get(api.equipmentEntriesApi.list.path, async (req, res) => {
+    const entries = await storage.getEquipmentEntries(Number(req.params.reportTaskId));
+    res.json(entries);
+  });
+
+  app.post(api.equipmentEntriesApi.create.path, async (req, res) => {
+    try {
+      const input = api.equipmentEntriesApi.create.input.parse(req.body);
+      const entry = await storage.createEquipmentEntry({
+        ...input,
+        reportTaskId: Number(req.params.reportTaskId),
+      });
+      res.status(201).json(entry);
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0].message });
+      }
+      throw err;
+    }
+  });
+
+  app.put(api.equipmentEntriesApi.update.path, async (req, res) => {
+    try {
+      const input = api.equipmentEntriesApi.update.input.parse(req.body);
+      const entry = await storage.updateEquipmentEntry(Number(req.params.id), input);
+      res.json(entry);
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0].message });
+      }
+      throw err;
+    }
+  });
+
+  app.delete(api.equipmentEntriesApi.delete.path, async (req, res) => {
+    await storage.deleteEquipmentEntry(Number(req.params.id));
+    res.status(204).send();
+  });
+
+  // Deliveries
+  app.get(api.deliveriesApi.list.path, async (req, res) => {
+    const deliveries = await storage.getDeliveries(Number(req.params.reportId));
+    res.json(deliveries);
+  });
+
+  app.post(api.deliveriesApi.create.path, async (req, res) => {
+    try {
+      const input = api.deliveriesApi.create.input.parse(req.body);
+      const delivery = await storage.createDelivery({
+        ...input,
+        reportId: Number(req.params.reportId),
+      });
+      res.status(201).json(delivery);
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0].message });
+      }
+      throw err;
+    }
+  });
+
+  app.put(api.deliveriesApi.update.path, async (req, res) => {
+    try {
+      const input = api.deliveriesApi.update.input.parse(req.body);
+      const delivery = await storage.updateDelivery(Number(req.params.id), input);
+      res.json(delivery);
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0].message });
+      }
+      throw err;
+    }
+  });
+
+  app.delete(api.deliveriesApi.delete.path, async (req, res) => {
+    await storage.deleteDelivery(Number(req.params.id));
+    res.status(204).send();
+  });
+
   return httpServer;
 }

@@ -1,9 +1,12 @@
 import {
   projects, tasks, equipment, allocations, folders, files, users, customers, dailyReports, maintenanceLogs, communications, taskStatusHistory, photoAlbums,
+  reportTasks, laborEntries, equipmentEntries, reportTaskPhotos, deliveries, deliveryPhotos,
   type InsertProject, type InsertTask, type InsertEquipment, type InsertAllocation, type InsertFolder, type InsertFileMetadata,
   type InsertCustomer, type InsertDailyReport, type InsertMaintenanceLog, type InsertCommunication, type InsertTaskStatusHistory, type InsertPhotoAlbum,
+  type InsertReportTask, type InsertLaborEntry, type InsertEquipmentEntry, type InsertReportTaskPhoto, type InsertDelivery, type InsertDeliveryPhoto,
   type Project, type Task, type Equipment, type Allocation, type Folder, type FileMetadata,
   type Customer, type DailyReport, type MaintenanceLog, type Communication, type TaskStatusHistory, type PhotoAlbum,
+  type ReportTask, type LaborEntry, type EquipmentEntry, type ReportTaskPhoto, type Delivery, type DeliveryPhoto,
   type User, type UpsertUser
 } from "@shared/schema";
 import { db } from "./db";
@@ -56,9 +59,46 @@ export interface IStorage {
   // Daily Reports
   getDailyReports(projectId: number): Promise<DailyReport[]>;
   getDailyReport(id: number): Promise<DailyReport | undefined>;
+  getDailyReportByDate(projectId: number, reportDate: string): Promise<DailyReport | undefined>;
   createDailyReport(report: InsertDailyReport): Promise<DailyReport>;
   updateDailyReport(id: number, report: Partial<InsertDailyReport>): Promise<DailyReport>;
   deleteDailyReport(id: number): Promise<void>;
+
+  // Report Tasks
+  getReportTasks(reportId: number): Promise<ReportTask[]>;
+  getReportTask(id: number): Promise<ReportTask | undefined>;
+  createReportTask(task: InsertReportTask): Promise<ReportTask>;
+  updateReportTask(id: number, task: Partial<InsertReportTask>): Promise<ReportTask>;
+  deleteReportTask(id: number): Promise<void>;
+
+  // Labor Entries
+  getLaborEntries(reportTaskId: number): Promise<LaborEntry[]>;
+  createLaborEntry(entry: InsertLaborEntry): Promise<LaborEntry>;
+  updateLaborEntry(id: number, entry: Partial<InsertLaborEntry>): Promise<LaborEntry>;
+  deleteLaborEntry(id: number): Promise<void>;
+
+  // Equipment Entries
+  getEquipmentEntries(reportTaskId: number): Promise<EquipmentEntry[]>;
+  createEquipmentEntry(entry: InsertEquipmentEntry): Promise<EquipmentEntry>;
+  updateEquipmentEntry(id: number, entry: Partial<InsertEquipmentEntry>): Promise<EquipmentEntry>;
+  deleteEquipmentEntry(id: number): Promise<void>;
+
+  // Report Task Photos
+  getReportTaskPhotos(reportTaskId: number): Promise<ReportTaskPhoto[]>;
+  createReportTaskPhoto(photo: InsertReportTaskPhoto): Promise<ReportTaskPhoto>;
+  deleteReportTaskPhoto(id: number): Promise<void>;
+
+  // Deliveries
+  getDeliveries(reportId: number): Promise<Delivery[]>;
+  getDelivery(id: number): Promise<Delivery | undefined>;
+  createDelivery(delivery: InsertDelivery): Promise<Delivery>;
+  updateDelivery(id: number, delivery: Partial<InsertDelivery>): Promise<Delivery>;
+  deleteDelivery(id: number): Promise<void>;
+
+  // Delivery Photos
+  getDeliveryPhotos(deliveryId: number): Promise<DeliveryPhoto[]>;
+  createDeliveryPhoto(photo: InsertDeliveryPhoto): Promise<DeliveryPhoto>;
+  deleteDeliveryPhoto(id: number): Promise<void>;
 
   // Communications
   getCommunications(customerId: number): Promise<Communication[]>;
@@ -296,16 +336,123 @@ export class DatabaseStorage implements IStorage {
     const [report] = await db.select().from(dailyReports).where(eq(dailyReports.id, id));
     return report;
   }
+  async getDailyReportByDate(projectId: number, reportDate: string): Promise<DailyReport | undefined> {
+    const [report] = await db.select().from(dailyReports).where(
+      and(eq(dailyReports.projectId, projectId), eq(dailyReports.reportDate, reportDate))
+    );
+    return report;
+  }
   async createDailyReport(insertReport: InsertDailyReport): Promise<DailyReport> {
     const [report] = await db.insert(dailyReports).values(insertReport).returning();
     return report;
   }
   async updateDailyReport(id: number, updates: Partial<InsertDailyReport>): Promise<DailyReport> {
-    const [report] = await db.update(dailyReports).set(updates).where(eq(dailyReports.id, id)).returning();
+    const [report] = await db.update(dailyReports).set({ ...updates, updatedAt: new Date() }).where(eq(dailyReports.id, id)).returning();
     return report;
   }
   async deleteDailyReport(id: number): Promise<void> {
     await db.delete(dailyReports).where(eq(dailyReports.id, id));
+  }
+
+  // Report Tasks
+  async getReportTasks(reportId: number): Promise<ReportTask[]> {
+    return await db.select().from(reportTasks).where(eq(reportTasks.reportId, reportId));
+  }
+  async getReportTask(id: number): Promise<ReportTask | undefined> {
+    const [task] = await db.select().from(reportTasks).where(eq(reportTasks.id, id));
+    return task;
+  }
+  async createReportTask(task: InsertReportTask): Promise<ReportTask> {
+    const [record] = await db.insert(reportTasks).values(task).returning();
+    return record;
+  }
+  async updateReportTask(id: number, updates: Partial<InsertReportTask>): Promise<ReportTask> {
+    const [record] = await db.update(reportTasks).set(updates).where(eq(reportTasks.id, id)).returning();
+    return record;
+  }
+  async deleteReportTask(id: number): Promise<void> {
+    // Delete associated labor and equipment entries first
+    await db.delete(laborEntries).where(eq(laborEntries.reportTaskId, id));
+    await db.delete(equipmentEntries).where(eq(equipmentEntries.reportTaskId, id));
+    await db.delete(reportTaskPhotos).where(eq(reportTaskPhotos.reportTaskId, id));
+    await db.delete(reportTasks).where(eq(reportTasks.id, id));
+  }
+
+  // Labor Entries
+  async getLaborEntries(reportTaskId: number): Promise<LaborEntry[]> {
+    return await db.select().from(laborEntries).where(eq(laborEntries.reportTaskId, reportTaskId));
+  }
+  async createLaborEntry(entry: InsertLaborEntry): Promise<LaborEntry> {
+    const [record] = await db.insert(laborEntries).values(entry).returning();
+    return record;
+  }
+  async updateLaborEntry(id: number, updates: Partial<InsertLaborEntry>): Promise<LaborEntry> {
+    const [record] = await db.update(laborEntries).set(updates).where(eq(laborEntries.id, id)).returning();
+    return record;
+  }
+  async deleteLaborEntry(id: number): Promise<void> {
+    await db.delete(laborEntries).where(eq(laborEntries.id, id));
+  }
+
+  // Equipment Entries
+  async getEquipmentEntries(reportTaskId: number): Promise<EquipmentEntry[]> {
+    return await db.select().from(equipmentEntries).where(eq(equipmentEntries.reportTaskId, reportTaskId));
+  }
+  async createEquipmentEntry(entry: InsertEquipmentEntry): Promise<EquipmentEntry> {
+    const [record] = await db.insert(equipmentEntries).values(entry).returning();
+    return record;
+  }
+  async updateEquipmentEntry(id: number, updates: Partial<InsertEquipmentEntry>): Promise<EquipmentEntry> {
+    const [record] = await db.update(equipmentEntries).set(updates).where(eq(equipmentEntries.id, id)).returning();
+    return record;
+  }
+  async deleteEquipmentEntry(id: number): Promise<void> {
+    await db.delete(equipmentEntries).where(eq(equipmentEntries.id, id));
+  }
+
+  // Report Task Photos
+  async getReportTaskPhotos(reportTaskId: number): Promise<ReportTaskPhoto[]> {
+    return await db.select().from(reportTaskPhotos).where(eq(reportTaskPhotos.reportTaskId, reportTaskId));
+  }
+  async createReportTaskPhoto(photo: InsertReportTaskPhoto): Promise<ReportTaskPhoto> {
+    const [record] = await db.insert(reportTaskPhotos).values(photo).returning();
+    return record;
+  }
+  async deleteReportTaskPhoto(id: number): Promise<void> {
+    await db.delete(reportTaskPhotos).where(eq(reportTaskPhotos.id, id));
+  }
+
+  // Deliveries
+  async getDeliveries(reportId: number): Promise<Delivery[]> {
+    return await db.select().from(deliveries).where(eq(deliveries.reportId, reportId));
+  }
+  async getDelivery(id: number): Promise<Delivery | undefined> {
+    const [delivery] = await db.select().from(deliveries).where(eq(deliveries.id, id));
+    return delivery;
+  }
+  async createDelivery(delivery: InsertDelivery): Promise<Delivery> {
+    const [record] = await db.insert(deliveries).values(delivery).returning();
+    return record;
+  }
+  async updateDelivery(id: number, updates: Partial<InsertDelivery>): Promise<Delivery> {
+    const [record] = await db.update(deliveries).set(updates).where(eq(deliveries.id, id)).returning();
+    return record;
+  }
+  async deleteDelivery(id: number): Promise<void> {
+    await db.delete(deliveryPhotos).where(eq(deliveryPhotos.deliveryId, id));
+    await db.delete(deliveries).where(eq(deliveries.id, id));
+  }
+
+  // Delivery Photos
+  async getDeliveryPhotos(deliveryId: number): Promise<DeliveryPhoto[]> {
+    return await db.select().from(deliveryPhotos).where(eq(deliveryPhotos.deliveryId, deliveryId));
+  }
+  async createDeliveryPhoto(photo: InsertDeliveryPhoto): Promise<DeliveryPhoto> {
+    const [record] = await db.insert(deliveryPhotos).values(photo).returning();
+    return record;
+  }
+  async deleteDeliveryPhoto(id: number): Promise<void> {
+    await db.delete(deliveryPhotos).where(eq(deliveryPhotos.id, id));
   }
 
   // Communications
