@@ -436,6 +436,282 @@ export async function registerRoutes(
     res.status(204).send();
   });
 
+  // PDF Export for Daily Report
+  app.get("/api/reports/:id/pdf", async (req, res) => {
+    try {
+      const { PDFDocument, StandardFonts, rgb, degrees } = await import("pdf-lib");
+      
+      const reportId = Number(req.params.id);
+      const report = await storage.getDailyReport(reportId);
+      if (!report) {
+        return res.status(404).json({ message: "Report not found" });
+      }
+      
+      const project = await storage.getProject(report.projectId);
+      const taskEntries = await storage.getDailyReportTaskEntries(reportId);
+      const deliveryEntries = await storage.getDailyReportDeliveryEntries(reportId);
+      
+      // Load labor and equipment lines for each task entry
+      const taskEntriesWithLines = await Promise.all(
+        taskEntries.map(async (entry) => ({
+          ...entry,
+          laborLines: await storage.getDailyReportLaborLines(entry.id),
+          equipmentLines: await storage.getDailyReportEquipmentLines(entry.id),
+        }))
+      );
+      
+      // Create PDF
+      const pdfDoc = await PDFDocument.create();
+      const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+      const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+      
+      let page = pdfDoc.addPage([612, 792]); // Letter size
+      const { height } = page.getSize();
+      let y = height - 50;
+      const margin = 50;
+      const lineHeight = 14;
+      
+      const drawText = (text: string, x: number, yPos: number, size = 10, useBold = false) => {
+        page.drawText(text, { x, y: yPos, size, font: useBold ? boldFont : font, color: rgb(0, 0, 0) });
+      };
+      
+      const addNewPageIfNeeded = () => {
+        if (y < 80) {
+          page = pdfDoc.addPage([612, 792]);
+          y = height - 50;
+          // Add DRAFT watermark to new page if draft
+          if (report.status === 'draft') {
+            page.drawText("DRAFT", {
+              x: 200,
+              y: 400,
+              size: 80,
+              font: boldFont,
+              color: rgb(0.9, 0.9, 0.9),
+              rotate: degrees(45),
+            });
+          }
+        }
+      };
+      
+      // Add DRAFT watermark if status is draft
+      if (report.status === 'draft') {
+        page.drawText("DRAFT", {
+          x: 200,
+          y: 400,
+          size: 80,
+          font: boldFont,
+          color: rgb(0.9, 0.9, 0.9),
+          rotate: degrees(45),
+        });
+      }
+      
+      // Header
+      drawText("DAILY FIELD REPORT", margin, y, 18, true);
+      y -= 30;
+      
+      // Project info
+      if (project) {
+        drawText(`Project: ${project.projectNumber} - ${project.name}`, margin, y, 12, true);
+        y -= lineHeight;
+        if (project.streetAddress || project.city || project.state) {
+          const address = [project.streetAddress, project.city, project.state].filter(Boolean).join(", ");
+          drawText(`Location: ${address}`, margin, y, 10);
+          y -= lineHeight;
+        }
+      }
+      
+      // Report date
+      const reportDate = new Date(report.reportDate);
+      const formattedDate = reportDate.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+      drawText(`Date: ${formattedDate}`, margin, y, 10);
+      y -= lineHeight;
+      
+      // Status
+      drawText(`Status: ${report.status.charAt(0).toUpperCase() + report.status.slice(1)}`, margin, y, 10);
+      y -= 25;
+      
+      // Weather section
+      drawText("WEATHER CONDITIONS", margin, y, 12, true);
+      y -= lineHeight + 2;
+      page.drawLine({ start: { x: margin, y: y + 6 }, end: { x: 562, y: y + 6 }, thickness: 0.5, color: rgb(0.7, 0.7, 0.7) });
+      y -= 4;
+      
+      const weatherInfo = [
+        report.weatherSummary ? `Conditions: ${report.weatherSummary}` : null,
+        report.temperature ? `Temperature: ${report.temperature}°F` : null,
+        (report.temperatureHigh || report.temperatureLow) 
+          ? `High/Low: ${report.temperatureHigh || '--'}°F / ${report.temperatureLow || '--'}°F` 
+          : null,
+        report.windSpeed ? `Wind: ${report.windSpeed} mph` : null,
+      ].filter(Boolean);
+      
+      if (weatherInfo.length > 0) {
+        weatherInfo.forEach((info) => {
+          drawText(info as string, margin + 10, y, 10);
+          y -= lineHeight;
+        });
+      } else {
+        drawText("No weather data recorded", margin + 10, y, 10);
+        y -= lineHeight;
+      }
+      y -= 15;
+      
+      // Task Entries
+      addNewPageIfNeeded();
+      drawText("DAILY OPERATIONS", margin, y, 12, true);
+      y -= lineHeight + 2;
+      page.drawLine({ start: { x: margin, y: y + 6 }, end: { x: 562, y: y + 6 }, thickness: 0.5, color: rgb(0.7, 0.7, 0.7) });
+      y -= 4;
+      
+      if (taskEntriesWithLines.length === 0) {
+        drawText("No tasks recorded", margin + 10, y, 10);
+        y -= lineHeight;
+      } else {
+        for (const entry of taskEntriesWithLines) {
+          addNewPageIfNeeded();
+          drawText(`• ${entry.taskTitleSnapshot}`, margin + 10, y, 10, true);
+          y -= lineHeight;
+          drawText(`  Progress: ${entry.percentComplete}%`, margin + 20, y, 9);
+          y -= lineHeight;
+          
+          if (entry.comments) {
+            drawText(`  Notes: ${entry.comments}`, margin + 20, y, 9);
+            y -= lineHeight;
+          }
+          
+          // Labor lines
+          if (entry.laborLines && entry.laborLines.length > 0) {
+            drawText("  Labor:", margin + 20, y, 9, true);
+            y -= lineHeight;
+            for (const labor of entry.laborLines) {
+              drawText(`    - ${labor.laborType}: ${labor.quantity} x ${labor.hours} hrs`, margin + 30, y, 9);
+              y -= lineHeight;
+              addNewPageIfNeeded();
+            }
+          }
+          
+          // Equipment lines
+          if (entry.equipmentLines && entry.equipmentLines.length > 0) {
+            drawText("  Equipment:", margin + 20, y, 9, true);
+            y -= lineHeight;
+            for (const equip of entry.equipmentLines) {
+              drawText(`    - ${equip.equipmentType}: ${equip.quantity} x ${equip.hours} hrs`, margin + 30, y, 9);
+              y -= lineHeight;
+              addNewPageIfNeeded();
+            }
+          }
+          y -= 5;
+        }
+      }
+      y -= 15;
+      
+      // Deliveries
+      addNewPageIfNeeded();
+      drawText("DELIVERIES", margin, y, 12, true);
+      y -= lineHeight + 2;
+      page.drawLine({ start: { x: margin, y: y + 6 }, end: { x: 562, y: y + 6 }, thickness: 0.5, color: rgb(0.7, 0.7, 0.7) });
+      y -= 4;
+      
+      if (deliveryEntries.length === 0) {
+        drawText("No deliveries recorded", margin + 10, y, 10);
+        y -= lineHeight;
+      } else {
+        for (const delivery of deliveryEntries) {
+          addNewPageIfNeeded();
+          drawText(`• ${delivery.vendor || 'Unknown vendor'}`, margin + 10, y, 10, true);
+          y -= lineHeight;
+          if (delivery.deliveryTime) {
+            drawText(`  Time: ${delivery.deliveryTime}`, margin + 20, y, 9);
+            y -= lineHeight;
+          }
+          if (delivery.description) {
+            drawText(`  Description: ${delivery.description}`, margin + 20, y, 9);
+            y -= lineHeight;
+          }
+          const deliveryStatus = delivery.allDelivered ? "All items delivered" : "Missing items";
+          drawText(`  Status: ${deliveryStatus}`, margin + 20, y, 9);
+          y -= lineHeight;
+          if (!delivery.allDelivered && delivery.missingItemsDetails) {
+            drawText(`  Missing: ${delivery.missingItemsDetails}`, margin + 20, y, 9);
+            y -= lineHeight;
+          }
+          y -= 5;
+          addNewPageIfNeeded();
+        }
+      }
+      y -= 15;
+      
+      // Notes
+      if (report.notes) {
+        addNewPageIfNeeded();
+        drawText("NOTES", margin, y, 12, true);
+        y -= lineHeight + 2;
+        page.drawLine({ start: { x: margin, y: y + 6 }, end: { x: 562, y: y + 6 }, thickness: 0.5, color: rgb(0.7, 0.7, 0.7) });
+        y -= 4;
+        
+        // Word wrap notes
+        const words = report.notes.split(' ');
+        let line = '';
+        const maxWidth = 500;
+        for (const word of words) {
+          const testLine = line + (line ? ' ' : '') + word;
+          const width = font.widthOfTextAtSize(testLine, 10);
+          if (width > maxWidth) {
+            drawText(line, margin + 10, y, 10);
+            y -= lineHeight;
+            line = word;
+            addNewPageIfNeeded();
+          } else {
+            line = testLine;
+          }
+        }
+        if (line) {
+          drawText(line, margin + 10, y, 10);
+          y -= lineHeight;
+        }
+        y -= 15;
+      }
+      
+      // Signature section (if completed)
+      if (report.status === 'completed' && report.completedByName) {
+        addNewPageIfNeeded();
+        drawText("SIGNATURE", margin, y, 12, true);
+        y -= lineHeight + 2;
+        page.drawLine({ start: { x: margin, y: y + 6 }, end: { x: 562, y: y + 6 }, thickness: 0.5, color: rgb(0.7, 0.7, 0.7) });
+        y -= 4;
+        
+        drawText(`Signed by: ${report.completedByName}`, margin + 10, y, 10);
+        y -= lineHeight;
+        if (report.completedAt) {
+          const signedDate = new Date(report.completedAt).toLocaleString('en-US');
+          drawText(`Date: ${signedDate}`, margin + 10, y, 10);
+          y -= lineHeight;
+        }
+        if (report.signatureType === 'typed' && report.signatureValue) {
+          drawText(`Signature: ${report.signatureValue}`, margin + 10, y, 10);
+        }
+      }
+      
+      // Footer
+      const totalPages = pdfDoc.getPageCount();
+      for (let i = 0; i < totalPages; i++) {
+        const pg = pdfDoc.getPage(i);
+        pg.drawText(`Page ${i + 1} of ${totalPages}`, { x: 500, y: 20, size: 8, font, color: rgb(0.5, 0.5, 0.5) });
+        pg.drawText(`Generated: ${new Date().toLocaleString('en-US')}`, { x: 50, y: 20, size: 8, font, color: rgb(0.5, 0.5, 0.5) });
+      }
+      
+      const pdfBytes = await pdfDoc.save();
+      
+      const filename = `daily-report-${report.reportDate}-${project?.projectNumber || 'unknown'}.pdf`;
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      res.send(Buffer.from(pdfBytes));
+    } catch (err) {
+      console.error("PDF generation error:", err);
+      return res.status(500).json({ message: "Failed to generate PDF" });
+    }
+  });
+
   // Daily Report Task Entries
   app.get("/api/reports/:reportId/task-entries", async (req, res) => {
     const entries = await storage.getDailyReportTaskEntries(Number(req.params.reportId));
