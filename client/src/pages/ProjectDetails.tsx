@@ -372,7 +372,8 @@ export default function ProjectDetails() {
   };
 
   const currentFolders = folders?.filter(f => f.parentId === currentFolderId) || [];
-  const currentFiles = files?.filter(f => f.folderId === currentFolderId) || [];
+  // Filter to only show documents (files without albumId) - photos have albumId set
+  const currentFiles = files?.filter(f => f.folderId === currentFolderId && !f.albumId) || [];
   
   // All files combined for unified view
   const allFiles = currentFiles;
@@ -1637,7 +1638,8 @@ export default function ProjectDetails() {
 
           {/* Photo Grid with Date Headers */}
           {(() => {
-            const allPhotos = files?.filter(f => isImageFile(f.contentType)) || [];
+            // Only show files that belong to an album (have albumId set) - not documents
+            const allPhotos = files?.filter(f => isImageFile(f.contentType) && f.albumId) || [];
             const photoFiles = currentAlbumId 
               ? allPhotos.filter(f => f.albumId === currentAlbumId)
               : allPhotos;
