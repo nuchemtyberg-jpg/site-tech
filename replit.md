@@ -256,3 +256,13 @@ Tables defined in `shared/schema.ts`:
 - POST `/api/reports/:reportId/deliveries` - Add delivery
 - PUT `/api/deliveries/:id` - Update delivery
 - DELETE `/api/deliveries/:id` - Delete delivery
+
+### Mobile UI/UX
+- Responsive layout using `flex-col sm:flex-row` patterns for stacked controls on mobile
+- Full-width buttons on mobile using `w-full sm:w-auto`
+- Grid breakpoints: `grid-cols-1 lg:grid-cols-3` for report list/detail layout
+- Dialogs use `mx-4 max-w-sm sm:max-w-lg` for mobile-friendly sizing
+- Text contrast uses `text-foreground` semantic class consistently
+- Weather section uses explicit colors `text-blue-800 dark:text-blue-200` for legibility
+- Labor/Equipment entries wrap on mobile with `flex-wrap`
+- `safeFormatDate` helper function prevents runtime errors on invalid dates
