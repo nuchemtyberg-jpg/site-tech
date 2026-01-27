@@ -78,7 +78,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { insertTaskSchema, type InsertTask, type FileMetadata, type Task } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
-import { cn } from "@/lib/utils";
+import { cn, getProxyUrl } from "@/lib/utils";
 import { ObjectUploader } from "@/components/ObjectUploader";
 import { PDFViewer } from "@/components/PDFViewer";
 import { useQuery, useMutation } from "@tanstack/react-query";
@@ -322,16 +322,17 @@ export default function ProjectDetails() {
   const handleFileClick = (file: FileMetadata) => {
     if (isPdfFile(file.contentType)) {
       // Open PDF in browser's native PDF viewer
-      window.open(file.objectPath, '_blank');
+      window.open(getProxyUrl(file.objectPath), '_blank');
     } else {
       setViewingFile(file);
     }
   };
 
   const handleShareFile = async (file: FileMetadata) => {
+    const proxyPath = getProxyUrl(file.objectPath);
     try {
       // Try to share the actual file
-      const response = await fetch(file.objectPath);
+      const response = await fetch(proxyPath);
       const blob = await response.blob();
       const fileToShare = new window.File([blob], file.name, { type: file.contentType || 'application/octet-stream' });
       
@@ -344,17 +345,17 @@ export default function ProjectDetails() {
         // Fall back to sharing link if file sharing not supported
         await navigator.share({
           title: file.name,
-          url: `${window.location.origin}${file.objectPath}`,
+          url: `${window.location.origin}${proxyPath}`,
         });
       } else {
         // Fall back to copying link
-        await navigator.clipboard.writeText(`${window.location.origin}${file.objectPath}`);
+        await navigator.clipboard.writeText(`${window.location.origin}${proxyPath}`);
         toast({ title: "Link Copied", description: "File link copied to clipboard." });
       }
     } catch (err) {
       // Final fallback
       try {
-        await navigator.clipboard.writeText(`${window.location.origin}${file.objectPath}`);
+        await navigator.clipboard.writeText(`${window.location.origin}${proxyPath}`);
         toast({ title: "Link Copied", description: "File link copied to clipboard." });
       } catch {
         toast({ title: "Share Failed", description: "Unable to share this file.", variant: "destructive" });
@@ -409,7 +410,7 @@ export default function ProjectDetails() {
     if (isImageFile(file.contentType)) {
       return (
         <img 
-          src={file.objectPath} 
+          src={getProxyUrl(file.objectPath)} 
           alt={file.name}
           className="w-full h-full object-cover"
           loading="lazy"
@@ -1600,7 +1601,7 @@ export default function ProjectDetails() {
                     const photo = files?.find(f => f.id === id);
                     if (photo) {
                       const link = document.createElement('a');
-                      link.href = photo.objectPath;
+                      link.href = getProxyUrl(photo.objectPath);
                       link.download = photo.name;
                       link.click();
                     }
@@ -1723,7 +1724,7 @@ export default function ProjectDetails() {
                                 data-testid={`photo-card-${photo.id}`}
                               >
                                 <img 
-                                  src={photo.objectPath} 
+                                  src={getProxyUrl(photo.objectPath)} 
                                   alt={photo.name}
                                   className="w-full h-full object-cover"
                                 />
@@ -1799,7 +1800,7 @@ export default function ProjectDetails() {
       {/* PDF Viewer with markup tools */}
       {viewingFile && isPdfFile(viewingFile.contentType) && (
         <PDFViewer 
-          url={viewingFile.objectPath}
+          url={getProxyUrl(viewingFile.objectPath)}
           fileName={viewingFile.name}
           onClose={() => setViewingFile(null)}
           onShare={() => handleShareFile(viewingFile)}
@@ -1845,7 +1846,7 @@ export default function ProjectDetails() {
 
             <div className="flex-1 flex items-center justify-center p-4 overflow-auto" onClick={() => setViewingFile(null)}>
               <img 
-                src={viewingFile.objectPath} 
+                src={getProxyUrl(viewingFile.objectPath)} 
                 alt={viewingFile.name}
                 className="max-w-full max-h-full object-contain rounded-lg"
                 onClick={(e) => e.stopPropagation()}
@@ -1868,7 +1869,7 @@ export default function ProjectDetails() {
                     <Share2 className="w-5 h-5" />
                   </Button>
                   <a
-                    href={viewingFile.objectPath}
+                    href={getProxyUrl(viewingFile.objectPath)}
                     download={viewingFile.name}
                     className="inline-flex items-center justify-center h-9 w-9 rounded-md text-white hover:bg-white/20"
                     data-testid="button-download-file"
@@ -1900,7 +1901,7 @@ export default function ProjectDetails() {
             <p className="text-muted-foreground mb-4">This file type cannot be previewed.</p>
             <div className="flex gap-2 justify-center">
               <a
-                href={viewingFile.objectPath}
+                href={getProxyUrl(viewingFile.objectPath)}
                 download={viewingFile.name}
                 className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
               >
