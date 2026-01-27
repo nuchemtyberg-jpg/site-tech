@@ -33,6 +33,18 @@ import type { DailyReport, Task, ReportTask, LaborEntry, EquipmentEntry, Deliver
 const LABOR_TYPES = ["Foreman", "Operator", "Laborer"];
 const EQUIPMENT_TYPES = ["Mini Excavator", "Excavator", "Skidsteer", "Compactor"];
 
+// Safe date formatting helper that won't throw on invalid dates
+function safeFormatDate(dateString: string | null | undefined, formatStr: string, fallback: string = 'this date'): string {
+  if (!dateString) return fallback;
+  try {
+    const date = new Date(dateString + 'T00:00:00');
+    if (isNaN(date.getTime())) return fallback;
+    return format(date, formatStr);
+  } catch {
+    return fallback;
+  }
+}
+
 interface DailyReportsTabProps {
   projectId: number;
   projectAddress?: string;
@@ -490,7 +502,7 @@ export function DailyReportsTab({ projectId, projectAddress, projectCity, projec
           <AlertDialogHeader>
             <AlertDialogTitle className="text-foreground">Report Already Exists</AlertDialogTitle>
             <AlertDialogDescription>
-              A report for {format(new Date(newReportDate + 'T00:00:00'), 'MMMM d, yyyy')} already exists for this project.
+              A report for {safeFormatDate(newReportDate, 'MMMM d, yyyy')} already exists for this project.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter className="flex-col sm:flex-row gap-2">
