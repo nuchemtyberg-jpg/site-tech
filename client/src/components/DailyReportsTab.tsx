@@ -332,20 +332,20 @@ export function DailyReportsTab({ projectId, projectAddress, projectCity, projec
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h3 className="text-lg font-semibold">Daily Reports</h3>
-        <Button onClick={() => setIsCreateDialogOpen(true)} data-testid="button-create-report">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <h3 className="text-lg font-semibold text-foreground">Daily Reports</h3>
+        <Button onClick={() => setIsCreateDialogOpen(true)} data-testid="button-create-report" className="w-full sm:w-auto">
           <Plus className="w-4 h-4 mr-2" /> New Report
         </Button>
       </div>
 
-      <div className="grid md:grid-cols-3 gap-4">
-        <div className="md:col-span-1 space-y-2">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div className="lg:col-span-1 space-y-2">
           <h4 className="font-medium text-sm text-muted-foreground">Select a Report</h4>
           {reports.length === 0 ? (
             <p className="text-sm text-muted-foreground">No reports yet. Create your first report.</p>
           ) : (
-            <div className="space-y-2 max-h-96 overflow-y-auto">
+            <div className="space-y-2 max-h-64 lg:max-h-96 overflow-y-auto">
               {reports.map(report => (
                 <Card 
                   key={report.id}
@@ -354,16 +354,17 @@ export function DailyReportsTab({ projectId, projectAddress, projectCity, projec
                   data-testid={`card-report-${report.id}`}
                 >
                   <CardContent className="p-3">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <Calendar className="w-4 h-4 text-muted-foreground" />
-                        <span className="font-medium">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <Calendar className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                        <span className="font-medium text-foreground truncate">
                           {format(new Date(report.reportDate + 'T00:00:00'), 'MMM d, yyyy')}
                         </span>
                       </div>
                       <Button
                         variant="ghost"
                         size="icon"
+                        className="flex-shrink-0"
                         onClick={(e) => {
                           e.stopPropagation();
                           setDeleteReportId(report.id);
@@ -375,8 +376,8 @@ export function DailyReportsTab({ projectId, projectAddress, projectCity, projec
                     </div>
                     {report.weather && (
                       <div className="flex items-center gap-1 text-sm text-muted-foreground mt-1">
-                        <Cloud className="w-3 h-3" />
-                        {report.weather} - {report.temperature}
+                        <Cloud className="w-3 h-3 flex-shrink-0" />
+                        <span className="truncate">{report.weather} - {report.temperature}</span>
                       </div>
                     )}
                   </CardContent>
@@ -386,7 +387,7 @@ export function DailyReportsTab({ projectId, projectAddress, projectCity, projec
           )}
         </div>
 
-        <div className="md:col-span-2">
+        <div className="lg:col-span-2">
           {selectedReport ? (
             <ReportEditor
               report={selectedReport}
@@ -446,13 +447,13 @@ export function DailyReportsTab({ projectId, projectAddress, projectCity, projec
       </div>
 
       <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-        <DialogContent className="bg-white dark:bg-zinc-900">
+        <DialogContent className="bg-white dark:bg-zinc-900 mx-4 max-w-sm sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle className="text-black dark:text-white">Create New Report</DialogTitle>
+            <DialogTitle className="text-foreground">Create New Report</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="grid gap-2">
-              <Label htmlFor="report-date" className="text-black dark:text-white">
+              <Label htmlFor="report-date" className="text-foreground">
                 <span className="text-red-500">*</span> Report Date
               </Label>
               <Input
@@ -460,7 +461,7 @@ export function DailyReportsTab({ projectId, projectAddress, projectCity, projec
                 type="date"
                 value={newReportDate}
                 onChange={(e) => setNewReportDate(e.target.value)}
-                className="bg-white dark:bg-zinc-900 text-black dark:text-white"
+                className="bg-white dark:bg-zinc-800 text-foreground border-border"
                 data-testid="input-report-date"
               />
             </div>
@@ -468,13 +469,14 @@ export function DailyReportsTab({ projectId, projectAddress, projectCity, projec
               Weather information will be automatically fetched for the project location.
             </p>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
+          <DialogFooter className="flex-col sm:flex-row gap-2">
+            <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)} className="w-full sm:w-auto">
               Cancel
             </Button>
             <Button 
               onClick={handleCreateReport}
               disabled={createReportMutation.isPending}
+              className="w-full sm:w-auto"
               data-testid="button-submit-create-report"
             >
               {createReportMutation.isPending ? "Creating..." : "Create Report"}
@@ -484,18 +486,18 @@ export function DailyReportsTab({ projectId, projectAddress, projectCity, projec
       </Dialog>
 
       <AlertDialog open={showDateConflictDialog} onOpenChange={setShowDateConflictDialog}>
-        <AlertDialogContent className="bg-white dark:bg-zinc-900">
+        <AlertDialogContent className="bg-white dark:bg-zinc-900 mx-4 max-w-sm sm:max-w-lg">
           <AlertDialogHeader>
-            <AlertDialogTitle className="text-black dark:text-white">Report Already Exists</AlertDialogTitle>
+            <AlertDialogTitle className="text-foreground">Report Already Exists</AlertDialogTitle>
             <AlertDialogDescription>
               A report for {format(new Date(newReportDate + 'T00:00:00'), 'MMMM d, yyyy')} already exists for this project.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => setShowDateConflictDialog(false)}>
+          <AlertDialogFooter className="flex-col sm:flex-row gap-2">
+            <AlertDialogCancel onClick={() => setShowDateConflictDialog(false)} className="w-full sm:w-auto">
               Choose Different Date
             </AlertDialogCancel>
-            <AlertDialogAction onClick={handleEditExistingReport} data-testid="button-edit-existing-report">
+            <AlertDialogAction onClick={handleEditExistingReport} className="w-full sm:w-auto" data-testid="button-edit-existing-report">
               Edit Existing Report
             </AlertDialogAction>
           </AlertDialogFooter>
@@ -503,18 +505,18 @@ export function DailyReportsTab({ projectId, projectAddress, projectCity, projec
       </AlertDialog>
 
       <AlertDialog open={!!deleteReportId} onOpenChange={() => setDeleteReportId(null)}>
-        <AlertDialogContent className="bg-white dark:bg-zinc-900">
+        <AlertDialogContent className="bg-white dark:bg-zinc-900 mx-4 max-w-sm sm:max-w-lg">
           <AlertDialogHeader>
-            <AlertDialogTitle className="text-black dark:text-white">Delete Report?</AlertDialogTitle>
+            <AlertDialogTitle className="text-foreground">Delete Report?</AlertDialogTitle>
             <AlertDialogDescription>
               This action cannot be undone. All tasks and deliveries associated with this report will be removed.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogFooter className="flex-col sm:flex-row gap-2">
+            <AlertDialogCancel className="w-full sm:w-auto">Cancel</AlertDialogCancel>
             <AlertDialogAction 
               onClick={() => deleteReportId && deleteReportMutation.mutate(deleteReportId)}
-              className="bg-destructive text-destructive-foreground"
+              className="bg-destructive text-destructive-foreground w-full sm:w-auto"
               data-testid="button-confirm-delete-report"
             >
               Delete
@@ -524,18 +526,18 @@ export function DailyReportsTab({ projectId, projectAddress, projectCity, projec
       </AlertDialog>
 
       <AlertDialog open={!!deleteTaskId} onOpenChange={() => setDeleteTaskId(null)}>
-        <AlertDialogContent className="bg-white dark:bg-zinc-900">
+        <AlertDialogContent className="bg-white dark:bg-zinc-900 mx-4 max-w-sm sm:max-w-lg">
           <AlertDialogHeader>
-            <AlertDialogTitle className="text-black dark:text-white">Remove Task from Report?</AlertDialogTitle>
+            <AlertDialogTitle className="text-foreground">Remove Task from Report?</AlertDialogTitle>
             <AlertDialogDescription>
               This will remove the task and its associated labor and equipment entries from this report.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogFooter className="flex-col sm:flex-row gap-2">
+            <AlertDialogCancel className="w-full sm:w-auto">Cancel</AlertDialogCancel>
             <AlertDialogAction 
               onClick={() => deleteTaskId && deleteReportTaskMutation.mutate(deleteTaskId)}
-              className="bg-destructive text-destructive-foreground"
+              className="bg-destructive text-destructive-foreground w-full sm:w-auto"
               data-testid="button-confirm-delete-task"
             >
               Remove
@@ -545,18 +547,18 @@ export function DailyReportsTab({ projectId, projectAddress, projectCity, projec
       </AlertDialog>
 
       <AlertDialog open={!!deleteDeliveryId} onOpenChange={() => setDeleteDeliveryId(null)}>
-        <AlertDialogContent className="bg-white dark:bg-zinc-900">
+        <AlertDialogContent className="bg-white dark:bg-zinc-900 mx-4 max-w-sm sm:max-w-lg">
           <AlertDialogHeader>
-            <AlertDialogTitle className="text-black dark:text-white">Remove Delivery?</AlertDialogTitle>
+            <AlertDialogTitle className="text-foreground">Remove Delivery?</AlertDialogTitle>
             <AlertDialogDescription>
               This will remove the delivery record from this report.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogFooter className="flex-col sm:flex-row gap-2">
+            <AlertDialogCancel className="w-full sm:w-auto">Cancel</AlertDialogCancel>
             <AlertDialogAction 
               onClick={() => deleteDeliveryId && deleteDeliveryMutation.mutate(deleteDeliveryId)}
-              className="bg-destructive text-destructive-foreground"
+              className="bg-destructive text-destructive-foreground w-full sm:w-auto"
               data-testid="button-confirm-delete-delivery"
             >
               Remove
@@ -661,49 +663,47 @@ function ReportEditor({
   );
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       <Card>
-        <CardHeader className="pb-2">
-          <div className="flex items-center justify-between">
-            <CardTitle className="flex items-center gap-2">
-              <Calendar className="w-5 h-5" />
-              {format(new Date(report.reportDate + 'T00:00:00'), 'EEEE, MMMM d, yyyy')}
-            </CardTitle>
-          </div>
+        <CardHeader className="pb-2 px-3 sm:px-6">
+          <CardTitle className="flex items-center gap-2 text-base sm:text-lg text-foreground">
+            <Calendar className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0" />
+            <span className="truncate">{format(new Date(report.reportDate + 'T00:00:00'), 'EEEE, MMMM d, yyyy')}</span>
+          </CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="px-3 sm:px-6">
           {report.weather && (
-            <div className="flex flex-wrap gap-4 mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-              <div className="flex items-center gap-2">
-                <Cloud className="w-5 h-5 text-blue-500" />
-                <span className="font-medium">{report.weather}</span>
+            <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-2 sm:gap-4 mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg text-sm">
+              <div className="col-span-2 flex items-center gap-2">
+                <Cloud className="w-4 h-4 sm:w-5 sm:h-5 text-blue-500 flex-shrink-0" />
+                <span className="font-medium text-blue-900 dark:text-blue-100">{report.weather}</span>
               </div>
               {report.temperature && (
-                <span>Current: {report.temperature}</span>
+                <span className="text-blue-800 dark:text-blue-200">Current: {report.temperature}</span>
               )}
               {report.temperatureHigh && (
-                <span>High: {report.temperatureHigh}</span>
+                <span className="text-blue-800 dark:text-blue-200">High: {report.temperatureHigh}</span>
               )}
               {report.temperatureLow && (
-                <span>Low: {report.temperatureLow}</span>
+                <span className="text-blue-800 dark:text-blue-200">Low: {report.temperatureLow}</span>
               )}
               {report.humidity && (
-                <span>Humidity: {report.humidity}</span>
+                <span className="text-blue-800 dark:text-blue-200">Humidity: {report.humidity}</span>
               )}
               {report.windSpeed && (
-                <span>Wind: {report.windSpeed}</span>
+                <span className="text-blue-800 dark:text-blue-200">Wind: {report.windSpeed}</span>
               )}
             </div>
           )}
           
           <div className="grid gap-2">
-            <Label htmlFor="notes" className="text-black dark:text-white">Notes</Label>
+            <Label htmlFor="notes" className="text-foreground">Notes</Label>
             <Textarea
               id="notes"
               placeholder="General notes for this day..."
               value={report.notes || ''}
               onChange={(e) => onUpdateReport({ notes: e.target.value })}
-              className="bg-white dark:bg-zinc-900 text-black dark:text-white"
+              className="bg-white dark:bg-zinc-800 text-foreground border-border min-h-[80px]"
               data-testid="textarea-report-notes"
             />
           </div>
@@ -711,15 +711,15 @@ function ReportEditor({
       </Card>
 
       <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle>Daily Operations</CardTitle>
-            <div className="flex items-center gap-2">
+        <CardHeader className="px-3 sm:px-6">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <CardTitle className="text-foreground">Daily Operations</CardTitle>
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
               <Select value={selectedTaskToAdd} onValueChange={setSelectedTaskToAdd}>
-                <SelectTrigger className="w-48 bg-white dark:bg-zinc-900 text-black" data-testid="select-add-task">
+                <SelectTrigger className="w-full sm:w-48 bg-white dark:bg-zinc-800 text-foreground border-border" data-testid="select-add-task">
                   <SelectValue placeholder="Select task..." />
                 </SelectTrigger>
-                <SelectContent className="bg-white dark:bg-zinc-900 text-black">
+                <SelectContent className="bg-white dark:bg-zinc-800 text-foreground border-border">
                   {availableTasksToAdd.length === 0 ? (
                     <SelectItem value="none" disabled>No available tasks</SelectItem>
                   ) : (
@@ -739,6 +739,7 @@ function ReportEditor({
                   }
                 }}
                 disabled={!selectedTaskToAdd || selectedTaskToAdd === "none"}
+                className="w-full sm:w-auto"
                 data-testid="button-add-task-to-report"
               >
                 <Plus className="w-4 h-4 mr-1" /> Add Task
@@ -746,7 +747,7 @@ function ReportEditor({
             </div>
           </div>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-4 px-3 sm:px-6">
           {reportTasks.length === 0 ? (
             <p className="text-sm text-muted-foreground text-center py-4">
               No tasks added yet. Select a task from the dropdown to add it to this report.
@@ -760,24 +761,26 @@ function ReportEditor({
 
               return (
                 <Card key={reportTask.id} className="border" data-testid={`card-report-task-${reportTask.id}`}>
-                  <CardContent className="pt-4">
-                    <div className="flex items-start justify-between mb-3">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2">
+                  <CardContent className="pt-4 px-3 sm:px-6">
+                    <div className="flex items-start justify-between gap-2 mb-3">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1 sm:gap-2">
                           <Button
                             variant="ghost"
                             size="icon"
+                            className="flex-shrink-0"
                             onClick={() => toggleTaskExpanded(reportTask.id)}
                             data-testid={`button-toggle-task-${reportTask.id}`}
                           >
                             {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                           </Button>
-                          <h4 className="font-medium">{task?.title || 'Unknown Task'}</h4>
+                          <h4 className="font-medium text-foreground text-sm sm:text-base truncate">{task?.title || 'Unknown Task'}</h4>
                         </div>
                       </div>
                       <Button
                         variant="ghost"
                         size="icon"
+                        className="flex-shrink-0"
                         onClick={() => onDeleteReportTask(reportTask.id)}
                         data-testid={`button-delete-report-task-${reportTask.id}`}
                       >
@@ -786,7 +789,7 @@ function ReportEditor({
                     </div>
 
                     <div className="mb-4">
-                      <Label className="text-sm text-black dark:text-white">Percent Complete: {reportTask.percentComplete}%</Label>
+                      <Label className="text-sm text-foreground">Percent Complete: {reportTask.percentComplete}%</Label>
                       <Slider
                         value={[reportTask.percentComplete]}
                         min={0}
@@ -801,13 +804,13 @@ function ReportEditor({
                     {isExpanded && (
                       <div className="space-y-4 mt-4 pt-4 border-t">
                         <div>
-                          <div className="flex items-center justify-between mb-2">
-                            <Label className="text-sm font-medium text-black dark:text-white">Labor</Label>
+                          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-2">
+                            <Label className="text-sm font-medium text-foreground">Labor</Label>
                             <Select onValueChange={(type) => onAddLabor(reportTask.id, type)}>
-                              <SelectTrigger className="w-40 bg-white dark:bg-zinc-900 text-black" data-testid={`select-add-labor-${reportTask.id}`}>
+                              <SelectTrigger className="w-full sm:w-40 bg-white dark:bg-zinc-800 text-foreground border-border" data-testid={`select-add-labor-${reportTask.id}`}>
                                 <SelectValue placeholder="Add labor..." />
                               </SelectTrigger>
-                              <SelectContent className="bg-white dark:bg-zinc-900 text-black">
+                              <SelectContent className="bg-white dark:bg-zinc-800 text-foreground border-border">
                                 {LABOR_TYPES.map(type => (
                                   <SelectItem key={type} value={type}>{type}</SelectItem>
                                 ))}
@@ -815,27 +818,31 @@ function ReportEditor({
                             </Select>
                           </div>
                           {laborEntries.map(entry => (
-                            <div key={entry.id} className="flex items-center gap-2 mb-2 p-2 bg-gray-50 dark:bg-zinc-800 rounded">
-                              <span className="w-24 text-sm">{entry.laborType}</span>
-                              <Input
-                                type="number"
-                                value={entry.quantity}
-                                onChange={(e) => {}}
-                                className="w-16 bg-white dark:bg-zinc-900 text-black"
-                                placeholder="Qty"
-                              />
-                              <span className="text-sm">x</span>
-                              <Input
-                                type="number"
-                                value={entry.hours}
-                                onChange={(e) => {}}
-                                className="w-16 bg-white dark:bg-zinc-900 text-black"
-                                placeholder="Hrs"
-                              />
-                              <span className="text-sm">hours</span>
+                            <div key={entry.id} className="flex flex-wrap items-center gap-2 mb-2 p-2 bg-muted/50 dark:bg-zinc-800 rounded">
+                              <span className="w-full sm:w-24 text-sm text-foreground font-medium">{entry.laborType}</span>
+                              <div className="flex items-center gap-2 flex-1 min-w-0">
+                                <Input
+                                  type="number"
+                                  value={entry.quantity}
+                                  onChange={(e) => {}}
+                                  className="w-16 bg-white dark:bg-zinc-700 text-foreground border-border"
+                                  placeholder="Qty"
+                                />
+                                <span className="text-sm text-muted-foreground">x</span>
+                                <Input
+                                  type="number"
+                                  value={entry.hours}
+                                  onChange={(e) => {}}
+                                  className="w-16 bg-white dark:bg-zinc-700 text-foreground border-border"
+                                  placeholder="Hrs"
+                                />
+                                <span className="text-sm text-muted-foreground hidden sm:inline">hours</span>
+                                <span className="text-sm text-muted-foreground sm:hidden">hrs</span>
+                              </div>
                               <Button
                                 variant="ghost"
                                 size="icon"
+                                className="flex-shrink-0"
                                 onClick={() => onDeleteLabor(entry.id)}
                               >
                                 <X className="w-4 h-4" />
@@ -845,13 +852,13 @@ function ReportEditor({
                         </div>
 
                         <div>
-                          <div className="flex items-center justify-between mb-2">
-                            <Label className="text-sm font-medium text-black dark:text-white">Equipment</Label>
+                          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-2">
+                            <Label className="text-sm font-medium text-foreground">Equipment</Label>
                             <Select onValueChange={(type) => onAddEquipment(reportTask.id, type)}>
-                              <SelectTrigger className="w-40 bg-white dark:bg-zinc-900 text-black" data-testid={`select-add-equipment-${reportTask.id}`}>
+                              <SelectTrigger className="w-full sm:w-40 bg-white dark:bg-zinc-800 text-foreground border-border" data-testid={`select-add-equipment-${reportTask.id}`}>
                                 <SelectValue placeholder="Add equipment..." />
                               </SelectTrigger>
-                              <SelectContent className="bg-white dark:bg-zinc-900 text-black">
+                              <SelectContent className="bg-white dark:bg-zinc-800 text-foreground border-border">
                                 {EQUIPMENT_TYPES.map(type => (
                                   <SelectItem key={type} value={type}>{type}</SelectItem>
                                 ))}
@@ -859,27 +866,31 @@ function ReportEditor({
                             </Select>
                           </div>
                           {equipmentEntries.map(entry => (
-                            <div key={entry.id} className="flex items-center gap-2 mb-2 p-2 bg-gray-50 dark:bg-zinc-800 rounded">
-                              <span className="w-24 text-sm">{entry.equipmentType}</span>
-                              <Input
-                                type="number"
-                                value={entry.quantity}
-                                onChange={(e) => {}}
-                                className="w-16 bg-white dark:bg-zinc-900 text-black"
-                                placeholder="Qty"
-                              />
-                              <span className="text-sm">x</span>
-                              <Input
-                                type="number"
-                                value={entry.hours}
-                                onChange={(e) => {}}
-                                className="w-16 bg-white dark:bg-zinc-900 text-black"
-                                placeholder="Hrs"
-                              />
-                              <span className="text-sm">hours</span>
+                            <div key={entry.id} className="flex flex-wrap items-center gap-2 mb-2 p-2 bg-muted/50 dark:bg-zinc-800 rounded">
+                              <span className="w-full sm:w-24 text-sm text-foreground font-medium">{entry.equipmentType}</span>
+                              <div className="flex items-center gap-2 flex-1 min-w-0">
+                                <Input
+                                  type="number"
+                                  value={entry.quantity}
+                                  onChange={(e) => {}}
+                                  className="w-16 bg-white dark:bg-zinc-700 text-foreground border-border"
+                                  placeholder="Qty"
+                                />
+                                <span className="text-sm text-muted-foreground">x</span>
+                                <Input
+                                  type="number"
+                                  value={entry.hours}
+                                  onChange={(e) => {}}
+                                  className="w-16 bg-white dark:bg-zinc-700 text-foreground border-border"
+                                  placeholder="Hrs"
+                                />
+                                <span className="text-sm text-muted-foreground hidden sm:inline">hours</span>
+                                <span className="text-sm text-muted-foreground sm:hidden">hrs</span>
+                              </div>
                               <Button
                                 variant="ghost"
                                 size="icon"
+                                className="flex-shrink-0"
                                 onClick={() => onDeleteEquipment(entry.id)}
                               >
                                 <X className="w-4 h-4" />
@@ -889,22 +900,23 @@ function ReportEditor({
                         </div>
 
                         <div>
-                          <Label className="text-sm font-medium text-black dark:text-white">Comments</Label>
+                          <Label className="text-sm font-medium text-foreground">Comments</Label>
                           <Textarea
                             value={reportTask.comments || ''}
                             onChange={(e) => onUpdateReportTask(reportTask.id, { comments: e.target.value })}
                             placeholder="Add comments about this task..."
-                            className="mt-1 bg-white dark:bg-zinc-900 text-black"
+                            className="mt-1 bg-white dark:bg-zinc-800 text-foreground border-border min-h-[60px]"
                             data-testid={`textarea-task-comments-${reportTask.id}`}
                           />
                         </div>
 
                         <div>
-                          <div className="flex items-center justify-between mb-2">
-                            <Label className="text-sm font-medium text-black dark:text-white">Task Photos</Label>
+                          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-2">
+                            <Label className="text-sm font-medium text-foreground">Task Photos</Label>
                             <Button 
                               variant="outline" 
                               size="sm"
+                              className="w-full sm:w-auto"
                               onClick={() => setShowTaskPhotoUpload(reportTask.id)}
                               data-testid={`button-upload-task-photos-${reportTask.id}`}
                             >
@@ -923,18 +935,18 @@ function ReportEditor({
       </Card>
 
       <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle className="flex items-center gap-2">
-              <Truck className="w-5 h-5" />
+        <CardHeader className="px-3 sm:px-6">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <CardTitle className="flex items-center gap-2 text-foreground">
+              <Truck className="w-5 h-5 flex-shrink-0" />
               Deliveries
             </CardTitle>
-            <Button onClick={onAddDelivery} data-testid="button-add-delivery">
+            <Button onClick={onAddDelivery} className="w-full sm:w-auto" data-testid="button-add-delivery">
               <Plus className="w-4 h-4 mr-1" /> Add Delivery
             </Button>
           </div>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-4 px-3 sm:px-6">
           {deliveries.length === 0 ? (
             <p className="text-sm text-muted-foreground text-center py-4">
               No deliveries recorded. Click "Add Delivery" to add one.
@@ -942,26 +954,26 @@ function ReportEditor({
           ) : (
             deliveries.map(delivery => (
               <Card key={delivery.id} className="border" data-testid={`card-delivery-${delivery.id}`}>
-                <CardContent className="pt-4 space-y-3">
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1 grid grid-cols-2 gap-3">
+                <CardContent className="pt-4 px-3 sm:px-6 space-y-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div>
-                        <Label className="text-sm text-black dark:text-white"><span className="text-red-500">*</span> Vendor</Label>
+                        <Label className="text-sm text-foreground"><span className="text-red-500">*</span> Vendor</Label>
                         <Input
                           value={delivery.vendor || ''}
                           onChange={(e) => onUpdateDelivery(delivery.id, { vendor: e.target.value })}
                           placeholder="Vendor name"
-                          className="mt-1 bg-white dark:bg-zinc-900 text-black"
+                          className="mt-1 bg-white dark:bg-zinc-800 text-foreground border-border"
                           data-testid={`input-delivery-vendor-${delivery.id}`}
                         />
                       </div>
                       <div>
-                        <Label className="text-sm text-black dark:text-white">Delivery Time</Label>
+                        <Label className="text-sm text-foreground">Delivery Time</Label>
                         <Input
                           type="time"
                           value={delivery.deliveryTime || ''}
                           onChange={(e) => onUpdateDelivery(delivery.id, { deliveryTime: e.target.value })}
-                          className="mt-1 bg-white dark:bg-zinc-900 text-black"
+                          className="mt-1 bg-white dark:bg-zinc-800 text-foreground border-border"
                           data-testid={`input-delivery-time-${delivery.id}`}
                         />
                       </div>
@@ -969,6 +981,7 @@ function ReportEditor({
                     <Button
                       variant="ghost"
                       size="icon"
+                      className="flex-shrink-0"
                       onClick={() => onDeleteDelivery(delivery.id)}
                       data-testid={`button-delete-delivery-${delivery.id}`}
                     >
@@ -977,18 +990,18 @@ function ReportEditor({
                   </div>
 
                   <div>
-                    <Label className="text-sm text-black dark:text-white">Description</Label>
+                    <Label className="text-sm text-foreground">Description</Label>
                     <Textarea
                       value={delivery.description || ''}
                       onChange={(e) => onUpdateDelivery(delivery.id, { description: e.target.value })}
                       placeholder="What was delivered..."
-                      className="mt-1 bg-white dark:bg-zinc-900 text-black"
+                      className="mt-1 bg-white dark:bg-zinc-800 text-foreground border-border min-h-[60px]"
                       data-testid={`textarea-delivery-description-${delivery.id}`}
                     />
                   </div>
 
                   <div className="space-y-2">
-                    <Label className="text-sm text-black dark:text-white">All items on delivery slip delivered?</Label>
+                    <Label className="text-sm text-foreground">All items on delivery slip delivered?</Label>
                     <div className="flex gap-4">
                       <label className="flex items-center gap-2 cursor-pointer">
                         <input
@@ -996,9 +1009,10 @@ function ReportEditor({
                           name={`delivered-${delivery.id}`}
                           checked={delivery.allItemsDelivered === true}
                           onChange={() => onUpdateDelivery(delivery.id, { allItemsDelivered: true, missingItemsDetails: null })}
+                          className="accent-primary"
                           data-testid={`radio-delivered-yes-${delivery.id}`}
                         />
-                        <span className="text-sm">Yes</span>
+                        <span className="text-sm text-foreground">Yes</span>
                       </label>
                       <label className="flex items-center gap-2 cursor-pointer">
                         <input
@@ -1006,23 +1020,24 @@ function ReportEditor({
                           name={`delivered-${delivery.id}`}
                           checked={delivery.allItemsDelivered === false}
                           onChange={() => onUpdateDelivery(delivery.id, { allItemsDelivered: false })}
+                          className="accent-primary"
                           data-testid={`radio-delivered-no-${delivery.id}`}
                         />
-                        <span className="text-sm">No</span>
+                        <span className="text-sm text-foreground">No</span>
                       </label>
                     </div>
                   </div>
 
                   {delivery.allItemsDelivered === false && (
                     <div>
-                      <Label className="text-sm text-black dark:text-white">
+                      <Label className="text-sm text-foreground">
                         <span className="text-red-500">*</span> Details of Missing Items
                       </Label>
                       <Textarea
                         value={delivery.missingItemsDetails || ''}
                         onChange={(e) => onUpdateDelivery(delivery.id, { missingItemsDetails: e.target.value })}
                         placeholder="Describe what items were missing..."
-                        className="mt-1 bg-white dark:bg-zinc-900 text-black"
+                        className="mt-1 bg-white dark:bg-zinc-800 text-foreground border-border min-h-[60px]"
                         data-testid={`textarea-missing-items-${delivery.id}`}
                       />
                     </div>
@@ -1035,6 +1050,7 @@ function ReportEditor({
                     <Button 
                       variant="outline" 
                       size="sm"
+                      className="w-full sm:w-auto"
                       onClick={() => setShowDeliveryPhotoUpload(delivery.id)}
                       data-testid={`button-upload-delivery-photos-${delivery.id}`}
                     >
@@ -1049,9 +1065,9 @@ function ReportEditor({
       </Card>
 
       <Dialog open={showTaskPhotoUpload !== null} onOpenChange={() => setShowTaskPhotoUpload(null)}>
-        <DialogContent className="bg-white dark:bg-zinc-900">
+        <DialogContent className="bg-white dark:bg-zinc-900 mx-4 max-w-sm sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle className="text-black dark:text-white">Upload Task Photos</DialogTitle>
+            <DialogTitle className="text-foreground">Upload Task Photos</DialogTitle>
           </DialogHeader>
           <div className="py-4 text-center">
             <p className="text-muted-foreground mb-4">
@@ -1065,9 +1081,9 @@ function ReportEditor({
       </Dialog>
 
       <Dialog open={showDeliveryPhotoUpload !== null} onOpenChange={() => setShowDeliveryPhotoUpload(null)}>
-        <DialogContent className="bg-white dark:bg-zinc-900">
+        <DialogContent className="bg-white dark:bg-zinc-900 mx-4 max-w-sm sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle className="text-black dark:text-white">Upload Delivery Photos</DialogTitle>
+            <DialogTitle className="text-foreground">Upload Delivery Photos</DialogTitle>
           </DialogHeader>
           <div className="py-4 text-center">
             <p className="text-muted-foreground mb-4">
