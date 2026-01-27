@@ -601,6 +601,33 @@ export default function ProjectDetails() {
     const successfulUploads = result.successful || [];
     let successCount = 0;
     
+    // Determine the album ID to use - if none selected, use first existing album or create one
+    let targetAlbumId = currentAlbumId;
+    
+    if (targetAlbumId === null && successfulUploads.length > 0) {
+      // Try to use an existing album (prefer "General" if exists, otherwise first album)
+      const generalAlbum = albums?.find((a: any) => a.name === "General");
+      const firstAlbum = albums?.[0];
+      
+      if (generalAlbum) {
+        targetAlbumId = generalAlbum.id;
+      } else if (firstAlbum) {
+        targetAlbumId = firstAlbum.id;
+      } else {
+        // Create a "General" album
+        try {
+          const response = await apiRequest('POST', `/api/projects/${projectId}/albums`, { name: "General" });
+          const newAlbum = await response.json();
+          targetAlbumId = newAlbum.id;
+          queryClient.invalidateQueries({ queryKey: ['/api/projects', projectId, 'albums'] });
+        } catch (err) {
+          console.error("Failed to create default album:", err);
+          toast({ title: "Error", description: "Failed to create album for photos", variant: "destructive" });
+          return;
+        }
+      }
+    }
+    
     for (const file of successfulUploads) {
       const objectPath = uploadedFilePathsRef.current.get(file.id) || file.meta?.objectPath || "";
       const originalFile = uploadedFilesRef.current.get(file.id);
@@ -622,7 +649,7 @@ export default function ProjectDetails() {
           objectPath: objectPath,
           contentType: file.type,
           size: file.size,
-          albumId: currentAlbumId,  // Use album instead of folder for photos
+          albumId: targetAlbumId,  // Use determined album
           takenAt: takenAt,
         });
         successCount++;
