@@ -2,6 +2,7 @@
 
 ## Overview
 
+
 SiteTech is a comprehensive web-based sitework management platform designed for construction companies. It facilitates the management of construction projects through their entire lifecycle, from bidding to completion, and includes robust tools for customer relationship management, equipment inventory tracking, and scheduling. The platform aims to streamline operations, enhance project oversight, and improve efficiency in the construction industry.
 
 Key capabilities include:
