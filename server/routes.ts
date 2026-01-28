@@ -130,12 +130,26 @@ export async function registerRoutes(
         addedByName: dbAdmin ? `${dbAdmin.firstName || ''} ${dbAdmin.lastName || ''}`.trim() || dbAdmin.email : undefined,
       });
       
-      // Send invite email to the new authorized user
-      try {
-        await sendInviteEmail(input.email, input.role || 'user');
-      } catch (emailError) {
-        console.error('Failed to send invite email:', emailError);
-        // Don't fail the request if email fails - user is still authorized
+      // Send invite email to the new authorized user (if Mailgun is configured)
+      const mailgunDomain = process.env.MAILGUN_DOMAIN;
+      const mailgunApiKey = process.env.MAILGUN_API_KEY;
+      const mailgunFromEmail = process.env.MAILGUN_FROM_EMAIL;
+      
+      if (mailgunDomain && mailgunApiKey && mailgunFromEmail) {
+        try {
+          await sendInviteEmail(
+            input.email, 
+            input.role || 'user',
+            mailgunDomain,
+            mailgunApiKey,
+            mailgunFromEmail
+          );
+        } catch (emailError) {
+          console.error('Failed to send invite email:', emailError);
+          // Don't fail the request if email fails - user is still authorized
+        }
+      } else {
+        console.log('Mailgun not configured - skipping invite email');
       }
       
       res.status(201).json(authorized);

@@ -1,48 +1,13 @@
-import sgMail from '@sendgrid/mail';
+const MAILGUN_API_BASE = 'https://api.mailgun.net/v3';
 
-let connectionSettings: any;
-
-async function getCredentials() {
-  const hostname = process.env.REPLIT_CONNECTORS_HOSTNAME;
-  const xReplitToken = process.env.REPL_IDENTITY 
-    ? 'repl ' + process.env.REPL_IDENTITY 
-    : process.env.WEB_REPL_RENEWAL 
-    ? 'depl ' + process.env.WEB_REPL_RENEWAL 
-    : null;
-
-  if (!xReplitToken) {
-    throw new Error('X_REPLIT_TOKEN not found for repl/depl');
-  }
-
-  connectionSettings = await fetch(
-    'https://' + hostname + '/api/v2/connection?include_secrets=true&connector_names=sendgrid',
-    {
-      headers: {
-        'Accept': 'application/json',
-        'X_REPLIT_TOKEN': xReplitToken
-      }
-    }
-  ).then(res => res.json()).then(data => data.items?.[0]);
-
-  if (!connectionSettings || (!connectionSettings.settings.api_key || !connectionSettings.settings.from_email)) {
-    throw new Error('SendGrid not connected');
-  }
-  return { apiKey: connectionSettings.settings.api_key, email: connectionSettings.settings.from_email };
-}
-
-async function getUncachableSendGridClient() {
-  const { apiKey, email } = await getCredentials();
-  sgMail.setApiKey(apiKey);
-  return {
-    client: sgMail,
-    fromEmail: email
-  };
-}
-
-export async function sendInviteEmail(toEmail: string, role: string): Promise<boolean> {
+export async function sendInviteEmail(
+  toEmail: string, 
+  role: string,
+  mailgunDomain: string,
+  mailgunApiKey: string,
+  fromEmail: string
+): Promise<boolean> {
   try {
-    const { client, fromEmail } = await getUncachableSendGridClient();
-    
     const appUrl = process.env.REPLIT_DEV_DOMAIN 
       ? `https://${process.env.REPLIT_DEV_DOMAIN}`
       : process.env.REPLIT_DOMAINS 
@@ -51,11 +16,7 @@ export async function sendInviteEmail(toEmail: string, role: string): Promise<bo
 
     const roleName = role === 'admin' ? 'Administrator' : role === 'manager' ? 'Manager' : 'User';
     
-    const msg = {
-      to: toEmail,
-      from: fromEmail,
-      subject: 'Welcome to SiteTech - You Have Been Invited!',
-      html: `
+    const htmlContent = `
 <!DOCTYPE html>
 <html>
 <head>
@@ -128,8 +89,9 @@ export async function sendInviteEmail(toEmail: string, role: string): Promise<bo
   </table>
 </body>
 </html>
-      `,
-      text: `
+    `;
+
+    const textContent = `
 Welcome to SiteTech!
 
 You have been invited to join SiteTech as a ${roleName}.
@@ -143,10 +105,29 @@ Getting Started:
 Access SiteTech: ${appUrl}
 
 This is an automated message from SiteTech. Please do not reply to this email.
-      `
-    };
+    `;
 
-    await client.send(msg);
+    const formData = new FormData();
+    formData.append('from', fromEmail);
+    formData.append('to', toEmail);
+    formData.append('subject', 'Welcome to SiteTech - You Have Been Invited!');
+    formData.append('html', htmlContent);
+    formData.append('text', textContent);
+
+    const response = await fetch(`${MAILGUN_API_BASE}/${mailgunDomain}/messages`, {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Basic ' + Buffer.from(`api:${mailgunApiKey}`).toString('base64'),
+      },
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`Mailgun API error: ${response.status} - ${errorText}`);
+      return false;
+    }
+
     console.log(`Invite email sent to ${toEmail}`);
     return true;
   } catch (error) {
