@@ -332,6 +332,7 @@ export default function ProjectDetails() {
   const [deleteAlbumId, setDeleteAlbumId] = useState<number | null>(null);
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState(0);
+  const [lightboxPhotos, setLightboxPhotos] = useState<Photo[]>([]);
   const [showBatchDeleteConfirm, setShowBatchDeleteConfirm] = useState(false);
   
   // Keep ref in sync with state for use in callbacks
@@ -1793,6 +1794,7 @@ export default function ProjectDetails() {
                                     });
                                   } else {
                                     const photoIndex = sortedPhotos.findIndex(p => p.id === photo.id);
+                                    setLightboxPhotos(sortedPhotos);
                                     setLightboxIndex(photoIndex >= 0 ? photoIndex : 0);
                                     setLightboxOpen(true);
                                   }
@@ -1889,98 +1891,12 @@ export default function ProjectDetails() {
         open={lightboxOpen}
         close={() => setLightboxOpen(false)}
         index={lightboxIndex}
-        slides={(photos || []).map(photo => ({
+        slides={lightboxPhotos.map(photo => ({
           src: getProxyUrl(photo.objectPath),
           alt: photo.name,
           title: photo.name,
         }))}
       />
-
-      {/* Image Viewer Modal with Prev/Next */}
-      {viewingFile && isImageFile(viewingFile.contentType) && (() => {
-        // Use photos from separate photos table for navigation
-        const allPhotos = photos?.sort((a, b) => 
-          new Date(b.takenAt || b.createdAt || 0).getTime() - new Date(a.takenAt || a.createdAt || 0).getTime()
-        ) || [];
-        const currentIndex = allPhotos.findIndex(p => p.id === viewingFile.id);
-        const hasPrev = currentIndex > 0;
-        const hasNext = currentIndex < allPhotos.length - 1;
-
-        return (
-          <div className="fixed inset-0 z-50 bg-black/90 flex flex-col" data-testid="document-viewer-modal">
-            {/* Previous Button */}
-            {hasPrev && (
-              <Button
-                variant="ghost"
-                size="icon"
-                className="absolute left-4 top-1/2 -translate-y-1/2 text-white hover:bg-white/20 h-12 w-12 z-10"
-                onClick={() => setViewingFile(allPhotos[currentIndex - 1])}
-                data-testid="button-prev-photo"
-              >
-                <ChevronLeft className="w-8 h-8" />
-              </Button>
-            )}
-            
-            {/* Next Button */}
-            {hasNext && (
-              <Button
-                variant="ghost"
-                size="icon"
-                className="absolute right-4 top-1/2 -translate-y-1/2 text-white hover:bg-white/20 h-12 w-12 z-10"
-                onClick={() => setViewingFile(allPhotos[currentIndex + 1])}
-                data-testid="button-next-photo"
-              >
-                <ChevronRight className="w-8 h-8" />
-              </Button>
-            )}
-
-            <div className="flex-1 flex items-center justify-center p-4 overflow-auto" onClick={() => setViewingFile(null)}>
-              <img 
-                src={getProxyUrl(viewingFile.objectPath)} 
-                alt={viewingFile.name}
-                className="max-w-full max-h-full object-contain rounded-lg"
-                onClick={(e) => e.stopPropagation()}
-              />
-            </div>
-            <div className="bg-black/80 backdrop-blur-sm border-t border-white/10 p-3 safe-area-bottom">
-              <div className="flex items-center justify-between max-w-lg mx-auto gap-2">
-                <p className="text-white text-sm font-medium truncate flex-1">
-                  {viewingFile.name}
-                  <span className="text-white/60 ml-2">({currentIndex + 1} of {allPhotos.length})</span>
-                </p>
-                <div className="flex items-center gap-1">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="text-white hover:bg-white/20"
-                    onClick={() => handleShareFile(viewingFile)}
-                    data-testid="button-share-file"
-                  >
-                    <Share2 className="w-5 h-5" />
-                  </Button>
-                  <a
-                    href={getProxyUrl(viewingFile.objectPath)}
-                    download={viewingFile.name}
-                    className="inline-flex items-center justify-center h-9 w-9 rounded-md text-white hover:bg-white/20"
-                    data-testid="button-download-file"
-                  >
-                    <Download className="w-5 h-5" />
-                  </a>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="text-white hover:bg-white/20"
-                    onClick={() => setViewingFile(null)}
-                    data-testid="button-close-viewer"
-                  >
-                    <X className="w-5 h-5" />
-                  </Button>
-                </div>
-              </div>
-            </div>
-          </div>
-        );
-      })()}
 
       {/* Other file types - download prompt */}
       {viewingFile && !isPdfFile(viewingFile.contentType) && !isImageFile(viewingFile.contentType) && (
