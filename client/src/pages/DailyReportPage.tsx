@@ -1075,7 +1075,7 @@ export default function DailyReportPage() {
                           <Label>Photos</Label>
                           {!isCompleted && (
                             <NativeFileUploader
-                              maxNumberOfFiles={5}
+                              maxNumberOfFiles={50}
                               accept="image/*"
                               onUploadComplete={(uploadedFiles) => {
                                 uploadedFiles.forEach((file) => {
@@ -1241,7 +1241,7 @@ export default function DailyReportPage() {
                         <Label>Photos</Label>
                         {!isCompleted && (
                           <NativeFileUploader
-                            maxNumberOfFiles={5}
+                            maxNumberOfFiles={50}
                             accept="image/*"
                             onUploadComplete={(uploadedFiles) => {
                               uploadedFiles.forEach((file) => {
