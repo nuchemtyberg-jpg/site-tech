@@ -69,3 +69,14 @@ export function useDeleteFolder(projectId: number) {
     },
   });
 }
+
+export function useUpdateFile(projectId: number) {
+  return useMutation({
+    mutationFn: async ({ id, ...data }: { id: number; tags?: string[] | null; albumId?: number | null; folderId?: number | null }) => {
+      return apiRequest("PUT", `/api/files/${id}`, data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/projects', projectId, 'files'] });
+    },
+  });
+}

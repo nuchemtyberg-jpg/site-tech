@@ -89,6 +89,32 @@ Key entities are defined in `shared/schema.ts`:
 - **zod**: Schema declaration and validation library.
 - **drizzle-zod**: Integration between Drizzle ORM and Zod for type validation.
 - **pdf-lib**: For programmatic PDF creation and modification (used for embedding annotations).
-- **@uppy/core, @uppy/react, @uppy/xhr-upload**: Libraries for robust file uploading with features like drag-and-drop.
 - **Open-Meteo Geocoding API**: For converting addresses to geographical coordinates (used in daily reports).
 - **Open-Meteo Weather API**: For fetching weather information (used in daily reports).
+
+## Recent Architectural Changes
+
+### Soft Deletes (January 2026)
+All primary entities now use soft deletes instead of hard deletes:
+- **Implementation**: Added `deletedAt` timestamp column to all tables that support deletion (customers, projects, tasks, equipment, maintenance_logs, daily_reports, folders, files, photo_albums, communications, allocations, daily_report_task_entries, daily_report_labor_lines, daily_report_equipment_lines, daily_report_delivery_entries, daily_report_photos)
+- **Storage Layer**: All `delete*` methods now perform `UPDATE SET deletedAt = NOW()` instead of `DELETE`
+- **Queries**: All `get*` methods filter records with `WHERE deletedAt IS NULL` to exclude soft-deleted items
+- **Benefits**: Data can be recovered if needed, maintains referential integrity, provides audit trail
+- **Note**: Legacy deprecated tables (report_tasks, labor_entries, equipment_entries, deliveries, delivery_photos, report_task_photos) still use hard deletes for backwards compatibility
+
+### Native File Uploader (January 2026)
+Replaced the Uppy-based file upload system with a native file picker:
+- **Component**: `client/src/components/NativeFileUploader.tsx`
+- **Features**: Uses native HTML file input with custom Dialog UI, progress tracking, multi-file support
+- **API**: Simpler callback interface - `onUploadComplete` receives array of `{name, objectPath, size, type}`
+- **Usage**: Used in ProjectDetails.tsx for document uploads and photo uploads, and in DailyReportPage.tsx for photo uploads
+
+### Document Tags (January 2026)
+Added tagging functionality to all uploaded documents:
+- **Schema**: `files.tags` column as PostgreSQL text array
+- **API**: PUT `/api/files/:id` endpoint accepts `tags` field for updates
+- **UI Components**:
+  - `TagInput` component (`client/src/components/TagInput.tsx`) - reusable tag input with keyboard support
+  - Tags displayed on file cards in both grid and list views
+  - Edit tags dialog accessible via Tags button on each file
+- **Features**: Press Enter or comma to add tags, click X to remove, tags stored as lowercase strings

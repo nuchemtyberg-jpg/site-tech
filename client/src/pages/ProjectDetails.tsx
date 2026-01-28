@@ -1,7 +1,8 @@
 import { useParams, Link, useLocation } from "wouter";
 import { useProject, useDeleteProject, useUpdateProject } from "@/hooks/use-projects";
 import { useProjectTasks, useCreateTask, useDeleteTask, useUpdateTask, useTaskStatusHistory } from "@/hooks/use-tasks";
-import { useProjectFiles, useProjectFolders, useCreateFile, useDeleteFile, useCreateFolder, useDeleteFolder } from "@/hooks/use-files";
+import { useProjectFiles, useProjectFolders, useCreateFile, useDeleteFile, useCreateFolder, useDeleteFolder, useUpdateFile } from "@/hooks/use-files";
+import { TagInput } from "@/components/TagInput";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { 
@@ -40,7 +41,9 @@ import {
   Grid2X2,
   Square,
   CheckSquare,
-  Maximize2
+  Maximize2,
+  Tag,
+  Tags
 } from "lucide-react";
 import { 
   DropdownMenu, 
@@ -53,6 +56,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
@@ -202,13 +206,19 @@ export default function ProjectDetails() {
   });
 
   const updateFileMutation = useMutation({
-    mutationFn: async ({ fileId, albumId }: { fileId: number; albumId: number | null }) => {
-      return apiRequest('PUT', `/api/files/${fileId}`, { albumId });
+    mutationFn: async ({ fileId, albumId, tags }: { fileId: number; albumId?: number | null; tags?: string[] | null }) => {
+      const body: { albumId?: number | null; tags?: string[] | null } = {};
+      if (albumId !== undefined) body.albumId = albumId;
+      if (tags !== undefined) body.tags = tags;
+      return apiRequest('PUT', `/api/files/${fileId}`, body);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/projects', projectId, 'files'] });
     },
   });
+
+  const [editingFile, setEditingFile] = useState<FileMetadata | null>(null);
+  const [editFileTags, setEditFileTags] = useState<string[]>([]);
 
   const [isTaskOpen, setIsTaskOpen] = useState(false);
   const [isFolderOpen, setIsFolderOpen] = useState(false);
@@ -1413,19 +1423,33 @@ export default function ProjectDetails() {
                             </button>
                             <div className="absolute bottom-0 left-0 right-0 bg-black/60 backdrop-blur-sm px-2 py-1">
                               <p className="text-white text-xs truncate">{file.name}</p>
+                              {file.tags && file.tags.length > 0 && (
+                                <p className="text-white/70 text-xs truncate">{file.tags.length} tag{file.tags.length !== 1 ? 's' : ''}</p>
+                              )}
                             </div>
-                            <Button 
-                              variant="ghost" 
-                              size="icon" 
-                              className="absolute top-1 right-1 h-6 w-6 opacity-0 group-hover:opacity-100 bg-black/50 hover:bg-black/70 text-white"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setDeleteFileId(file.id);
-                              }}
-                              data-testid={`button-delete-file-${file.id}`}
-                            >
-                              <Trash2 className="w-3 h-3" />
-                            </Button>
+                            <div className="absolute top-1 right-1 flex gap-1 opacity-0 group-hover:opacity-100">
+                              <button 
+                                className="p-1.5 rounded bg-black/50 text-white hover-elevate"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setEditingFile(file);
+                                  setEditFileTags(file.tags || []);
+                                }}
+                                data-testid={`button-edit-file-${file.id}`}
+                              >
+                                <Tags className="w-3.5 h-3.5" />
+                              </button>
+                              <button 
+                                className="p-1.5 rounded bg-black/50 text-white hover-elevate"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setDeleteFileId(file.id);
+                                }}
+                                data-testid={`button-delete-file-${file.id}`}
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
                           </div>
                         ))}
                       </div>
@@ -1439,30 +1463,60 @@ export default function ProjectDetails() {
                 <div className="grid gap-2">
                   <h3 className="text-sm font-medium text-muted-foreground mb-2">Files</h3>
                   {allFiles.map((file: FileMetadata) => (
-                    <div key={file.id} className="group bg-card border border-border rounded-lg p-3 hover:border-primary/50 transition-all flex items-center justify-between" data-testid={`file-item-${file.id}`}>
+                    <div key={file.id} className="group bg-card border border-border rounded-lg p-3 hover:border-primary/50 transition-all flex items-center justify-between gap-2" data-testid={`file-item-${file.id}`}>
                       <button 
                         onClick={() => handleFileClick(file)}
-                        className="flex items-center gap-3 flex-1 text-left hover:text-primary transition-colors"
+                        className="flex items-center gap-3 flex-1 text-left hover:text-primary transition-colors min-w-0"
                         data-testid={`button-view-file-${file.id}`}
                       >
                         {getFileIcon(file)}
                         <div className="flex-1 min-w-0">
                           <span className="font-medium block truncate">{file.name}</span>
-                          <span className="text-xs text-muted-foreground">
-                            {file.createdAt && format(new Date(file.createdAt), "MMM d, yyyy")}
-                            {file.size && ` • ${Math.round(file.size / 1024)} KB`}
-                          </span>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-xs text-muted-foreground">
+                              {file.createdAt && format(new Date(file.createdAt), "MMM d, yyyy")}
+                              {file.size && ` • ${Math.round(file.size / 1024)} KB`}
+                            </span>
+                            {file.tags && file.tags.length > 0 && (
+                              <div className="flex gap-1 flex-wrap">
+                                {file.tags.slice(0, 3).map((tag) => (
+                                  <Badge key={tag} variant="secondary" className="text-xs py-0 px-1.5" data-testid={`file-tag-${file.id}-${tag}`}>
+                                    {tag}
+                                  </Badge>
+                                ))}
+                                {file.tags.length > 3 && (
+                                  <Badge variant="outline" className="text-xs py-0 px-1.5">
+                                    +{file.tags.length - 3}
+                                  </Badge>
+                                )}
+                              </div>
+                            )}
+                          </div>
                         </div>
                       </button>
-                      <Button 
-                        variant="ghost" 
-                        size="icon" 
-                        className="opacity-0 group-hover:opacity-100"
-                        onClick={() => setDeleteFileId(file.id)}
-                        data-testid={`button-delete-file-${file.id}`}
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
+                      <div className="flex gap-1 shrink-0">
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className="opacity-0 group-hover:opacity-100 h-8 w-8"
+                          onClick={() => {
+                            setEditingFile(file);
+                            setEditFileTags(file.tags || []);
+                          }}
+                          data-testid={`button-edit-file-${file.id}`}
+                        >
+                          <Tags className="w-4 h-4" />
+                        </Button>
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className="opacity-0 group-hover:opacity-100 h-8 w-8"
+                          onClick={() => setDeleteFileId(file.id)}
+                          data-testid={`button-delete-file-${file.id}`}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -2020,6 +2074,56 @@ export default function ProjectDetails() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Edit File Tags Dialog */}
+      <Dialog open={editingFile !== null} onOpenChange={(open) => !open && setEditingFile(null)}>
+        <DialogContent className="bg-white dark:bg-zinc-900 sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-black dark:text-white">Edit Document Tags</DialogTitle>
+            <DialogDescription>
+              Add tags to help organize and find this document. Press Enter or comma to add a tag.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            {editingFile && (
+              <>
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <File className="w-4 h-4" />
+                  <span className="truncate">{editingFile.name}</span>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="file-tags" className="text-black dark:text-white">Tags</Label>
+                  <TagInput
+                    value={editFileTags}
+                    onChange={setEditFileTags}
+                    placeholder="Type a tag and press Enter..."
+                  />
+                </div>
+              </>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditingFile(null)} data-testid="button-cancel-edit-tags">
+              Cancel
+            </Button>
+            <Button 
+              onClick={() => {
+                if (editingFile) {
+                  updateFileMutation.mutate({ 
+                    fileId: editingFile.id, 
+                    tags: editFileTags.length > 0 ? editFileTags : null 
+                  });
+                  setEditingFile(null);
+                }
+              }}
+              disabled={updateFileMutation.isPending}
+              data-testid="button-save-tags"
+            >
+              Save Tags
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Delete Album Confirmation */}
       <AlertDialog open={deleteAlbumId !== null} onOpenChange={(open) => !open && setDeleteAlbumId(null)}>
