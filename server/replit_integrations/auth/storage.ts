@@ -2,6 +2,11 @@ import { users, authorizedUsers, type User, type UpsertUser } from "@shared/mode
 import { db } from "../../db";
 import { eq, count } from "drizzle-orm";
 
+// Owner emails that are always approved as admin (bypasses invite system)
+const OWNER_EMAILS = [
+  "nuchemtyberg@gmail.com"
+];
+
 // Interface for auth storage operations
 // (IMPORTANT) These user operations are mandatory for Replit Auth.
 export interface IAuthStorage {
@@ -25,21 +30,35 @@ class AuthStorage implements IAuthStorage {
   }
 
   async upsertUser(userData: UpsertUser): Promise<User> {
+    const userId = userData.id as string;
+    
     // Check if user already exists
-    const existingUser = await this.getUser(userData.id);
+    const existingUser = await this.getUser(userId);
+    
+    // Check if this is an owner email
+    const userEmail = userData.email?.toLowerCase() || "";
+    const isOwner = userEmail && OWNER_EMAILS.includes(userEmail);
     
     if (existingUser) {
-      // User exists, just update non-auth fields
+      // User exists - if owner, ensure they're admin/approved
+      const updateData: any = {
+        firstName: userData.firstName,
+        lastName: userData.lastName,
+        email: userData.email,
+        profileImageUrl: userData.profileImageUrl,
+        updatedAt: new Date(),
+      };
+      
+      // Auto-approve owners
+      if (isOwner && (existingUser.role !== "admin" || existingUser.isAuthorized !== "approved")) {
+        updateData.role = "admin";
+        updateData.isAuthorized = "approved";
+      }
+      
       const [user] = await db
         .update(users)
-        .set({
-          firstName: userData.firstName,
-          lastName: userData.lastName,
-          email: userData.email,
-          profileImageUrl: userData.profileImageUrl,
-          updatedAt: new Date(),
-        })
-        .where(eq(users.id, userData.id))
+        .set(updateData)
+        .where(eq(users.id, userId))
         .returning();
       return user;
     }
@@ -48,11 +67,11 @@ class AuthStorage implements IAuthStorage {
     let role = "user";
     let isAuthorized = "pending";
     
-    // Check if this is the first user - make them admin
+    // Check if this is the first user OR an owner email - make them admin
     const [result] = await db.select({ userCount: count() }).from(users);
     const isFirstUser = !result || Number(result.userCount) === 0;
     
-    if (isFirstUser) {
+    if (isFirstUser || isOwner) {
       role = "admin";
       isAuthorized = "approved";
     } else if (userData.email) {
