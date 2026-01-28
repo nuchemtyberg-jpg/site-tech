@@ -9,6 +9,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import ExifReader from "exifreader";
 
 interface UploadedFile {
   id: string;
@@ -17,6 +18,7 @@ interface UploadedFile {
   type: string;
   file: File;
   objectPath?: string;
+  takenAt?: Date;
   status: 'pending' | 'uploading' | 'success' | 'error';
   progress: number;
   error?: string;
@@ -26,9 +28,46 @@ interface NativeFileUploaderProps {
   maxNumberOfFiles?: number;
   maxFileSize?: number;
   accept?: string;
-  onUploadComplete?: (files: Array<{ name: string; objectPath: string; size: number; type: string }>) => void;
+  onUploadComplete?: (files: Array<{ name: string; objectPath: string; size: number; type: string; takenAt?: Date }>) => void;
   buttonClassName?: string;
   children: ReactNode;
+}
+
+async function extractExifDate(file: File): Promise<Date | undefined> {
+  if (!file.type.startsWith('image/')) return undefined;
+  
+  try {
+    const arrayBuffer = await file.arrayBuffer();
+    const tags = ExifReader.load(arrayBuffer);
+    
+    const dateTimeOriginal = tags['DateTimeOriginal'];
+    if (dateTimeOriginal?.description) {
+      const dateStr = dateTimeOriginal.description;
+      const [datePart, timePart] = dateStr.split(' ');
+      if (datePart && timePart) {
+        const [year, month, day] = datePart.split(':');
+        const isoDate = `${year}-${month}-${day}T${timePart}`;
+        const date = new Date(isoDate);
+        if (!isNaN(date.getTime())) return date;
+      }
+    }
+    
+    const createDate = tags['CreateDate'];
+    if (createDate?.description) {
+      const dateStr = createDate.description;
+      const [datePart, timePart] = dateStr.split(' ');
+      if (datePart && timePart) {
+        const [year, month, day] = datePart.split(':');
+        const isoDate = `${year}-${month}-${day}T${timePart}`;
+        const date = new Date(isoDate);
+        if (!isNaN(date.getTime())) return date;
+      }
+    }
+  } catch (error) {
+    console.log('Could not extract EXIF data:', error);
+  }
+  
+  return undefined;
 }
 
 export function NativeFileUploader({
@@ -52,26 +91,28 @@ export function NativeFileUploader({
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFiles = Array.from(e.target.files || []);
     
-    const newFiles: UploadedFile[] = selectedFiles
-      .filter(file => {
-        if (file.size > maxFileSize) {
-          return false;
-        }
-        return true;
+    const validFiles = selectedFiles
+      .filter(file => file.size <= maxFileSize)
+      .slice(0, maxNumberOfFiles - files.length);
+    
+    const newFiles: UploadedFile[] = await Promise.all(
+      validFiles.map(async file => {
+        const takenAt = await extractExifDate(file);
+        return {
+          id: Math.random().toString(36).substring(7),
+          name: file.name,
+          size: file.size,
+          type: file.type || 'application/octet-stream',
+          file,
+          takenAt,
+          status: 'pending' as const,
+          progress: 0,
+        };
       })
-      .slice(0, maxNumberOfFiles - files.length)
-      .map(file => ({
-        id: Math.random().toString(36).substring(7),
-        name: file.name,
-        size: file.size,
-        type: file.type || 'application/octet-stream',
-        file,
-        status: 'pending' as const,
-        progress: 0,
-      }));
+    );
 
     setFiles(prev => [...prev, ...newFiles].slice(0, maxNumberOfFiles));
     
@@ -88,7 +129,7 @@ export function NativeFileUploader({
     if (files.length === 0) return;
 
     setIsUploading(true);
-    const uploadedFiles: Array<{ name: string; objectPath: string; size: number; type: string }> = [];
+    const uploadedFiles: Array<{ name: string; objectPath: string; size: number; type: string; takenAt?: Date }> = [];
 
     for (const uploadFile of files) {
       if (uploadFile.status === 'success') {
@@ -98,6 +139,7 @@ export function NativeFileUploader({
             objectPath: uploadFile.objectPath,
             size: uploadFile.size,
             type: uploadFile.type,
+            takenAt: uploadFile.takenAt,
           });
         }
         continue;
@@ -149,6 +191,7 @@ export function NativeFileUploader({
           objectPath,
           size: uploadFile.size,
           type: uploadFile.type,
+          takenAt: uploadFile.takenAt,
         });
       } catch (error) {
         setFiles(prev => prev.map(f => 

@@ -601,7 +601,7 @@ export default function ProjectDetails() {
     }
   };
 
-  const handlePhotoUploadComplete = async (uploadedFiles: Array<{ name: string; objectPath: string; size: number; type: string }>) => {
+  const handlePhotoUploadComplete = async (uploadedFiles: Array<{ name: string; objectPath: string; size: number; type: string; takenAt?: Date }>) => {
     let successCount = 0;
     
     // Determine the album ID to use - if none selected, use first existing album or create one
@@ -640,6 +640,7 @@ export default function ProjectDetails() {
           contentType: file.type,
           size: file.size,
           albumId: targetAlbumId,
+          takenAt: file.takenAt?.toISOString(),
         });
         successCount++;
       } catch (err) {
