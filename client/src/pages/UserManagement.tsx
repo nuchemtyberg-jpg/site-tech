@@ -17,6 +17,9 @@ import type { User, AuthorizedUser } from "@shared/models/auth";
 
 export default function UserManagement() {
   const [newEmail, setNewEmail] = useState("");
+  const [newFirstName, setNewFirstName] = useState("");
+  const [newLastName, setNewLastName] = useState("");
+  const [newPhoneNumber, setNewPhoneNumber] = useState("");
   const [newRole, setNewRole] = useState("user");
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const { toast } = useToast();
@@ -44,12 +47,15 @@ export default function UserManagement() {
   });
 
   const addAuthorizedUserMutation = useMutation({
-    mutationFn: async (data: { email: string; role: string }) => {
+    mutationFn: async (data: { email: string; firstName?: string; lastName?: string; phoneNumber?: string; role: string }) => {
       return apiRequest("POST", "/api/admin/authorized-users", data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/authorized-users"] });
       setNewEmail("");
+      setNewFirstName("");
+      setNewLastName("");
+      setNewPhoneNumber("");
       setNewRole("user");
       setAddDialogOpen(false);
       toast({ title: "User added", description: "Email has been added to the authorized list." });
@@ -78,7 +84,13 @@ export default function UserManagement() {
 
   const handleAddUser = () => {
     if (!newEmail.trim()) return;
-    addAuthorizedUserMutation.mutate({ email: newEmail.trim(), role: newRole });
+    addAuthorizedUserMutation.mutate({ 
+      email: newEmail.trim(), 
+      firstName: newFirstName.trim() || undefined,
+      lastName: newLastName.trim() || undefined,
+      phoneNumber: newPhoneNumber.trim() || undefined,
+      role: newRole 
+    });
   };
 
   const getStatusBadge = (status: string) => {
@@ -146,8 +158,30 @@ export default function UserManagement() {
               <DialogTitle>Add Authorized User</DialogTitle>
             </DialogHeader>
             <div className="space-y-4 py-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="firstName">First Name</Label>
+                  <Input
+                    id="firstName"
+                    placeholder="John"
+                    value={newFirstName}
+                    onChange={(e) => setNewFirstName(e.target.value)}
+                    data-testid="input-first-name"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="lastName">Last Name</Label>
+                  <Input
+                    id="lastName"
+                    placeholder="Doe"
+                    value={newLastName}
+                    onChange={(e) => setNewLastName(e.target.value)}
+                    data-testid="input-last-name"
+                  />
+                </div>
+              </div>
               <div className="space-y-2">
-                <Label htmlFor="email">Email Address</Label>
+                <Label htmlFor="email" className="text-red-500">* Email Address</Label>
                 <Input
                   id="email"
                   type="email"
@@ -155,6 +189,17 @@ export default function UserManagement() {
                   value={newEmail}
                   onChange={(e) => setNewEmail(e.target.value)}
                   data-testid="input-email"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="phoneNumber">Phone Number</Label>
+                <Input
+                  id="phoneNumber"
+                  type="tel"
+                  placeholder="(555) 123-4567"
+                  value={newPhoneNumber}
+                  onChange={(e) => setNewPhoneNumber(e.target.value)}
+                  data-testid="input-phone"
                 />
               </div>
               <div className="space-y-2">
@@ -322,7 +367,9 @@ export default function UserManagement() {
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead>Name</TableHead>
                     <TableHead>Email</TableHead>
+                    <TableHead>Phone</TableHead>
                     <TableHead>Role</TableHead>
                     <TableHead>Added By</TableHead>
                     <TableHead>Added</TableHead>
@@ -332,7 +379,16 @@ export default function UserManagement() {
                 <TableBody>
                   {authorizedUsers.map((authUser) => (
                     <TableRow key={authUser.id} data-testid={`row-authorized-${authUser.id}`}>
-                      <TableCell className="font-medium">{authUser.email}</TableCell>
+                      <TableCell className="font-medium">
+                        {authUser.firstName || authUser.lastName 
+                          ? `${authUser.firstName || ''} ${authUser.lastName || ''}`.trim()
+                          : <span className="text-muted-foreground">-</span>
+                        }
+                      </TableCell>
+                      <TableCell>{authUser.email}</TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {authUser.phoneNumber || "-"}
+                      </TableCell>
                       <TableCell>{getRoleBadge(authUser.role)}</TableCell>
                       <TableCell className="text-muted-foreground">
                         {authUser.addedByName || "System"}
@@ -355,7 +411,7 @@ export default function UserManagement() {
                   ))}
                   {authorizedUsers.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                      <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
                         No pre-authorized emails. Add emails to allow specific users to register.
                       </TableCell>
                     </TableRow>

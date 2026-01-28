@@ -434,9 +434,13 @@ Protected Routes:
 ## Changelog
 
 ### January 28, 2026
+- Added first name, last name, and phone number fields to authorized users system
+- Enhanced Add Authorized User form with new contact fields
+- Updated authorized users list to display name and phone columns
 - Migrated email service from SendGrid to Mailgun API
 - Updated email invite links to use production URL
 - Published app to sitetech-app.replit.app
+- Comprehensive documentation update (plan.md)
 
 ### January 27, 2026
 - Implemented invite-only user management system

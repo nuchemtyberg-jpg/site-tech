@@ -36,6 +36,9 @@ export type User = typeof users.$inferSelect;
 export const authorizedUsers = pgTable("authorized_users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   email: varchar("email").unique().notNull(),
+  firstName: varchar("first_name"),
+  lastName: varchar("last_name"),
+  phoneNumber: varchar("phone_number"),
   role: varchar("role").notNull().default("user"), // admin, manager, user
   addedBy: varchar("added_by"),
   addedByName: varchar("added_by_name"),
