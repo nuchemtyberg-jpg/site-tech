@@ -138,3 +138,16 @@ All projects automatically receive two default photo albums:
   - Photos uploaded via Photos tab → assigned to "General" album (via `getOrCreateGeneralAlbum`)
   - Photos uploaded via Daily Reports → assigned to "Daily Report Photos" album (via `getOrCreateDailyReportAlbum`)
 - **Storage Methods**: `getOrCreateGeneralAlbum()`, `getOrCreateDailyReportAlbum()`, `ensureDefaultAlbums()`
+
+### Photo Gallery Enhancements (January 2026)
+Enhanced photo viewing experience with EXIF extraction, lazy loading, and professional lightbox:
+- **EXIF Extraction**: Client-side extraction of photo taken date using `exifreader` library during upload
+  - Extracts `DateTimeOriginal` or `CreateDate` from EXIF metadata
+  - Stored in `photos.takenAt` field; falls back to upload date (`createdAt`) if unavailable
+  - Implementation in `NativeFileUploader.tsx` via `extractExifDate()` function
+- **Lazy Loading**: Photo gallery images use `loading="lazy"` attribute for improved page load performance
+- **Lightbox Gallery**: Uses `yet-another-react-lightbox` for professional fullscreen photo viewing
+  - Respects album filtering (only shows photos from current album)
+  - Keyboard navigation and swipe gestures supported
+  - State managed via `lightboxPhotos`, `lightboxIndex`, and `lightboxOpen`
+- **Photo Sorting**: Photos sorted by `takenAt` date (when available) with fallback to `createdAt`
