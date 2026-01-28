@@ -180,6 +180,7 @@ export function DailyReportsTab({ project }: DailyReportsTabProps) {
                 <TableRow>
                   <TableHead>Report Date</TableHead>
                   <TableHead>Weather</TableHead>
+                  <TableHead>Date Created</TableHead>
                   <TableHead>Last Updated</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
@@ -206,6 +207,9 @@ export function DailyReportsTab({ project }: DailyReportsTabProps) {
                           <span className="text-sm font-medium">{report.temperature}</span>
                         )}
                       </div>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {report.createdAt ? format(new Date(report.createdAt), "MMM d, h:mm a") : "N/A"}
                     </TableCell>
                     <TableCell className="text-muted-foreground">
                       {report.updatedAt ? format(new Date(report.updatedAt), "MMM d, h:mm a") : "N/A"}

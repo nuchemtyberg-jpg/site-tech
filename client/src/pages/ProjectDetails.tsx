@@ -1,4 +1,4 @@
-import { useParams, Link, useLocation } from "wouter";
+import { useParams, Link, useLocation, useSearch } from "wouter";
 import { useProject, useDeleteProject, useUpdateProject } from "@/hooks/use-projects";
 import { useProjectTasks, useCreateTask, useDeleteTask, useUpdateTask, useTaskStatusHistory } from "@/hooks/use-tasks";
 import { useProjectFiles, useProjectFolders, useCreateFile, useDeleteFile, useCreateFolder, useDeleteFolder, useUpdateFile } from "@/hooks/use-files";
@@ -80,7 +80,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Slider } from "@/components/ui/slider";
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { insertTaskSchema, type InsertTask, type FileMetadata, type Task, type Photo } from "@shared/schema";
@@ -318,6 +318,29 @@ export default function ProjectDetails() {
     const folderId = params.get("folder");
     return folderId ? parseInt(folderId, 10) : null;
   });
+
+  // Tab state from URL using wouter's useSearch hook
+  const search = useSearch();
+  const [location, navigate] = useLocation();
+
+  // Derive active tab from search params
+  const activeTab = useMemo(() => {
+    const params = new URLSearchParams(search);
+    const tab = params.get("tab");
+    return tab && ["tasks", "documents", "photos", "daily-reports"].includes(tab) ? tab : "tasks";
+  }, [search]);
+
+  // Update URL when tab changes using wouter navigation
+  const handleTabChange = (newTab: string) => {
+    const params = new URLSearchParams(search);
+    if (newTab === "tasks") {
+      params.delete("tab");
+    } else {
+      params.set("tab", newTab);
+    }
+    const newSearch = params.toString();
+    navigate(newSearch ? `?${newSearch}` : location.split('?')[0], { replace: false });
+  };
   const [viewingFile, setViewingFile] = useState<FileMetadata | Photo | null>(null);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const currentFolderIdRef = useRef<number | null>(null);
@@ -1035,7 +1058,7 @@ export default function ProjectDetails() {
       </div>
 
       {/* Tabs */}
-      <Tabs defaultValue="tasks" className="w-full">
+      <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
         <TabsList className="mb-4">
           <TabsTrigger value="tasks" data-testid="tab-tasks">Tasks</TabsTrigger>
           <TabsTrigger value="documents" data-testid="tab-documents">Documents</TabsTrigger>

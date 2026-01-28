@@ -835,53 +835,66 @@ export async function registerRoutes(
           // Add photos for this task entry if any
           if (entry.photos && entry.photos.length > 0) {
             drawText("  Photos:", margin + 20, y, 9, true);
-            y -= lineHeight;
-            for (const photo of entry.photos) {
-              try {
-                // Convert URL to proxy path and fetch the image
-                const imagePath = getProxyPath(photo.url);
-                
-                // Fetch the image from the object storage proxy
-                const imageResponse = await fetch(`${baseUrl}${imagePath}`);
-                if (imageResponse.ok) {
-                  const imageBuffer = await imageResponse.arrayBuffer();
-                  const imageBytes = new Uint8Array(imageBuffer);
-                  
-                  // Try to embed as JPEG or PNG
-                  let embeddedImage;
-                  try {
-                    embeddedImage = await pdfDoc.embedJpg(imageBytes);
-                  } catch {
+            y -= lineHeight + 5;
+            
+            // Process photos in pairs for 2-column layout
+            const photoMaxWidth = 240;
+            const photoMaxHeight = 160;
+            const photoGap = 20;
+            
+            for (let i = 0; i < entry.photos.length; i += 2) {
+              const photosInRow: { image: any; width: number; height: number }[] = [];
+              
+              // Load up to 2 photos for this row
+              for (let j = 0; j < 2 && i + j < entry.photos.length; j++) {
+                const photo = entry.photos[i + j];
+                try {
+                  const imagePath = getProxyPath(photo.url);
+                  const imageResponse = await fetch(`${baseUrl}${imagePath}`);
+                  if (imageResponse.ok) {
+                    const imageBuffer = await imageResponse.arrayBuffer();
+                    const imageBytes = new Uint8Array(imageBuffer);
+                    
+                    let embeddedImage;
                     try {
-                      embeddedImage = await pdfDoc.embedPng(imageBytes);
+                      embeddedImage = await pdfDoc.embedJpg(imageBytes);
                     } catch {
-                      // Skip if can't embed
-                      continue;
+                      try {
+                        embeddedImage = await pdfDoc.embedPng(imageBytes);
+                      } catch {
+                        continue;
+                      }
                     }
+                    
+                    const scale = Math.min(photoMaxWidth / embeddedImage.width, photoMaxHeight / embeddedImage.height);
+                    photosInRow.push({
+                      image: embeddedImage,
+                      width: embeddedImage.width * scale,
+                      height: embeddedImage.height * scale
+                    });
                   }
-                  
-                  // Calculate dimensions to fit within page
-                  const maxWidth = 150;
-                  const maxHeight = 100;
-                  const scale = Math.min(maxWidth / embeddedImage.width, maxHeight / embeddedImage.height);
-                  const imgWidth = embeddedImage.width * scale;
-                  const imgHeight = embeddedImage.height * scale;
-                  
-                  // Check if we need a new page
-                  if (y - imgHeight < 80) {
-                    page = pdfDoc.addPage([612, 792]);
-                    y = height - 50;
-                    if (report.status === 'draft') {
-                      page.drawText("DRAFT", { x: 200, y: 400, size: 80, font: boldFont, color: rgb(0.9, 0.9, 0.9), rotate: degrees(45) });
-                    }
-                  }
-                  
-                  page.drawImage(embeddedImage, { x: margin + 30, y: y - imgHeight, width: imgWidth, height: imgHeight });
-                  y -= imgHeight + 10;
+                } catch (err) {
+                  console.error("Failed to embed task photo:", err);
                 }
-              } catch (err) {
-                // Skip photos that fail to load
-                console.error("Failed to embed task photo:", err);
+              }
+              
+              if (photosInRow.length > 0) {
+                const maxRowHeight = Math.max(...photosInRow.map(p => p.height));
+                
+                if (y - maxRowHeight < 80) {
+                  page = pdfDoc.addPage([612, 792]);
+                  y = height - 50;
+                  if (report.status === 'draft') {
+                    page.drawText("DRAFT", { x: 200, y: 400, size: 80, font: boldFont, color: rgb(0.9, 0.9, 0.9), rotate: degrees(45) });
+                  }
+                }
+                
+                let xPos = margin + 20;
+                for (const p of photosInRow) {
+                  page.drawImage(p.image, { x: xPos, y: y - p.height, width: p.width, height: p.height });
+                  xPos += p.width + photoGap;
+                }
+                y -= maxRowHeight + 10;
               }
             }
           }
@@ -925,53 +938,66 @@ export async function registerRoutes(
           // Add photos for this delivery if any
           if (delivery.photos && delivery.photos.length > 0) {
             drawText("  Photos:", margin + 20, y, 9, true);
-            y -= lineHeight;
-            for (const photo of delivery.photos) {
-              try {
-                // Convert URL to proxy path and fetch the image
-                const imagePath = getProxyPath(photo.url);
-                
-                // Fetch the image from the object storage proxy
-                const imageResponse = await fetch(`${baseUrl}${imagePath}`);
-                if (imageResponse.ok) {
-                  const imageBuffer = await imageResponse.arrayBuffer();
-                  const imageBytes = new Uint8Array(imageBuffer);
-                  
-                  // Try to embed as JPEG or PNG
-                  let embeddedImage;
-                  try {
-                    embeddedImage = await pdfDoc.embedJpg(imageBytes);
-                  } catch {
+            y -= lineHeight + 5;
+            
+            // Process photos in pairs for 2-column layout
+            const photoMaxWidth = 240;
+            const photoMaxHeight = 160;
+            const photoGap = 20;
+            
+            for (let i = 0; i < delivery.photos.length; i += 2) {
+              const photosInRow: { image: any; width: number; height: number }[] = [];
+              
+              // Load up to 2 photos for this row
+              for (let j = 0; j < 2 && i + j < delivery.photos.length; j++) {
+                const photo = delivery.photos[i + j];
+                try {
+                  const imagePath = getProxyPath(photo.url);
+                  const imageResponse = await fetch(`${baseUrl}${imagePath}`);
+                  if (imageResponse.ok) {
+                    const imageBuffer = await imageResponse.arrayBuffer();
+                    const imageBytes = new Uint8Array(imageBuffer);
+                    
+                    let embeddedImage;
                     try {
-                      embeddedImage = await pdfDoc.embedPng(imageBytes);
+                      embeddedImage = await pdfDoc.embedJpg(imageBytes);
                     } catch {
-                      // Skip if can't embed
-                      continue;
+                      try {
+                        embeddedImage = await pdfDoc.embedPng(imageBytes);
+                      } catch {
+                        continue;
+                      }
                     }
+                    
+                    const scale = Math.min(photoMaxWidth / embeddedImage.width, photoMaxHeight / embeddedImage.height);
+                    photosInRow.push({
+                      image: embeddedImage,
+                      width: embeddedImage.width * scale,
+                      height: embeddedImage.height * scale
+                    });
                   }
-                  
-                  // Calculate dimensions to fit within page
-                  const maxWidth = 150;
-                  const maxHeight = 100;
-                  const scale = Math.min(maxWidth / embeddedImage.width, maxHeight / embeddedImage.height);
-                  const imgWidth = embeddedImage.width * scale;
-                  const imgHeight = embeddedImage.height * scale;
-                  
-                  // Check if we need a new page
-                  if (y - imgHeight < 80) {
-                    page = pdfDoc.addPage([612, 792]);
-                    y = height - 50;
-                    if (report.status === 'draft') {
-                      page.drawText("DRAFT", { x: 200, y: 400, size: 80, font: boldFont, color: rgb(0.9, 0.9, 0.9), rotate: degrees(45) });
-                    }
-                  }
-                  
-                  page.drawImage(embeddedImage, { x: margin + 30, y: y - imgHeight, width: imgWidth, height: imgHeight });
-                  y -= imgHeight + 10;
+                } catch (err) {
+                  console.error("Failed to embed delivery photo:", err);
                 }
-              } catch (err) {
-                // Skip photos that fail to load
-                console.error("Failed to embed delivery photo:", err);
+              }
+              
+              if (photosInRow.length > 0) {
+                const maxRowHeight = Math.max(...photosInRow.map(p => p.height));
+                
+                if (y - maxRowHeight < 80) {
+                  page = pdfDoc.addPage([612, 792]);
+                  y = height - 50;
+                  if (report.status === 'draft') {
+                    page.drawText("DRAFT", { x: 200, y: 400, size: 80, font: boldFont, color: rgb(0.9, 0.9, 0.9), rotate: degrees(45) });
+                  }
+                }
+                
+                let xPos = margin + 20;
+                for (const p of photosInRow) {
+                  page.drawImage(p.image, { x: xPos, y: y - p.height, width: p.width, height: p.height });
+                  xPos += p.width + photoGap;
+                }
+                y -= maxRowHeight + 10;
               }
             }
           }
@@ -1030,6 +1056,42 @@ export async function registerRoutes(
         }
         if (report.signatureType === 'typed' && report.signatureValue) {
           drawText(`Signature: ${report.signatureValue}`, margin + 10, y, 10);
+          y -= lineHeight;
+        } else if (report.signatureType === 'freehand' && report.signatureValue) {
+          try {
+            const base64Data = report.signatureValue.replace(/^data:image\/\w+;base64,/, '');
+            const signatureBytes = Buffer.from(base64Data, 'base64');
+            let signatureImage;
+            try {
+              signatureImage = await pdfDoc.embedPng(signatureBytes);
+            } catch {
+              try {
+                signatureImage = await pdfDoc.embedJpg(signatureBytes);
+              } catch {
+                signatureImage = null;
+              }
+            }
+            if (signatureImage) {
+              const sigMaxWidth = 200;
+              const sigMaxHeight = 60;
+              const sigScale = Math.min(sigMaxWidth / signatureImage.width, sigMaxHeight / signatureImage.height);
+              const sigWidth = signatureImage.width * sigScale;
+              const sigHeight = signatureImage.height * sigScale;
+              
+              if (y - sigHeight < 80) {
+                page = pdfDoc.addPage([612, 792]);
+                y = height - 50;
+                if (report.status === 'draft') {
+                  page.drawText("DRAFT", { x: 200, y: 400, size: 80, font: boldFont, color: rgb(0.9, 0.9, 0.9), rotate: degrees(45) });
+                }
+              }
+              
+              page.drawImage(signatureImage, { x: margin + 10, y: y - sigHeight, width: sigWidth, height: sigHeight });
+              y -= sigHeight + 10;
+            }
+          } catch (sigErr) {
+            console.error("Failed to embed signature image:", sigErr);
+          }
         }
       }
       

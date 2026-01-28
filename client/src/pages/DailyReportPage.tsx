@@ -39,6 +39,7 @@ import { ArrowLeft, Save, Plus, Trash2, Cloud, Truck, ChevronDown, ChevronUp, Ch
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { NativeFileUploader } from "@/components/NativeFileUploader";
+import { TimePicker } from "@/components/ui/time-picker";
 import type { Task, Project } from "@shared/schema";
 
 const LABOR_TYPES = ["Foreman", "Operator", "Laborer"];
@@ -1163,11 +1164,10 @@ export default function DailyReportPage() {
                         </div>
                         <div className="space-y-2">
                           <Label>Delivery Time</Label>
-                          <Input
-                            type="time"
+                          <TimePicker
                             value={delivery.deliveryTime || ''}
                             disabled={isCompleted}
-                            onChange={(e) => updateDeliveryMutation.mutate({ id: delivery.id, data: { deliveryTime: e.target.value } })}
+                            onChange={(value) => updateDeliveryMutation.mutate({ id: delivery.id, data: { deliveryTime: value } })}
                           />
                         </div>
                       </div>
