@@ -168,11 +168,11 @@ SiteTech is a comprehensive web-based sitework management platform designed for 
 
 ### 7. Daily Reports
 - **Weather**: Auto-fetched via Open-Meteo based on project location
-- **Task Logging**: Select tasks, log progress changes
+- **Task Logging**: Select tasks, log progress changes with custom TimePicker component
 - **Labor/Equipment**: Detailed resource logging per task
-- **Deliveries**: Track vendor deliveries with status
-- **Signatures**: Complete reports with freehand or typed signature
-- **PDF Export**: Generate professional PDF reports
+- **Deliveries**: Track vendor deliveries with status (up to 50 photos per upload)
+- **Signatures**: Complete reports with freehand or typed signature (embedded in PDF)
+- **PDF Export**: Generate professional PDF reports with 2-column photo grid layout
 
 ### 8. Dashboard
 - **Metrics**: Active projects, pending tasks, equipment status
@@ -198,6 +198,7 @@ SiteTech is a comprehensive web-based sitework management platform designed for 
 | pdf-lib | PDF annotation export |
 | exifreader | EXIF metadata extraction |
 | yet-another-react-lightbox | Photo gallery lightbox |
+| TimePicker (custom) | Hour/minute/AM-PM time selection |
 
 ### Backend Stack
 | Technology | Purpose |
@@ -439,6 +440,17 @@ Protected Routes:
 ---
 
 ## Changelog
+
+### January 28, 2026 (Late Night)
+- **Router-Safe Tab URLs**: Implemented URL-synced tabs on project details page using wouter's `useSearch` and `navigate` hooks instead of direct window.history manipulation
+- **TimePicker Component**: Created custom time picker with hour/minute/AM-PM dropdowns for better UX than native HTML5 time input (`client/src/components/ui/time-picker.tsx`)
+- **Enhanced PDF Export**: 
+  - Added freehand signature images (base64) to PDF exports
+  - Improved photo layout with 2-column grid (240x160px photos)
+  - Fixed photo loading by accessing object storage directly (bypasses authentication middleware)
+- **Photo Upload Limit**: Increased from 5 to 50 photos per upload for task entries and deliveries
+- **Task Progress Slider Fix**: Fixed slider not saving changes by adding `onValueCommit` handler to persist progress when user releases slider
+- **PDF Photo Loading Fix**: Changed from HTTP fetch to direct `ObjectStorageService.getObjectEntityFile()` access for embedding photos in PDFs
 
 ### January 28, 2026 (Evening)
 - Integrated `yet-another-react-lightbox` for professional fullscreen photo viewing
