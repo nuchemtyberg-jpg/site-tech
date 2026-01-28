@@ -8,11 +8,12 @@ export async function sendInviteEmail(
   fromEmail: string
 ): Promise<boolean> {
   try {
-    const appUrl = process.env.REPLIT_DEV_DOMAIN 
-      ? `https://${process.env.REPLIT_DEV_DOMAIN}`
+    // Prioritize production deployment URL over development URL
+    const appUrl = process.env.REPLIT_DEPLOYMENT_URL 
+      ? process.env.REPLIT_DEPLOYMENT_URL
       : process.env.REPLIT_DOMAINS 
         ? `https://${process.env.REPLIT_DOMAINS.split(',')[0]}`
-        : 'https://your-app.replit.app';
+        : 'https://sitetech-app.replit.app';
 
     const roleName = role === 'admin' ? 'Administrator' : role === 'manager' ? 'Manager' : 'User';
     
