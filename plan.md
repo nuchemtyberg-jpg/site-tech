@@ -81,12 +81,17 @@ SiteTech is a comprehensive web-based sitework management platform designed for 
 
 #### Phase 9: Photo Management
 - [x] Album-based organization (separate from documents)
-- [x] Auto-created "General" album
-- [x] EXIF date extraction for photo sorting
-- [x] Date-based grouping headers
+- [x] Auto-created "General" album for Photos tab
+- [x] Auto-created "Daily Report Photos" album for daily reports
+- [x] EXIF date extraction for photo sorting (takenAt field)
+- [x] Date-based grouping headers (month/day)
 - [x] Variable tile sizes (Small, Medium, Large)
 - [x] Multi-select for bulk actions
 - [x] Download, share, delete bulk operations
+- [x] Professional lightbox gallery (yet-another-react-lightbox)
+- [x] Keyboard navigation and swipe gestures
+- [x] Album-aware lightbox (respects current album filter)
+- [x] Lazy loading for improved performance
 
 #### Phase 10: Daily Reports
 - [x] Comprehensive field reporting
@@ -187,10 +192,12 @@ SiteTech is a comprehensive web-based sitework management platform designed for 
 | TanStack React Query | Server state management |
 | Tailwind CSS | Utility-first styling |
 | shadcn/ui + Radix UI | Component library |
-| Uppy | File uploads to object storage |
+| Native File Uploader | File uploads to object storage |
 | Recharts | Dashboard charts |
 | date-fns | Date manipulation |
 | pdf-lib | PDF annotation export |
+| exifreader | EXIF metadata extraction |
+| yet-another-react-lightbox | Photo gallery lightbox |
 
 ### Backend Stack
 | Technology | Purpose |
@@ -432,6 +439,17 @@ Protected Routes:
 ---
 
 ## Changelog
+
+### January 28, 2026 (Evening)
+- Integrated `yet-another-react-lightbox` for professional fullscreen photo viewing
+- Added EXIF metadata extraction using `exifreader` library during upload
+- Photos now capture actual taken date from camera metadata (takenAt field)
+- Implemented lazy loading for photo gallery images (loading="lazy")
+- Lightbox respects album filtering (only shows photos from current album)
+- Keyboard navigation and swipe gestures in lightbox
+- Fixed mobile photo upload error (date string to Date conversion)
+- Removed legacy image viewer in favor of new lightbox
+- Updated replit.md and plan.md documentation
 
 ### January 28, 2026
 - Added first name, last name, and phone number fields to authorized users system
