@@ -78,8 +78,8 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { insertTaskSchema, type InsertTask, type FileMetadata, type Task } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
-import { cn, getProxyUrl, extractPhotoDate } from "@/lib/utils";
-import { ObjectUploader } from "@/components/ObjectUploader";
+import { cn, getProxyUrl } from "@/lib/utils";
+import { NativeFileUploader } from "@/components/NativeFileUploader";
 import { PDFViewer } from "@/components/PDFViewer";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -303,8 +303,6 @@ export default function ProjectDetails() {
   const [viewingFile, setViewingFile] = useState<FileMetadata | null>(null);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const currentFolderIdRef = useRef<number | null>(null);
-  const uploadedFilePathsRef = useRef<Map<string, string>>(new Map());
-  const uploadedFilesRef = useRef<Map<string, File>>(new Map());  // Store original files for EXIF extraction
   
   // Photo tool state
   const [photoTileSize, setPhotoTileSize] = useState<'small' | 'medium' | 'large'>('medium');
@@ -563,22 +561,14 @@ export default function ProjectDetails() {
     });
   };
 
-  const handleUploadComplete = async (result: any) => {
-    const successfulUploads = result.successful || [];
+  const handleUploadComplete = async (uploadedFiles: Array<{ name: string; objectPath: string; size: number; type: string }>) => {
     let successCount = 0;
     
-    for (const file of successfulUploads) {
-      const objectPath = uploadedFilePathsRef.current.get(file.id) || file.meta?.objectPath || "";
-      
-      if (!objectPath) {
-        console.error("Missing objectPath for file:", file.name);
-        continue;
-      }
-      
+    for (const file of uploadedFiles) {
       try {
         await createFileMutation.mutateAsync({
           name: file.name,
-          objectPath: objectPath,
+          objectPath: file.objectPath,
           contentType: file.type,
           size: file.size,
           folderId: currentFolderIdRef.current,
@@ -590,21 +580,18 @@ export default function ProjectDetails() {
       }
     }
     
-    uploadedFilePathsRef.current = new Map();
-    
     if (successCount > 0) {
       toast({ title: "Upload Complete", description: `${successCount} file(s) uploaded successfully.` });
     }
   };
 
-  const handlePhotoUploadComplete = async (result: any) => {
-    const successfulUploads = result.successful || [];
+  const handlePhotoUploadComplete = async (uploadedFiles: Array<{ name: string; objectPath: string; size: number; type: string }>) => {
     let successCount = 0;
     
     // Determine the album ID to use - if none selected, use first existing album or create one
     let targetAlbumId = currentAlbumId;
     
-    if (targetAlbumId === null && successfulUploads.length > 0) {
+    if (targetAlbumId === null && uploadedFiles.length > 0) {
       // Try to use an existing album (prefer "General" if exists, otherwise first album)
       const generalAlbum = albums?.find((a: any) => a.name === "General");
       const firstAlbum = albums?.[0];
@@ -628,29 +615,14 @@ export default function ProjectDetails() {
       }
     }
     
-    for (const file of successfulUploads) {
-      const objectPath = uploadedFilePathsRef.current.get(file.id) || file.meta?.objectPath || "";
-      const originalFile = uploadedFilesRef.current.get(file.id);
-      
-      if (!objectPath) {
-        console.error("Missing objectPath for file:", file.name);
-        continue;
-      }
-      
+    for (const file of uploadedFiles) {
       try {
-        // Extract EXIF date if we have the original file
-        let takenAt: string | null = null;
-        if (originalFile) {
-          takenAt = await extractPhotoDate(originalFile);
-        }
-        
         await createFileMutation.mutateAsync({
           name: file.name,
-          objectPath: objectPath,
+          objectPath: file.objectPath,
           contentType: file.type,
           size: file.size,
-          albumId: targetAlbumId,  // Use determined album
-          takenAt: takenAt,
+          albumId: targetAlbumId,
         });
         successCount++;
       } catch (err) {
@@ -658,9 +630,6 @@ export default function ProjectDetails() {
         toast({ title: "Error", description: `Failed to save ${file.name}`, variant: "destructive" });
       }
     }
-    
-    uploadedFilePathsRef.current = new Map();
-    uploadedFilesRef.current = new Map();
     
     if (successCount > 0) {
       toast({ title: "Upload Complete", description: `${successCount} photo(s) uploaded successfully.` });
@@ -1351,34 +1320,14 @@ export default function ProjectDetails() {
               </DialogContent>
             </Dialog>
 
-            <ObjectUploader
+            <NativeFileUploader
               maxNumberOfFiles={50}
               maxFileSize={52428800}
               buttonClassName="w-full sm:w-auto"
-              onGetUploadParameters={async (file) => {
-                const res = await fetch("/api/uploads/request-url", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({
-                    name: file.name,
-                    size: file.size,
-                    contentType: file.type,
-                  }),
-                });
-                const { uploadURL, objectPath } = await res.json();
-                
-                uploadedFilePathsRef.current.set(file.id, objectPath);
-                
-                return {
-                  method: "PUT",
-                  url: uploadURL,
-                  headers: { "Content-Type": file.type || "application/octet-stream" },
-                };
-              }}
-              onComplete={handleUploadComplete}
+              onUploadComplete={handleUploadComplete}
             >
               <Upload className="w-4 h-4 mr-2" /> Upload Files
-            </ObjectUploader>
+            </NativeFileUploader>
             </div>
           </div>
 
@@ -1632,36 +1581,15 @@ export default function ProjectDetails() {
             </Button>
 
             {/* Upload Button */}
-            <ObjectUploader
+            <NativeFileUploader
               maxNumberOfFiles={50}
               maxFileSize={52428800}
+              accept="image/*"
               buttonClassName="w-full sm:w-auto"
-              onGetUploadParameters={async (file) => {
-                const res = await fetch("/api/uploads/request-url", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({
-                    name: file.name,
-                    size: file.size,
-                    contentType: file.type,
-                  }),
-                });
-                const { uploadURL, objectPath } = await res.json();
-                uploadedFilePathsRef.current.set(file.id, objectPath);
-                // Store the original file for EXIF extraction (use duck typing instead of instanceof)
-                if (file.data && typeof (file.data as any).arrayBuffer === 'function') {
-                  uploadedFilesRef.current.set(file.id, file.data as File);
-                }
-                return {
-                  method: "PUT",
-                  url: uploadURL,
-                  headers: { "Content-Type": file.type || "application/octet-stream" },
-                };
-              }}
-              onComplete={handlePhotoUploadComplete}
+              onUploadComplete={handlePhotoUploadComplete}
             >
               <Camera className="w-4 h-4 mr-2" /> Upload
-            </ObjectUploader>
+            </NativeFileUploader>
           </div>
 
           {/* Selection Actions Bar */}

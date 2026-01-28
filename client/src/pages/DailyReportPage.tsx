@@ -38,8 +38,7 @@ import {
 import { ArrowLeft, Save, Plus, Trash2, Cloud, Truck, ChevronDown, ChevronUp, CheckCircle, PenLine, Download, Camera, X, Image } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
-import { ObjectUploader } from "@/components/ObjectUploader";
-import { useUpload } from "@/hooks/use-upload";
+import { NativeFileUploader } from "@/components/NativeFileUploader";
 import type { Task, Project } from "@shared/schema";
 
 const LABOR_TYPES = ["Foreman", "Operator", "Laborer"];
@@ -488,8 +487,6 @@ export default function DailyReportPage() {
   });
 
   // Photo mutations
-  const { getUploadParameters } = useUpload();
-  
   const createPhotoMutation = useMutation({
     mutationFn: async (data: { taskEntryId?: number; deliveryEntryId?: number; url: string; objectPath?: string; fileName?: string }) => {
       return apiRequest("POST", `/api/daily-report-photos`, data);
@@ -1076,27 +1073,22 @@ export default function DailyReportPage() {
                         <div className="flex items-center justify-between">
                           <Label>Photos</Label>
                           {!isCompleted && (
-                            <ObjectUploader
+                            <NativeFileUploader
                               maxNumberOfFiles={5}
-                              onGetUploadParameters={getUploadParameters}
-                              onComplete={(result) => {
-                                result.successful?.forEach((file) => {
-                                  const uploadUrl = file.uploadURL;
-                                  if (uploadUrl) {
-                                    const fullUrl = uploadUrl.split('?')[0];
-                                    const objectPath = fullUrl.replace(/^https:\/\/storage\.googleapis\.com\/[^\/]+/, '');
-                                    createPhotoMutation.mutate({ 
-                                      taskEntryId: taskEntry.id, 
-                                      url: fullUrl,
-                                      objectPath,
-                                      fileName: file.name || undefined,
-                                    });
-                                  }
+                              accept="image/*"
+                              onUploadComplete={(uploadedFiles) => {
+                                uploadedFiles.forEach((file) => {
+                                  createPhotoMutation.mutate({ 
+                                    taskEntryId: taskEntry.id, 
+                                    url: file.objectPath,
+                                    objectPath: file.objectPath,
+                                    fileName: file.name,
+                                  });
                                 });
                               }}
                             >
                               <Camera className="h-3 w-3 mr-1" /> Upload Photos
-                            </ObjectUploader>
+                            </NativeFileUploader>
                           )}
                         </div>
                         {taskEntry.photos && taskEntry.photos.length > 0 && (
@@ -1248,27 +1240,22 @@ export default function DailyReportPage() {
                       <div className="flex items-center justify-between">
                         <Label>Photos</Label>
                         {!isCompleted && (
-                          <ObjectUploader
+                          <NativeFileUploader
                             maxNumberOfFiles={5}
-                            onGetUploadParameters={getUploadParameters}
-                            onComplete={(result) => {
-                              result.successful?.forEach((file) => {
-                                const uploadUrl = file.uploadURL;
-                                if (uploadUrl) {
-                                  const fullUrl = uploadUrl.split('?')[0];
-                                  const objectPath = fullUrl.replace(/^https:\/\/storage\.googleapis\.com\/[^\/]+/, '');
-                                  createPhotoMutation.mutate({ 
-                                    deliveryEntryId: delivery.id, 
-                                    url: fullUrl,
-                                    objectPath,
-                                    fileName: file.name || undefined,
-                                  });
-                                }
+                            accept="image/*"
+                            onUploadComplete={(uploadedFiles) => {
+                              uploadedFiles.forEach((file) => {
+                                createPhotoMutation.mutate({ 
+                                  deliveryEntryId: delivery.id, 
+                                  url: file.objectPath,
+                                  objectPath: file.objectPath,
+                                  fileName: file.name,
+                                });
                               });
                             }}
                           >
                             <Camera className="h-3 w-3 mr-1" /> Upload Photos
-                          </ObjectUploader>
+                          </NativeFileUploader>
                         )}
                       </div>
                       {delivery.photos && delivery.photos.length > 0 && (
