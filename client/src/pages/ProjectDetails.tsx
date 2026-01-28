@@ -2,6 +2,7 @@ import { useParams, Link, useLocation } from "wouter";
 import { useProject, useDeleteProject, useUpdateProject } from "@/hooks/use-projects";
 import { useProjectTasks, useCreateTask, useDeleteTask, useUpdateTask, useTaskStatusHistory } from "@/hooks/use-tasks";
 import { useProjectFiles, useProjectFolders, useCreateFile, useDeleteFile, useCreateFolder, useDeleteFolder, useUpdateFile } from "@/hooks/use-files";
+import { useProjectPhotos, useCreatePhoto, useDeletePhoto } from "@/hooks/use-photos";
 import { TagInput } from "@/components/TagInput";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -80,7 +81,7 @@ import { Slider } from "@/components/ui/slider";
 import { useState, useRef, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { insertTaskSchema, type InsertTask, type FileMetadata, type Task } from "@shared/schema";
+import { insertTaskSchema, type InsertTask, type FileMetadata, type Task, type Photo } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
 import { cn, getProxyUrl } from "@/lib/utils";
 import { NativeFileUploader } from "@/components/NativeFileUploader";
@@ -173,6 +174,11 @@ export default function ProjectDetails() {
   const deleteFileMutation = useDeleteFile(projectId);
   const createFolderMutation = useCreateFolder(projectId);
   const deleteFolderMutation = useDeleteFolder(projectId);
+  
+  // Photos (separate from files/documents)
+  const { data: photos = [], isLoading: isPhotosLoading } = useProjectPhotos(projectId);
+  const createPhotoMutation = useCreatePhoto(projectId);
+  const deletePhotoMutation = useDeletePhoto(projectId);
 
   // Photo Albums
   const { data: albums = [] } = useQuery<{ id: number; projectId: number; name: string; createdAt: string }[]>({
@@ -310,7 +316,7 @@ export default function ProjectDetails() {
     const folderId = params.get("folder");
     return folderId ? parseInt(folderId, 10) : null;
   });
-  const [viewingFile, setViewingFile] = useState<FileMetadata | null>(null);
+  const [viewingFile, setViewingFile] = useState<FileMetadata | Photo | null>(null);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const currentFolderIdRef = useRef<number | null>(null);
   
@@ -337,7 +343,7 @@ export default function ProjectDetails() {
     }
   };
 
-  const handleShareFile = async (file: FileMetadata) => {
+  const handleShareFile = async (file: FileMetadata | Photo) => {
     const proxyPath = getProxyUrl(file.objectPath);
     try {
       // Try to share the actual file
@@ -627,7 +633,8 @@ export default function ProjectDetails() {
     
     for (const file of uploadedFiles) {
       try {
-        await createFileMutation.mutateAsync({
+        // Use createPhotoMutation - photos are now stored in separate photos table
+        await createPhotoMutation.mutateAsync({
           name: file.name,
           objectPath: file.objectPath,
           contentType: file.type,
@@ -1656,7 +1663,7 @@ export default function ProjectDetails() {
                 size="sm"
                 onClick={() => {
                   selectedPhotos.forEach(id => {
-                    const photo = files?.find(f => f.id === id);
+                    const photo = photos?.find(p => p.id === id);
                     if (photo) {
                       const link = document.createElement('a');
                       link.href = getProxyUrl(photo.objectPath);
@@ -1695,10 +1702,10 @@ export default function ProjectDetails() {
 
           {/* Photo Grid with Date Headers */}
           {(() => {
-            // Only show files that belong to an album (have albumId set) - not documents
-            const allPhotos = files?.filter(f => isImageFile(f.contentType) && f.albumId) || [];
+            // Use photos from separate photos table (not files)
+            const allPhotos = photos || [];
             const photoFiles = currentAlbumId 
-              ? allPhotos.filter(f => f.albumId === currentAlbumId)
+              ? allPhotos.filter(p => p.albumId === currentAlbumId)
               : allPhotos;
             
             if (photoFiles.length === 0) {
@@ -1715,14 +1722,14 @@ export default function ProjectDetails() {
 
             // Sort by date descending and group by date
             // Use takenAt (photo timestamp) if available, otherwise fall back to createdAt (upload date)
-            const getPhotoDate = (photo: FileMetadata) => new Date(photo.takenAt || photo.createdAt || 0);
+            const getPhotoDate = (photo: Photo) => new Date(photo.takenAt || photo.createdAt || 0);
             
             const sortedPhotos = [...photoFiles].sort((a, b) => 
               getPhotoDate(b).getTime() - getPhotoDate(a).getTime()
             );
 
             // Group by month - store actual Date for proper formatting
-            const monthDataMap: Map<string, { monthDate: Date; days: { date: string; photos: FileMetadata[] }[] }> = new Map();
+            const monthDataMap: Map<string, { monthDate: Date; days: { date: string; photos: Photo[] }[] }> = new Map();
             
             sortedPhotos.forEach(photo => {
               const date = getPhotoDate(photo);
@@ -1871,8 +1878,9 @@ export default function ProjectDetails() {
 
       {/* Image Viewer Modal with Prev/Next */}
       {viewingFile && isImageFile(viewingFile.contentType) && (() => {
-        const allPhotos = files?.filter(f => isImageFile(f.contentType)).sort((a, b) => 
-          new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+        // Use photos from separate photos table for navigation
+        const allPhotos = photos?.sort((a, b) => 
+          new Date(b.takenAt || b.createdAt || 0).getTime() - new Date(a.takenAt || a.createdAt || 0).getTime()
         ) || [];
         const currentIndex = allPhotos.findIndex(p => p.id === viewingFile.id);
         const hasPrev = currentIndex > 0;
@@ -2169,7 +2177,7 @@ export default function ProjectDetails() {
             <AlertDialogAction 
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               onClick={() => {
-                selectedPhotos.forEach(id => deleteFileMutation.mutate(id));
+                selectedPhotos.forEach(id => deletePhotoMutation.mutate(id));
                 setSelectedPhotos(new Set());
                 setShowBatchDeleteConfirm(false);
               }}

@@ -118,3 +118,13 @@ Added tagging functionality to all uploaded documents:
   - Tags displayed on file cards in both grid and list views
   - Edit tags dialog accessible via Tags button on each file
 - **Features**: Press Enter or comma to add tags, click X to remove, tags stored as lowercase strings
+
+### Separate Photos and Documents Storage (January 2026)
+Photos and documents are now stored in completely separate database tables:
+- **Photos Table**: New `photos` table stores all project photos with fields: `id`, `projectId`, `albumId`, `name`, `objectPath`, `contentType`, `size`, `takenAt`, `createdAt`, `deletedAt`
+- **Files Table**: The `files` table now exclusively stores documents with fields: `id`, `projectId`, `folderId`, `name`, `objectPath`, `contentType`, `size`, `tags`, `createdAt`, `deletedAt`
+- **API Endpoints**:
+  - Photos: `GET /api/projects/:projectId/photos`, `POST /api/projects/:projectId/photos`, `DELETE /api/photos/:id`
+  - Files: `GET /api/projects/:projectId/files`, `POST /api/projects/:projectId/files`, `DELETE /api/files/:id`
+- **Hooks**: `client/src/hooks/use-photos.ts` provides `useProjectPhotos`, `useCreatePhoto`, `useDeletePhoto`
+- **Benefits**: Complete separation ensures photos and documents don't interfere with each other
