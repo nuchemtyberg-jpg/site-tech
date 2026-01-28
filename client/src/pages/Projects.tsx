@@ -761,16 +761,26 @@ export default function Projects() {
                     {project.location && (
                       <div className="flex items-center text-xs text-muted-foreground mt-2">
                         <MapPin className="w-3 h-3 mr-1 text-primary shrink-0" />
-                        <a 
-                          href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(project.location)}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="line-clamp-1 text-primary hover:underline"
-                          onClick={(e) => e.stopPropagation()}
+                        <span 
+                          role="button"
+                          tabIndex={0}
+                          className="line-clamp-1 text-primary hover:underline cursor-pointer"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(project.location || '')}`, '_blank');
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(project.location || '')}`, '_blank');
+                            }
+                          }}
                           data-testid={`link-project-address-${project.id}`}
                         >
                           {project.location}
-                        </a>
+                        </span>
                       </div>
                     )}
 
@@ -824,17 +834,27 @@ export default function Projects() {
                             </span>
                           )}
                           {project.location && (
-                            <a 
-                              href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(project.location)}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="flex items-center gap-1 truncate text-primary hover:underline"
-                              onClick={(e) => e.stopPropagation()}
+                            <span 
+                              role="button"
+                              tabIndex={0}
+                              className="flex items-center gap-1 truncate text-primary hover:underline cursor-pointer"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(project.location || '')}`, '_blank');
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter' || e.key === ' ') {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(project.location || '')}`, '_blank');
+                                }
+                              }}
                               data-testid={`link-project-address-list-${project.id}`}
                             >
                               <MapPin className="w-3 h-3" />
                               {project.location}
-                            </a>
+                            </span>
                           )}
                         </div>
                       </div>
