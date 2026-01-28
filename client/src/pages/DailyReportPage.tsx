@@ -923,6 +923,15 @@ export default function DailyReportPage() {
                           onValueChange={(value) => {
                             setLocalTaskPercents(prev => ({ ...prev, [taskEntry.id]: value[0] }));
                           }}
+                          onValueCommit={(value) => {
+                            const newPercent = value[0];
+                            if (newPercent !== taskEntry.percentComplete) {
+                              updateTaskEntryMutation.mutate({
+                                id: taskEntry.id,
+                                data: { percentComplete: newPercent },
+                              });
+                            }
+                          }}
                           data-testid={`slider-percent-${taskEntry.id}`}
                         />
                         <div className="flex justify-between text-xs text-muted-foreground">

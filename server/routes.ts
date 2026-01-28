@@ -4,7 +4,7 @@ import { storage } from "./storage";
 import { api } from "@shared/routes";
 import { z } from "zod";
 import { setupAuth, registerAuthRoutes, isAuthenticated } from "./replit_integrations/auth";
-import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
+import { registerObjectStorageRoutes, ObjectStorageService } from "./replit_integrations/object_storage";
 import type { User } from "@shared/schema";
 import { insertAuthorizedUserSchema } from "@shared/schema";
 import { isAdmin, isAuthorizedUser } from "./middleware/auth";
@@ -648,8 +648,11 @@ export async function registerRoutes(
       const reportId = Number(req.params.id);
       const includePhotos = req.query.includePhotos === 'true';
       
-      // Helper to convert photo URL to proxy path
-      const getProxyPath = (url: string): string => {
+      // Object storage service for direct file access (bypasses auth)
+      const objectStorageService = new ObjectStorageService();
+      
+      // Helper to convert photo URL to object path format
+      const getObjectPath = (url: string): string => {
         if (!url) return url;
         if (url.startsWith('/objects/')) return url;
         if (url.startsWith('/.private/uploads/')) return url.replace('/.private/uploads/', '/objects/uploads/');
@@ -661,8 +664,22 @@ export async function registerRoutes(
         return url;
       };
       
-      // Get base URL for fetching photos
-      const baseUrl = `${req.protocol}://${req.get('host')}`;
+      // Helper to read photo bytes directly from object storage
+      const getPhotoBytes = async (url: string): Promise<Uint8Array | null> => {
+        try {
+          const objectPath = getObjectPath(url);
+          if (!objectPath.startsWith('/objects/')) {
+            console.log(`[PDF Photo] Skipping non-object URL: ${url}`);
+            return null;
+          }
+          const file = await objectStorageService.getObjectEntityFile(objectPath);
+          const [buffer] = await file.download();
+          return new Uint8Array(buffer);
+        } catch (err) {
+          console.error(`[PDF Photo] Failed to read photo from storage: ${url}`, err);
+          return null;
+        }
+      };
       
       const report = await storage.getDailyReport(reportId);
       if (!report) {
@@ -849,30 +866,27 @@ export async function registerRoutes(
               for (let j = 0; j < 2 && i + j < entry.photos.length; j++) {
                 const photo = entry.photos[i + j];
                 try {
-                  const imagePath = getProxyPath(photo.url);
-                  const imageResponse = await fetch(`${baseUrl}${imagePath}`);
-                  if (imageResponse.ok) {
-                    const imageBuffer = await imageResponse.arrayBuffer();
-                    const imageBytes = new Uint8Array(imageBuffer);
-                    
-                    let embeddedImage;
+                  const imageBytes = await getPhotoBytes(photo.url);
+                  if (!imageBytes) continue;
+                  
+                  let embeddedImage;
+                  try {
+                    embeddedImage = await pdfDoc.embedJpg(imageBytes);
+                  } catch {
                     try {
-                      embeddedImage = await pdfDoc.embedJpg(imageBytes);
+                      embeddedImage = await pdfDoc.embedPng(imageBytes);
                     } catch {
-                      try {
-                        embeddedImage = await pdfDoc.embedPng(imageBytes);
-                      } catch {
-                        continue;
-                      }
+                      console.log(`[PDF Photo] Could not embed as JPG or PNG: ${photo.url}`);
+                      continue;
                     }
-                    
-                    const scale = Math.min(photoMaxWidth / embeddedImage.width, photoMaxHeight / embeddedImage.height);
-                    photosInRow.push({
-                      image: embeddedImage,
-                      width: embeddedImage.width * scale,
-                      height: embeddedImage.height * scale
-                    });
                   }
+                  
+                  const scale = Math.min(photoMaxWidth / embeddedImage.width, photoMaxHeight / embeddedImage.height);
+                  photosInRow.push({
+                    image: embeddedImage,
+                    width: embeddedImage.width * scale,
+                    height: embeddedImage.height * scale
+                  });
                 } catch (err) {
                   console.error("Failed to embed task photo:", err);
                 }
@@ -952,30 +966,27 @@ export async function registerRoutes(
               for (let j = 0; j < 2 && i + j < delivery.photos.length; j++) {
                 const photo = delivery.photos[i + j];
                 try {
-                  const imagePath = getProxyPath(photo.url);
-                  const imageResponse = await fetch(`${baseUrl}${imagePath}`);
-                  if (imageResponse.ok) {
-                    const imageBuffer = await imageResponse.arrayBuffer();
-                    const imageBytes = new Uint8Array(imageBuffer);
-                    
-                    let embeddedImage;
+                  const imageBytes = await getPhotoBytes(photo.url);
+                  if (!imageBytes) continue;
+                  
+                  let embeddedImage;
+                  try {
+                    embeddedImage = await pdfDoc.embedJpg(imageBytes);
+                  } catch {
                     try {
-                      embeddedImage = await pdfDoc.embedJpg(imageBytes);
+                      embeddedImage = await pdfDoc.embedPng(imageBytes);
                     } catch {
-                      try {
-                        embeddedImage = await pdfDoc.embedPng(imageBytes);
-                      } catch {
-                        continue;
-                      }
+                      console.log(`[PDF Photo] Could not embed delivery photo as JPG or PNG: ${photo.url}`);
+                      continue;
                     }
-                    
-                    const scale = Math.min(photoMaxWidth / embeddedImage.width, photoMaxHeight / embeddedImage.height);
-                    photosInRow.push({
-                      image: embeddedImage,
-                      width: embeddedImage.width * scale,
-                      height: embeddedImage.height * scale
-                    });
                   }
+                  
+                  const scale = Math.min(photoMaxWidth / embeddedImage.width, photoMaxHeight / embeddedImage.height);
+                  photosInRow.push({
+                    image: embeddedImage,
+                    width: embeddedImage.width * scale,
+                    height: embeddedImage.height * scale
+                  });
                 } catch (err) {
                   console.error("Failed to embed delivery photo:", err);
                 }
