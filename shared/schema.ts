@@ -391,17 +391,36 @@ export const insertPhotoAlbumSchema = createInsertSchema(photoAlbums).omit({ id:
 export type PhotoAlbum = typeof photoAlbums.$inferSelect;
 export type InsertPhotoAlbum = z.infer<typeof insertPhotoAlbumSchema>;
 
-// Files
-export const files = pgTable("files", {
+// Photos - Separate table for project photos
+export const photos = pgTable("photos", {
   id: serial("id").primaryKey(),
   projectId: integer("project_id").notNull(),
-  folderId: integer("folder_id"),
   albumId: integer("album_id"),
   name: text("name").notNull(),
   objectPath: text("object_path").notNull(),
   contentType: text("content_type"),
   size: integer("size"),
   takenAt: timestamp("taken_at"),  // Photo timestamp from EXIF metadata
+  createdAt: timestamp("created_at").defaultNow(),
+  deletedAt: timestamp("deleted_at"), // Soft delete support
+});
+
+export const insertPhotoSchema = createInsertSchema(photos).omit({ id: true, createdAt: true, deletedAt: true });
+export type Photo = typeof photos.$inferSelect;
+export type InsertPhoto = z.infer<typeof insertPhotoSchema>;
+
+// Files - Documents only (separate from photos)
+// Note: albumId and takenAt are deprecated - photos now stored in photos table
+export const files = pgTable("files", {
+  id: serial("id").primaryKey(),
+  projectId: integer("project_id").notNull(),
+  folderId: integer("folder_id"),
+  albumId: integer("album_id"), // DEPRECATED - kept for migration
+  name: text("name").notNull(),
+  objectPath: text("object_path").notNull(),
+  contentType: text("content_type"),
+  size: integer("size"),
+  takenAt: timestamp("taken_at"), // DEPRECATED - kept for migration
   tags: text("tags").array(), // Document tags for categorization
   createdAt: timestamp("created_at").defaultNow(),
   deletedAt: timestamp("deleted_at"), // Soft delete support
