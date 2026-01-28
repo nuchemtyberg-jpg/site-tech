@@ -12,7 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { Loader2, UserPlus, Users, Mail, Shield, Check, X, Trash2 } from "lucide-react";
+import { Loader2, UserPlus, Users, Mail, Shield, Check, X, Trash2, Pencil } from "lucide-react";
 import type { User, AuthorizedUser } from "@shared/models/auth";
 
 export default function UserManagement() {
@@ -22,6 +22,14 @@ export default function UserManagement() {
   const [newPhoneNumber, setNewPhoneNumber] = useState("");
   const [newRole, setNewRole] = useState("user");
   const [addDialogOpen, setAddDialogOpen] = useState(false);
+  
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [editingUser, setEditingUser] = useState<AuthorizedUser | null>(null);
+  const [editFirstName, setEditFirstName] = useState("");
+  const [editLastName, setEditLastName] = useState("");
+  const [editPhoneNumber, setEditPhoneNumber] = useState("");
+  const [editRole, setEditRole] = useState("user");
+  
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -82,6 +90,21 @@ export default function UserManagement() {
     },
   });
 
+  const updateAuthorizedUserMutation = useMutation({
+    mutationFn: async ({ id, updates }: { id: string; updates: { firstName?: string; lastName?: string; phoneNumber?: string; role?: string } }) => {
+      return apiRequest("PATCH", `/api/admin/authorized-users/${id}`, updates);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/authorized-users"] });
+      setEditDialogOpen(false);
+      setEditingUser(null);
+      toast({ title: "Updated", description: "Authorized user has been updated." });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to update authorized user.", variant: "destructive" });
+    },
+  });
+
   const handleAddUser = () => {
     if (!newEmail.trim()) return;
     addAuthorizedUserMutation.mutate({ 
@@ -90,6 +113,28 @@ export default function UserManagement() {
       lastName: newLastName.trim() || undefined,
       phoneNumber: newPhoneNumber.trim() || undefined,
       role: newRole 
+    });
+  };
+
+  const openEditDialog = (user: AuthorizedUser) => {
+    setEditingUser(user);
+    setEditFirstName(user.firstName || "");
+    setEditLastName(user.lastName || "");
+    setEditPhoneNumber(user.phoneNumber || "");
+    setEditRole(user.role);
+    setEditDialogOpen(true);
+  };
+
+  const handleEditUser = () => {
+    if (!editingUser) return;
+    updateAuthorizedUserMutation.mutate({
+      id: editingUser.id,
+      updates: {
+        firstName: editFirstName.trim() || undefined,
+        lastName: editLastName.trim() || undefined,
+        phoneNumber: editPhoneNumber.trim() || undefined,
+        role: editRole,
+      }
     });
   };
 
@@ -397,15 +442,25 @@ export default function UserManagement() {
                         {authUser.createdAt ? new Date(authUser.createdAt).toLocaleDateString() : "-"}
                       </TableCell>
                       <TableCell>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="text-red-500 hover:text-red-600 hover:bg-red-500/10"
-                          onClick={() => deleteAuthorizedUserMutation.mutate(authUser.id)}
-                          data-testid={`button-delete-${authUser.id}`}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
+                        <div className="flex items-center gap-1">
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            onClick={() => openEditDialog(authUser)}
+                            data-testid={`button-edit-${authUser.id}`}
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="text-red-500 hover:text-red-600 hover:bg-red-500/10"
+                            onClick={() => deleteAuthorizedUserMutation.mutate(authUser.id)}
+                            data-testid={`button-delete-${authUser.id}`}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -422,6 +477,81 @@ export default function UserManagement() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Authorized User</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label className="text-muted-foreground">Email</Label>
+              <div className="px-3 py-2 bg-muted rounded-md text-sm">
+                {editingUser?.email}
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="editFirstName">First Name</Label>
+                <Input
+                  id="editFirstName"
+                  placeholder="John"
+                  value={editFirstName}
+                  onChange={(e) => setEditFirstName(e.target.value)}
+                  data-testid="input-edit-first-name"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="editLastName">Last Name</Label>
+                <Input
+                  id="editLastName"
+                  placeholder="Doe"
+                  value={editLastName}
+                  onChange={(e) => setEditLastName(e.target.value)}
+                  data-testid="input-edit-last-name"
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="editPhoneNumber">Phone Number</Label>
+              <Input
+                id="editPhoneNumber"
+                type="tel"
+                placeholder="(555) 123-4567"
+                value={editPhoneNumber}
+                onChange={(e) => setEditPhoneNumber(e.target.value)}
+                data-testid="input-edit-phone"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="editRole">Role</Label>
+              <Select value={editRole} onValueChange={setEditRole}>
+                <SelectTrigger data-testid="select-edit-role">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="user">User</SelectItem>
+                  <SelectItem value="manager">Manager</SelectItem>
+                  <SelectItem value="admin">Admin</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button variant="outline">Cancel</Button>
+            </DialogClose>
+            <Button 
+              onClick={handleEditUser} 
+              disabled={updateAuthorizedUserMutation.isPending}
+              data-testid="button-confirm-edit"
+            >
+              {updateAuthorizedUserMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              Save Changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

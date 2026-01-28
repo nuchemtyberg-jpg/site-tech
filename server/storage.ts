@@ -28,6 +28,7 @@ export interface IStorage {
   getAuthorizedUsers(): Promise<AuthorizedUser[]>;
   getAuthorizedUserByEmail(email: string): Promise<AuthorizedUser | undefined>;
   createAuthorizedUser(user: InsertAuthorizedUser): Promise<AuthorizedUser>;
+  updateAuthorizedUser(id: string, updates: Partial<InsertAuthorizedUser>): Promise<AuthorizedUser | undefined>;
   deleteAuthorizedUser(id: string): Promise<void>;
 
   // Customers
@@ -227,6 +228,14 @@ export class DatabaseStorage implements IStorage {
       email: user.email.toLowerCase(),
     }).returning();
     return authorized;
+  }
+
+  async updateAuthorizedUser(id: string, updates: Partial<InsertAuthorizedUser>): Promise<AuthorizedUser | undefined> {
+    const [updated] = await db.update(authorizedUsers)
+      .set(updates)
+      .where(eq(authorizedUsers.id, id))
+      .returning();
+    return updated;
   }
 
   async deleteAuthorizedUser(id: string): Promise<void> {

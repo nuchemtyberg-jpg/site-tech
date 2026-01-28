@@ -161,6 +161,20 @@ export async function registerRoutes(
     }
   });
 
+  // Update authorized email (admin only)
+  app.patch("/api/admin/authorized-users/:id", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const updates = req.body;
+      const updated = await storage.updateAuthorizedUser(req.params.id, updates);
+      if (!updated) {
+        return res.status(404).json({ message: "Authorized user not found" });
+      }
+      res.json(updated);
+    } catch (err) {
+      res.status(500).json({ message: "Failed to update authorized user" });
+    }
+  });
+
   // Delete authorized email (admin only)
   app.delete("/api/admin/authorized-users/:id", isAuthenticated, isAdmin, async (req, res) => {
     await storage.deleteAuthorizedUser(req.params.id);
