@@ -1565,6 +1565,29 @@ export async function registerRoutes(
     res.status(204).send();
   });
 
+  // Photos (separate from documents/files)
+  app.get('/api/projects/:projectId/photos', isAuthenticated, isAuthorizedUser, async (req, res) => {
+    const photos = await storage.getPhotos(Number(req.params.projectId));
+    res.json(photos);
+  });
+
+  app.post('/api/projects/:projectId/photos', isAuthenticated, isAuthorizedUser, async (req, res) => {
+    try {
+      const photo = await storage.createPhoto({
+        ...req.body,
+        projectId: Number(req.params.projectId),
+      });
+      res.status(201).json(photo);
+    } catch (err) {
+      throw err;
+    }
+  });
+
+  app.delete('/api/photos/:id', isAuthenticated, isAuthorizedUser, async (req, res) => {
+    await storage.deletePhoto(Number(req.params.id));
+    res.status(204).send();
+  });
+
   // Update file to assign to album
   app.put('/api/files/:id', isAuthenticated, isAuthorizedUser, async (req, res) => {
     try {

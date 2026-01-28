@@ -1,14 +1,14 @@
 import {
-  projects, tasks, equipment, allocations, folders, files, users, customers, dailyReports, maintenanceLogs, communications, taskStatusHistory, photoAlbums,
+  projects, tasks, equipment, allocations, folders, files, photos, users, customers, dailyReports, maintenanceLogs, communications, taskStatusHistory, photoAlbums,
   reportTasks, laborEntries, equipmentEntries, reportTaskPhotos, deliveries, deliveryPhotos,
   dailyReportTaskEntries, dailyReportLaborLines, dailyReportEquipmentLines, dailyReportDeliveryEntries, dailyReportPhotos,
   authorizedUsers,
-  type InsertProject, type InsertTask, type InsertEquipment, type InsertAllocation, type InsertFolder, type InsertFileMetadata,
+  type InsertProject, type InsertTask, type InsertEquipment, type InsertAllocation, type InsertFolder, type InsertFileMetadata, type InsertPhoto,
   type InsertCustomer, type InsertDailyReport, type InsertMaintenanceLog, type InsertCommunication, type InsertTaskStatusHistory, type InsertPhotoAlbum,
   type InsertReportTask, type InsertLaborEntry, type InsertEquipmentEntry, type InsertReportTaskPhoto, type InsertDelivery, type InsertDeliveryPhoto,
   type InsertDailyReportTaskEntry, type InsertDailyReportLaborLine, type InsertDailyReportEquipmentLine, type InsertDailyReportDeliveryEntry, type InsertDailyReportPhoto,
   type InsertAuthorizedUser,
-  type Project, type Task, type Equipment, type Allocation, type Folder, type FileMetadata,
+  type Project, type Task, type Equipment, type Allocation, type Folder, type FileMetadata, type Photo,
   type Customer, type DailyReport, type MaintenanceLog, type Communication, type TaskStatusHistory, type PhotoAlbum,
   type ReportTask, type LaborEntry, type EquipmentEntry, type ReportTaskPhoto, type Delivery, type DeliveryPhoto,
   type DailyReportTaskEntry, type DailyReportLaborLine, type DailyReportEquipmentLine, type DailyReportDeliveryEntry, type DailyReportPhoto,
@@ -144,6 +144,12 @@ export interface IStorage {
   createPhotoAlbum(album: InsertPhotoAlbum): Promise<PhotoAlbum>;
   updatePhotoAlbum(id: number, album: Partial<InsertPhotoAlbum>): Promise<PhotoAlbum>;
   deletePhotoAlbum(id: number): Promise<void>;
+
+  // Photos (separate from files/documents)
+  getPhotos(projectId: number): Promise<Photo[]>;
+  getPhoto(id: number): Promise<Photo | undefined>;
+  createPhoto(photo: InsertPhoto): Promise<Photo>;
+  deletePhoto(id: number): Promise<void>;
 
   // New Daily Report Task Entries
   getDailyReportTaskEntries(reportId: number): Promise<DailyReportTaskEntry[]>;
@@ -636,6 +642,22 @@ export class DatabaseStorage implements IStorage {
   }
   async deletePhotoAlbum(id: number): Promise<void> {
     await db.update(photoAlbums).set({ deletedAt: new Date() }).where(eq(photoAlbums.id, id));
+  }
+
+  // Photos (separate from files/documents)
+  async getPhotos(projectId: number): Promise<Photo[]> {
+    return await db.select().from(photos).where(and(eq(photos.projectId, projectId), isNull(photos.deletedAt)));
+  }
+  async getPhoto(id: number): Promise<Photo | undefined> {
+    const [photo] = await db.select().from(photos).where(and(eq(photos.id, id), isNull(photos.deletedAt)));
+    return photo;
+  }
+  async createPhoto(photo: InsertPhoto): Promise<Photo> {
+    const [record] = await db.insert(photos).values(photo).returning();
+    return record;
+  }
+  async deletePhoto(id: number): Promise<void> {
+    await db.update(photos).set({ deletedAt: new Date() }).where(eq(photos.id, id));
   }
 
   // New Daily Report Task Entries (with soft delete)
