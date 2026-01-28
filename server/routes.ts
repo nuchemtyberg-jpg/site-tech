@@ -8,6 +8,7 @@ import { registerObjectStorageRoutes } from "./replit_integrations/object_storag
 import type { User } from "@shared/schema";
 import { insertAuthorizedUserSchema } from "@shared/schema";
 import { isAdmin, isAuthorizedUser } from "./middleware/auth";
+import { sendInviteEmail } from "./services/email";
 
 // Weather fetch helper using Open-Meteo API
 async function fetchWeatherData(address: string, city: string, state: string): Promise<{
@@ -128,6 +129,15 @@ export async function registerRoutes(
         addedBy: adminUser.claims.sub,
         addedByName: dbAdmin ? `${dbAdmin.firstName || ''} ${dbAdmin.lastName || ''}`.trim() || dbAdmin.email : undefined,
       });
+      
+      // Send invite email to the new authorized user
+      try {
+        await sendInviteEmail(input.email, input.role || 'user');
+      } catch (emailError) {
+        console.error('Failed to send invite email:', emailError);
+        // Don't fail the request if email fails - user is still authorized
+      }
+      
       res.status(201).json(authorized);
     } catch (err) {
       if (err instanceof z.ZodError) {
