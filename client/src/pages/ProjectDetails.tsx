@@ -4,6 +4,8 @@ import { useProjectTasks, useCreateTask, useDeleteTask, useUpdateTask, useTaskSt
 import { useProjectFiles, useProjectFolders, useCreateFile, useDeleteFile, useCreateFolder, useDeleteFolder, useUpdateFile } from "@/hooks/use-files";
 import { useProjectPhotos, useCreatePhoto, useDeletePhoto } from "@/hooks/use-photos";
 import { TagInput } from "@/components/TagInput";
+import Lightbox from "yet-another-react-lightbox";
+import "yet-another-react-lightbox/styles.css";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { 
@@ -328,6 +330,8 @@ export default function ProjectDetails() {
   const [isCreateAlbumOpen, setIsCreateAlbumOpen] = useState(false);
   const [newAlbumName, setNewAlbumName] = useState("");
   const [deleteAlbumId, setDeleteAlbumId] = useState<number | null>(null);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [lightboxIndex, setLightboxIndex] = useState(0);
   const [showBatchDeleteConfirm, setShowBatchDeleteConfirm] = useState(false);
   
   // Keep ref in sync with state for use in callbacks
@@ -1788,7 +1792,9 @@ export default function ProjectDetails() {
                                       return newSet;
                                     });
                                   } else {
-                                    setViewingFile(photo);
+                                    const photoIndex = sortedPhotos.findIndex(p => p.id === photo.id);
+                                    setLightboxIndex(photoIndex >= 0 ? photoIndex : 0);
+                                    setLightboxOpen(true);
                                   }
                                 }}
                                 data-testid={`photo-card-${photo.id}`}
@@ -1797,6 +1803,7 @@ export default function ProjectDetails() {
                                   src={getProxyUrl(photo.objectPath)} 
                                   alt={photo.name}
                                   className="w-full h-full object-cover"
+                                  loading="lazy"
                                 />
                                 {isPhotoSelectMode && (
                                   <div className={cn(
@@ -1876,6 +1883,18 @@ export default function ProjectDetails() {
           onShare={() => handleShareFile(viewingFile)}
         />
       )}
+
+      {/* Lightbox Gallery for Photos */}
+      <Lightbox
+        open={lightboxOpen}
+        close={() => setLightboxOpen(false)}
+        index={lightboxIndex}
+        slides={(photos || []).map(photo => ({
+          src: getProxyUrl(photo.objectPath),
+          alt: photo.name,
+          title: photo.name,
+        }))}
+      />
 
       {/* Image Viewer Modal with Prev/Next */}
       {viewingFile && isImageFile(viewingFile.contentType) && (() => {
