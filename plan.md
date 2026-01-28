@@ -1,74 +1,182 @@
-# SiteTech - Features and Implementation Details
+# SiteTech - Construction Management Platform
 
-## Current Features
+## Project Overview
 
-### 1. Project Management
-- **Project List View**: Grid/card layout showing all projects with status indicators, color coding, and key details
-- **Project Details**: Comprehensive project page with tabbed interface (Overview, Schedule, Documents, Photos, Daily Reports)
-- **Project Status Workflow**: Supports multiple statuses (new, bidding, proposal_sent, active, completed, on_hold, cancelled)
-- **Color Coding**: Each project has a customizable color for easy identification
-- **Address Autocomplete**: OpenStreetMap Nominatim API integration for address lookup during project creation
+SiteTech is a comprehensive web-based sitework management platform designed for construction companies. It facilitates the management of construction projects through their entire lifecycle, from bidding to completion, and includes robust tools for customer relationship management, equipment inventory tracking, scheduling, and team collaboration.
 
-### 2. Customer Management
-- **Customer Database**: Store customer contact info, company details, and notes
-- **Project Association**: Link projects to customers for relationship tracking
-- **Customer Details Page**: View all customer information and associated projects
-
-### 3. Task/Schedule Management
-- **Task Creation**: Create tasks with title, description, scheduled date, priority, and status
-- **Progress Tracking**: Tasks have percent complete (0-100%) with automatic status updates
-- **Status History**: Audit trail of task status changes with user attribution
-- **Priority Levels**: Low, Medium, High priority settings
-- **Schedule View**: Calendar-based view of all tasks across projects
-
-### 4. Equipment Management
-- **Equipment Inventory**: Track equipment with type, make, model, year, serial number
-- **Status Tracking**: Available, In Use, Maintenance statuses
-- **Location Monitoring**: Track current location and project assignments
-- **Maintenance Scheduling**: Log service dates and schedule next maintenance
-- **Allocations**: Link equipment to specific projects for scheduling
-
-### 5. Document Management
-- **Folder Structure**: Hierarchical folder organization per project
-- **Default Folders**: Auto-created folder structure (Office/Field with subfolders like Takeoffs, Proposals, Drawings, etc.)
-- **File Upload**: Direct upload to object storage via Uppy
-- **Grid/List Views**: Toggle between viewing modes
-- **PDF Viewer**: Professional PDF viewing with annotation tools
-
-### 6. Photo Management (Separate from Documents)
-- **Album Organization**: Photos organized into albums (not folders)
-- **Default Album**: "General" album auto-created when uploading without album selection
-- **EXIF Date Extraction**: Photos sorted by taken date from EXIF metadata (falls back to upload date)
-- **Date-Based Grouping**: Photos grouped by date headers
-- **Variable Tile Sizes**: Small, Medium, Large tile options
-- **Multi-Select**: Bulk actions (download, share, delete) with selection mode
-- **Upload with EXIF**: Automatic extraction of photo date from EXIF metadata
-
-### 7. Daily Reports
-- **Field Reporting**: Comprehensive daily field reports per project
-- **Weather Integration**: Fetch and display local weather via Open-Meteo API
-- **Task Entries**: Record tasks worked on with progress snapshots
-- **Labor Lines**: Log labor hours per task entry
-- **Equipment Lines**: Log equipment usage per task entry
-- **Delivery Tracking**: Record deliveries with vendor, time, description, and status
-- **Report Status**: Draft → Completed workflow
-- **Signature Capture**: Freehand or typed signatures to complete reports
-- **PDF Export**: Generate PDF reports with optional photo inclusion
-- **Daily Report Photos Album**: Photos from daily reports saved to dedicated album
-
-### 8. Dashboard
-- **Key Metrics**: Overview of projects, tasks, equipment status
-- **Analytics Charts**: Visual representations using Recharts
-- **Quick Access**: Navigate to active items
-
-### 9. Authentication
-- **Replit Auth**: OpenID Connect integration
-- **Protected Routes**: Middleware-based route protection
-- **Session Management**: PostgreSQL-backed sessions
+**Live URL**: https://sitetech-app.replit.app
 
 ---
 
-## Technical Implementation
+## Development Progress
+
+### Completed Features
+
+#### Phase 1: Core Infrastructure
+- [x] React 18 + TypeScript frontend with Vite
+- [x] Express.js + TypeScript backend
+- [x] PostgreSQL database with Drizzle ORM
+- [x] Dark slate blue theme with safety orange accents
+- [x] Responsive sidebar navigation
+- [x] shadcn/ui component library integration
+
+#### Phase 2: Authentication & Security
+- [x] Replit Auth (OpenID Connect) integration
+- [x] Passport.js implementation with OIDC strategy
+- [x] PostgreSQL-backed session management
+- [x] Protected route middleware (`isAuthenticated`)
+- [x] Invite-only user system with role-based access control
+- [x] Centralized authorization middleware (`isAuthorizedUser`)
+- [x] Owner email auto-approval system
+- [x] Pending access page for unauthorized users
+
+#### Phase 3: User Management System
+- [x] Admin-only User Management page
+- [x] Authorized Email List management
+- [x] Role-based permissions (Admin, Manager, User)
+- [x] Add/remove authorized users
+- [x] Mailgun email integration for invites
+- [x] Professional HTML email templates with SiteTech branding
+- [x] Production URL in email invite links
+- [x] User approval workflow
+
+#### Phase 4: Project Management
+- [x] Project list view with grid/card layout
+- [x] Project details page with tabbed interface
+- [x] Project status workflow (new, bidding, proposal_sent, active, completed, on_hold, cancelled)
+- [x] Custom color coding per project
+- [x] Address autocomplete via OpenStreetMap Nominatim API
+- [x] Customer association with projects
+
+#### Phase 5: Task & Schedule Management
+- [x] Task creation with title, description, dates, priority
+- [x] Progress tracking (0-100% in 5% increments)
+- [x] Automatic status updates based on progress
+- [x] Task status history with user attribution
+- [x] Calendar-based schedule view
+- [x] Priority levels (Low, Medium, High)
+
+#### Phase 6: Equipment Management
+- [x] Equipment inventory tracking
+- [x] Equipment types, make, model, year, serial number
+- [x] Status tracking (Available, In Use, Maintenance)
+- [x] Location monitoring
+- [x] Maintenance scheduling
+- [x] Project allocations
+
+#### Phase 7: Customer Management
+- [x] Customer database with contact info
+- [x] Company details and notes
+- [x] Project association tracking
+- [x] Customer details page
+
+#### Phase 8: Document Management
+- [x] Hierarchical folder structure per project
+- [x] Auto-created default folders (Office/, Field/ with subfolders)
+- [x] File upload via Uppy to object storage
+- [x] Grid and list view modes
+- [x] PDF viewer with annotation tools
+- [x] Annotation persistence in localStorage
+- [x] PDF export with embedded annotations
+
+#### Phase 9: Photo Management
+- [x] Album-based organization (separate from documents)
+- [x] Auto-created "General" album
+- [x] EXIF date extraction for photo sorting
+- [x] Date-based grouping headers
+- [x] Variable tile sizes (Small, Medium, Large)
+- [x] Multi-select for bulk actions
+- [x] Download, share, delete bulk operations
+
+#### Phase 10: Daily Reports
+- [x] Comprehensive field reporting
+- [x] Weather integration via Open-Meteo API
+- [x] Task entries with progress snapshots
+- [x] Labor line logging per task
+- [x] Equipment usage logging per task
+- [x] Delivery tracking with vendor/status
+- [x] Draft → Completed workflow
+- [x] Signature capture (freehand or typed)
+- [x] PDF export with optional photos
+- [x] Daily Report Photos album integration
+
+#### Phase 11: Dashboard
+- [x] Key metrics overview
+- [x] Analytics charts using Recharts
+- [x] Quick access navigation
+
+---
+
+## Current Features Detail
+
+### 1. Authentication & User Management
+
+**Invite-Only Access System**
+- Only pre-authorized email addresses can access the system
+- Admins manage the authorized email list via User Management page
+- Owner email (nuchemtyberg@gmail.com) auto-approved as admin on first login
+- Unauthorized users see a "Pending Access" page with contact instructions
+
+**Role-Based Permissions**
+| Role | Permissions |
+|------|-------------|
+| Admin | Full access, manage users, authorize emails |
+| Manager | Project management, reports, limited admin |
+| User | View and update assigned projects/tasks |
+
+**Email Invitations**
+- Mailgun API integration for sending invites
+- Professional HTML email template with SiteTech branding
+- Dark slate blue design with orange accent CTA button
+- Includes role information and login instructions
+- Links to production app URL
+
+### 2. Project Management
+- **Project List View**: Grid/card layout with status indicators and color coding
+- **Project Details**: Tabbed interface (Overview, Schedule, Documents, Photos, Daily Reports)
+- **Status Workflow**: new → bidding → proposal_sent → active → completed/on_hold/cancelled
+- **Address Autocomplete**: OpenStreetMap Nominatim API with debounced search
+
+### 3. Task/Schedule Management
+- **Task Fields**: Title, description, scheduled date, due date, priority, status
+- **Progress**: 0-100% with 5% increment controls
+- **Auto-Status**: Automatically updates status based on percent complete
+- **History Audit**: Records all status/progress changes with timestamps
+
+### 4. Equipment Management
+- **Inventory Fields**: Name, type, make, model, year, serial number
+- **Status Options**: Available, In Use, Maintenance
+- **Location Tracking**: Current location and project assignments
+- **Maintenance**: Service date logging and next service scheduling
+
+### 5. Document Management
+- **Folder Structure**: Office/ and Field/ with subfolders (Takeoffs, Proposals, Drawings, etc.)
+- **Upload**: Uppy-powered drag-and-drop file upload
+- **PDF Viewer**: Annotation tools (pen, highlighter, shapes, text, eraser)
+- **Export**: Save annotated PDFs
+
+### 6. Photo Management
+- **Album System**: Flat album structure (not hierarchical folders)
+- **EXIF Support**: Extracts photo taken date for sorting
+- **Bulk Actions**: Multi-select mode for download, share, delete
+- **Tile Sizes**: Adjustable grid density
+
+### 7. Daily Reports
+- **Weather**: Auto-fetched via Open-Meteo based on project location
+- **Task Logging**: Select tasks, log progress changes
+- **Labor/Equipment**: Detailed resource logging per task
+- **Deliveries**: Track vendor deliveries with status
+- **Signatures**: Complete reports with freehand or typed signature
+- **PDF Export**: Generate professional PDF reports
+
+### 8. Dashboard
+- **Metrics**: Active projects, pending tasks, equipment status
+- **Charts**: Visual analytics using Recharts
+- **Quick Actions**: Navigate to key sections
+
+---
+
+## Technical Architecture
 
 ### Frontend Stack
 | Technology | Purpose |
@@ -93,10 +201,23 @@
 | Zod | Schema validation |
 | Passport.js | Authentication (OIDC) |
 | connect-pg-simple | Session storage |
+| Mailgun API | Email delivery |
 
 ### Key Data Models
 
 ```
+Users
+├── id, email, firstName, lastName
+├── role (admin/manager/user)
+├── isAuthorized (approved/pending/denied)
+├── profileImageUrl
+└── createdAt, updatedAt
+
+AuthorizedEmails
+├── id (UUID), email, role
+├── addedBy (FK to Users), addedByName
+└── createdAt
+
 Projects
 ├── id, projectNumber, name, description
 ├── customerId (FK to Customers)
@@ -106,7 +227,7 @@ Projects
 
 Tasks
 ├── id, projectId (FK to Projects)
-├── title, description, scheduledDate
+├── title, description, scheduledDate, dueDate
 ├── status (pending/in_progress/completed)
 ├── priority (low/medium/high)
 └── percentComplete (0-100)
@@ -125,98 +246,214 @@ DailyReports
 ├── signature, signatureType
 └── notes, createdBy
 
-PhotoAlbums
-├── id, projectId (FK to Projects)
-└── name (e.g., "General", "Daily Report Photos")
+Equipment
+├── id, name, type, make, model, year
+├── serialNumber, status, currentLocation
+├── assignedProjectId
+└── lastServiceDate, nextServiceDate
+
+Customers
+├── id, name, company, email, phone
+├── address, city, state, zip
+└── notes, createdAt
 ```
-
-### File Organization Pattern
-- **Documents**: Use `folderId` - organized in hierarchical folders
-- **Photos**: Use `albumId` - organized in flat albums
-- **Key Distinction**: Documents and Photos are completely separate tools with different organization systems
-
-### Photo Upload Flow
-1. User clicks Upload in Photos tab
-2. Uppy modal opens for file selection
-3. Files uploaded to object storage via presigned URLs
-4. On complete:
-   - EXIF date extracted from photos (if available)
-   - Album determined (current selection or auto-create "General")
-   - File record created with albumId, takenAt, etc.
-5. Photos displayed sorted by takenAt (or createdAt fallback)
 
 ### API Endpoints
 
 ```
 Authentication:
-GET  /api/auth/user          - Current user
-GET  /api/login              - Initiate login
-POST /api/logout             - Logout
+GET  /api/auth/user              - Current user info
+GET  /api/login                  - Initiate OIDC login
+POST /api/logout                 - Logout
+
+Admin/User Management:
+GET    /api/admin/users          - List all users
+GET    /api/admin/authorized-users - List authorized emails
+POST   /api/admin/authorized-users - Add authorized email (sends invite)
+DELETE /api/admin/authorized-users/:id - Remove authorized email
 
 Projects:
-GET    /api/projects         - List all
-POST   /api/projects         - Create
-GET    /api/projects/:id     - Get one
-PATCH  /api/projects/:id     - Update
-DELETE /api/projects/:id     - Delete
-
-Project Files:
-GET    /api/projects/:id/files    - List files
-POST   /api/projects/:id/files    - Create file record
-DELETE /api/files/:id             - Delete file
-
-Project Albums:
-GET    /api/projects/:id/albums   - List albums
-POST   /api/projects/:id/albums   - Create album
-DELETE /api/albums/:id            - Delete album
-
-Folders:
-GET    /api/projects/:id/folders  - List folders
-POST   /api/projects/:id/folders  - Create folder
-DELETE /api/folders/:id           - Delete folder
+GET    /api/projects             - List all
+POST   /api/projects             - Create
+GET    /api/projects/:id         - Get one
+PATCH  /api/projects/:id         - Update
+DELETE /api/projects/:id         - Delete
 
 Tasks:
-GET    /api/tasks                 - List all tasks
-GET    /api/projects/:id/tasks    - Project tasks
-POST   /api/tasks                 - Create
-PATCH  /api/tasks/:id             - Update
-DELETE /api/tasks/:id             - Delete
+GET    /api/tasks                - List all tasks
+GET    /api/projects/:id/tasks   - Project tasks
+POST   /api/tasks                - Create
+PATCH  /api/tasks/:id            - Update
+DELETE /api/tasks/:id            - Delete
 
 Daily Reports:
-GET    /api/projects/:id/daily-reports     - List reports
-POST   /api/projects/:id/daily-reports     - Create
-GET    /api/daily-reports/:id              - Get one
-PATCH  /api/daily-reports/:id              - Update
-DELETE /api/daily-reports/:id              - Delete
-POST   /api/daily-reports/:id/complete     - Complete with signature
+GET    /api/projects/:id/daily-reports   - List reports
+POST   /api/projects/:id/daily-reports   - Create
+GET    /api/daily-reports/:id            - Get one
+PATCH  /api/daily-reports/:id            - Update
+DELETE /api/daily-reports/:id            - Delete
+POST   /api/daily-reports/:id/complete   - Complete with signature
 
 Equipment:
 GET    /api/equipment            - List all
 POST   /api/equipment            - Create
-GET    /api/equipment/:id        - Get one
 PATCH  /api/equipment/:id        - Update
 DELETE /api/equipment/:id        - Delete
 
 Customers:
 GET    /api/customers            - List all
 POST   /api/customers            - Create
-GET    /api/customers/:id        - Get one
 PATCH  /api/customers/:id        - Update
 DELETE /api/customers/:id        - Delete
 
-File Uploads:
+Files & Uploads:
 POST   /api/uploads/request-url  - Get presigned upload URL
+GET    /api/projects/:id/files   - List project files
+POST   /api/projects/:id/files   - Create file record
+DELETE /api/files/:id            - Delete file
+
+Folders & Albums:
+GET    /api/projects/:id/folders - List folders
+POST   /api/projects/:id/folders - Create folder
+DELETE /api/folders/:id          - Delete folder
+GET    /api/projects/:id/albums  - List albums
+POST   /api/projects/:id/albums  - Create album
+DELETE /api/albums/:id           - Delete album
 ```
 
 ---
 
-## Design Theme
-- **Primary Colors**: Dark slate blue background
-- **Accent Color**: Safety orange (#f97316) - suitable for construction industry
-- **Style**: Industrial, professional, dark mode optimized
+## Security Implementation
 
-## UI/UX Standards
+### Authentication Flow
+1. User clicks "Sign in with Google" via Replit Auth
+2. OIDC callback creates/updates user record
+3. System checks if email is in authorized list
+4. If authorized: full access granted
+5. If not authorized: shows "Pending Access" page
+6. Owner email auto-approved as admin on first login
+
+### Middleware Stack
+```
+server/middleware/auth.ts
+├── isAuthenticated - Verifies user is logged in
+└── isAuthorizedUser - Verifies user is approved
+
+Protected Routes:
+├── All /api/* routes require isAuthenticated
+├── All /api/* routes require isAuthorizedUser
+└── /api/admin/* routes require admin role
+```
+
+### Environment Variables
+| Variable | Purpose |
+|----------|---------|
+| DATABASE_URL | PostgreSQL connection string |
+| MAILGUN_API_KEY | Mailgun API authentication |
+| MAILGUN_DOMAIN | Mailgun sending domain |
+| MAILGUN_FROM_EMAIL | Sender email address |
+| SESSION_SECRET | Express session encryption |
+
+---
+
+## Design System
+
+### Color Palette
+- **Background**: Dark slate blue (#1e293b, #0f172a)
+- **Accent**: Safety orange (#f97316)
+- **Text Primary**: Light gray (#f8fafc)
+- **Text Secondary**: Muted gray (#94a3b8)
+- **Cards**: Slightly elevated slate (#334155)
+
+### UI/UX Standards
 - Delete confirmations required for all destructive actions
 - Red asterisk (*) before mandatory field labels
 - Consistent spacing and component usage
 - Mobile-responsive layouts
+- Toast notifications for user feedback
+
+---
+
+## File Structure
+
+```
+/
+├── client/
+│   ├── src/
+│   │   ├── components/
+│   │   │   ├── ui/          # shadcn components
+│   │   │   ├── Layout.tsx
+│   │   │   ├── PDFViewer.tsx
+│   │   │   ├── ObjectUploader.tsx
+│   │   │   └── ...
+│   │   ├── pages/
+│   │   │   ├── Dashboard.tsx
+│   │   │   ├── Projects.tsx
+│   │   │   ├── ProjectDetails.tsx
+│   │   │   ├── UserManagement.tsx
+│   │   │   ├── PendingAccessPage.tsx
+│   │   │   └── ...
+│   │   ├── hooks/
+│   │   ├── lib/
+│   │   └── App.tsx
+│   └── index.html
+├── server/
+│   ├── middleware/
+│   │   └── auth.ts          # Authentication & authorization
+│   ├── services/
+│   │   └── email.ts         # Mailgun email service
+│   ├── replit_integrations/
+│   │   └── auth/            # Replit Auth integration
+│   ├── routes.ts
+│   ├── storage.ts
+│   └── index.ts
+├── shared/
+│   └── schema.ts            # Drizzle schemas & types
+├── replit.md                # Project documentation
+└── plan.md                  # This file
+```
+
+---
+
+## Next Steps / Future Enhancements
+
+### Potential Features
+- [ ] Email notifications for task assignments
+- [ ] Mobile app (React Native)
+- [ ] Offline mode for field workers
+- [ ] Time tracking integration
+- [ ] Invoice generation
+- [ ] Subcontractor portal
+- [ ] Equipment GPS tracking
+- [ ] Custom report templates
+- [ ] Project templates
+- [ ] Bulk import/export
+
+---
+
+## Changelog
+
+### January 28, 2026
+- Migrated email service from SendGrid to Mailgun API
+- Updated email invite links to use production URL
+- Published app to sitetech-app.replit.app
+
+### January 27, 2026
+- Implemented invite-only user management system
+- Added role-based access control (Admin, Manager, User)
+- Created centralized auth middleware
+- Added owner email auto-approval system
+- Built User Management admin page
+- Created professional HTML email templates
+
+### January 26, 2026
+- Photo management with EXIF date extraction
+- Daily reports with signature capture
+- Weather integration for daily reports
+- PDF viewer with annotations
+
+### January 25, 2026
+- Initial project setup
+- Core authentication with Replit Auth
+- Basic project and task management
+- Equipment tracking system
