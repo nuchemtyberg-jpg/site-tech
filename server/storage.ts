@@ -140,7 +140,9 @@ export interface IStorage {
   getPhotoAlbums(projectId: number): Promise<PhotoAlbum[]>;
   getPhotoAlbum(id: number): Promise<PhotoAlbum | undefined>;
   getPhotoAlbumByName(projectId: number, name: string): Promise<PhotoAlbum | undefined>;
+  getOrCreateGeneralAlbum(projectId: number): Promise<PhotoAlbum>;
   getOrCreateDailyReportAlbum(projectId: number): Promise<PhotoAlbum>;
+  ensureDefaultAlbums(projectId: number): Promise<{ general: PhotoAlbum; dailyReport: PhotoAlbum }>;
   createPhotoAlbum(album: InsertPhotoAlbum): Promise<PhotoAlbum>;
   updatePhotoAlbum(id: number, album: Partial<InsertPhotoAlbum>): Promise<PhotoAlbum>;
   deletePhotoAlbum(id: number): Promise<void>;
@@ -624,6 +626,14 @@ export class DatabaseStorage implements IStorage {
       .where(and(eq(photoAlbums.projectId, projectId), eq(photoAlbums.name, name), isNull(photoAlbums.deletedAt)));
     return album;
   }
+  async getOrCreateGeneralAlbum(projectId: number): Promise<PhotoAlbum> {
+    const albumName = "General";
+    let album = await this.getPhotoAlbumByName(projectId, albumName);
+    if (!album) {
+      album = await this.createPhotoAlbum({ projectId, name: albumName });
+    }
+    return album;
+  }
   async getOrCreateDailyReportAlbum(projectId: number): Promise<PhotoAlbum> {
     const albumName = "Daily Report Photos";
     let album = await this.getPhotoAlbumByName(projectId, albumName);
@@ -631,6 +641,11 @@ export class DatabaseStorage implements IStorage {
       album = await this.createPhotoAlbum({ projectId, name: albumName });
     }
     return album;
+  }
+  async ensureDefaultAlbums(projectId: number): Promise<{ general: PhotoAlbum; dailyReport: PhotoAlbum }> {
+    const general = await this.getOrCreateGeneralAlbum(projectId);
+    const dailyReport = await this.getOrCreateDailyReportAlbum(projectId);
+    return { general, dailyReport };
   }
   async createPhotoAlbum(insertAlbum: InsertPhotoAlbum): Promise<PhotoAlbum> {
     const [album] = await db.insert(photoAlbums).values(insertAlbum).returning();

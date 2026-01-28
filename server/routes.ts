@@ -242,6 +242,10 @@ export async function registerRoutes(
     try {
       const input = api.projects.create.input.parse(req.body);
       const project = await storage.createProject(input);
+      
+      // Auto-create default albums for the new project
+      await storage.ensureDefaultAlbums(project.id);
+      
       res.status(201).json(project);
     } catch (err) {
       if (err instanceof z.ZodError) {
@@ -1384,7 +1388,7 @@ export async function registerRoutes(
             proxyPath = `/objects${objectPath}`;
           }
           
-          await storage.createFile({
+          await storage.createPhoto({
             projectId: report.projectId,
             albumId: album.id,
             name: fileName || `daily-report-photo-${photo.id}`,
@@ -1573,9 +1577,12 @@ export async function registerRoutes(
 
   app.post('/api/projects/:projectId/photos', isAuthenticated, isAuthorizedUser, async (req, res) => {
     try {
+      const projectId = Number(req.params.projectId);
+      const generalAlbum = await storage.getOrCreateGeneralAlbum(projectId);
       const photo = await storage.createPhoto({
         ...req.body,
-        projectId: Number(req.params.projectId),
+        projectId,
+        albumId: req.body.albumId || generalAlbum.id,
       });
       res.status(201).json(photo);
     } catch (err) {
