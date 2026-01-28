@@ -1,4 +1,4 @@
-import type { Express, RequestHandler } from "express";
+import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { api } from "@shared/routes";
@@ -7,36 +7,7 @@ import { setupAuth, registerAuthRoutes, isAuthenticated } from "./replit_integra
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
 import type { User } from "@shared/schema";
 import { insertAuthorizedUserSchema } from "@shared/schema";
-
-// Middleware to check if user is an admin
-const isAdmin: RequestHandler = async (req, res, next) => {
-  const user = req.user as any;
-  if (!user?.claims?.sub) {
-    return res.status(401).json({ message: "Unauthorized" });
-  }
-  
-  const dbUser = await storage.getUser(user.claims.sub);
-  if (!dbUser || dbUser.role !== "admin") {
-    return res.status(403).json({ message: "Forbidden: Admin access required" });
-  }
-  
-  next();
-};
-
-// Middleware to check if user is authorized (approved)
-const isAuthorizedUser: RequestHandler = async (req, res, next) => {
-  const user = req.user as any;
-  if (!user?.claims?.sub) {
-    return res.status(401).json({ message: "Unauthorized" });
-  }
-  
-  const dbUser = await storage.getUser(user.claims.sub);
-  if (!dbUser || dbUser.isAuthorized !== "approved") {
-    return res.status(403).json({ message: "Access pending approval" });
-  }
-  
-  next();
-};
+import { isAdmin, isAuthorizedUser } from "./middleware/auth";
 
 // Weather fetch helper using Open-Meteo API
 async function fetchWeatherData(address: string, city: string, state: string): Promise<{
@@ -172,19 +143,19 @@ export async function registerRoutes(
     res.status(204).send();
   });
 
-  // Customers
-  app.get(api.customers.list.path, async (req, res) => {
+  // Customers - all routes protected by authorization
+  app.get(api.customers.list.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
     const customers = await storage.getCustomers();
     res.json(customers);
   });
 
-  app.get(api.customers.get.path, async (req, res) => {
+  app.get(api.customers.get.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
     const customer = await storage.getCustomer(Number(req.params.id));
     if (!customer) return res.status(404).json({ message: "Customer not found" });
     res.json(customer);
   });
 
-  app.post(api.customers.create.path, async (req, res) => {
+  app.post(api.customers.create.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
     try {
       const input = api.customers.create.input.parse(req.body);
       const customer = await storage.createCustomer(input);
@@ -197,7 +168,7 @@ export async function registerRoutes(
     }
   });
 
-  app.put(api.customers.update.path, async (req, res) => {
+  app.put(api.customers.update.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
     try {
       const input = api.customers.update.input.parse(req.body);
       const customer = await storage.updateCustomer(Number(req.params.id), input);
@@ -207,29 +178,29 @@ export async function registerRoutes(
     }
   });
 
-  app.delete(api.customers.delete.path, async (req, res) => {
+  app.delete(api.customers.delete.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
     await storage.deleteCustomer(Number(req.params.id));
     res.status(204).send();
   });
 
-  // Projects
-  app.get(api.projects.list.path, async (req, res) => {
+  // Projects - all routes protected by authorization
+  app.get(api.projects.list.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
     const projects = await storage.getProjects();
     res.json(projects);
   });
   
-  app.get("/api/projects/next-number", async (req, res) => {
+  app.get("/api/projects/next-number", isAuthenticated, isAuthorizedUser, async (req, res) => {
     const nextNumber = await storage.getNextProjectNumber();
     res.json({ projectNumber: nextNumber });
   });
 
-  app.get(api.projects.get.path, async (req, res) => {
+  app.get(api.projects.get.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
     const project = await storage.getProject(Number(req.params.id));
     if (!project) return res.status(404).json({ message: "Project not found" });
     res.json(project);
   });
 
-  app.post(api.projects.create.path, async (req, res) => {
+  app.post(api.projects.create.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
     try {
       const input = api.projects.create.input.parse(req.body);
       const project = await storage.createProject(input);
@@ -242,7 +213,7 @@ export async function registerRoutes(
     }
   });
 
-  app.put(api.projects.update.path, async (req, res) => {
+  app.put(api.projects.update.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
     try {
       const input = api.projects.update.input.parse(req.body);
       const project = await storage.updateProject(Number(req.params.id), input);
@@ -252,23 +223,23 @@ export async function registerRoutes(
     }
   });
 
-  app.delete(api.projects.delete.path, async (req, res) => {
+  app.delete(api.projects.delete.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
     await storage.deleteProject(Number(req.params.id));
     res.status(204).send();
   });
 
-  // Tasks
-  app.get(api.tasks.list.path, async (req, res) => {
+  // Tasks - all routes protected by authorization
+  app.get(api.tasks.list.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
     const tasks = await storage.getTasks(Number(req.params.projectId));
     res.json(tasks);
   });
 
-  app.get(api.tasks.getAll.path, async (req, res) => {
+  app.get(api.tasks.getAll.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
     const tasks = await storage.getTasks();
     res.json(tasks);
   });
 
-  app.post(api.tasks.create.path, async (req, res) => {
+  app.post(api.tasks.create.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
     try {
       const input = api.tasks.create.input.parse(req.body);
       // Convert empty strings to null for date fields
@@ -288,7 +259,7 @@ export async function registerRoutes(
     }
   });
 
-  app.put(api.tasks.update.path, async (req, res) => {
+  app.put(api.tasks.update.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
     try {
       const input = api.tasks.update.input.parse(req.body);
       const taskId = Number(req.params.id);
@@ -352,29 +323,29 @@ export async function registerRoutes(
   });
 
   // Task Status History
-  app.get("/api/tasks/:id/history", async (req, res) => {
+  app.get("/api/tasks/:id/history", isAuthenticated, isAuthorizedUser, async (req, res) => {
     const history = await storage.getTaskStatusHistory(Number(req.params.id));
     res.json(history);
   });
 
-  app.delete(api.tasks.delete.path, async (req, res) => {
+  app.delete(api.tasks.delete.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
     await storage.deleteTask(Number(req.params.id));
     res.status(204).send();
   });
 
-  // Equipment
-  app.get(api.equipment.list.path, async (req, res) => {
+  // Equipment - all routes protected by authorization
+  app.get(api.equipment.list.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
     const list = await storage.getEquipmentList();
     res.json(list);
   });
 
-  app.get(api.equipment.get.path, async (req, res) => {
+  app.get(api.equipment.get.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
     const item = await storage.getEquipment(Number(req.params.id));
     if (!item) return res.status(404).json({ message: "Equipment not found" });
     res.json(item);
   });
 
-  app.post(api.equipment.create.path, async (req, res) => {
+  app.post(api.equipment.create.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
     try {
       const input = api.equipment.create.input.parse(req.body);
       const item = await storage.createEquipment(input);
@@ -387,7 +358,7 @@ export async function registerRoutes(
     }
   });
 
-  app.put(api.equipment.update.path, async (req, res) => {
+  app.put(api.equipment.update.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
     try {
       const input = api.equipment.update.input.parse(req.body);
       const item = await storage.updateEquipment(Number(req.params.id), input);
@@ -397,18 +368,18 @@ export async function registerRoutes(
     }
   });
 
-  app.delete(api.equipment.delete.path, async (req, res) => {
+  app.delete(api.equipment.delete.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
     await storage.deleteEquipment(Number(req.params.id));
     res.status(204).send();
   });
 
-  // Maintenance Logs
-  app.get(api.maintenanceLogs.list.path, async (req, res) => {
+  // Maintenance Logs - all routes protected by authorization
+  app.get(api.maintenanceLogs.list.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
     const logs = await storage.getMaintenanceLogs(Number(req.params.equipmentId));
     res.json(logs);
   });
 
-  app.post(api.maintenanceLogs.create.path, async (req, res) => {
+  app.post(api.maintenanceLogs.create.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
     try {
       const input = api.maintenanceLogs.create.input.parse(req.body);
       const log = await storage.createMaintenanceLog({
@@ -424,19 +395,19 @@ export async function registerRoutes(
     }
   });
 
-  app.delete(api.maintenanceLogs.delete.path, async (req, res) => {
+  app.delete(api.maintenanceLogs.delete.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
     await storage.deleteMaintenanceLog(Number(req.params.id));
     res.status(204).send();
   });
 
-  // Daily Reports
-  app.get(api.dailyReports.list.path, async (req, res) => {
+  // Daily Reports - all routes protected by authorization
+  app.get(api.dailyReports.list.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
     const reports = await storage.getDailyReports(Number(req.params.projectId));
     res.json(reports);
   });
 
   // Get report by date
-  app.get("/api/projects/:projectId/reports/by-date", async (req, res) => {
+  app.get("/api/projects/:projectId/reports/by-date", isAuthenticated, isAuthorizedUser, async (req, res) => {
     const { date } = req.query;
     if (!date || typeof date !== 'string') {
       return res.status(400).json({ message: "Date query parameter is required" });
@@ -446,7 +417,7 @@ export async function registerRoutes(
     res.json(report);
   });
 
-  app.get(api.dailyReports.get.path, async (req, res) => {
+  app.get(api.dailyReports.get.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
     const report = await storage.getDailyReport(Number(req.params.id));
     if (!report) return res.status(404).json({ message: "Report not found" });
     
@@ -493,7 +464,7 @@ export async function registerRoutes(
     });
   });
 
-  app.post(api.dailyReports.create.path, async (req, res) => {
+  app.post(api.dailyReports.create.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
     try {
       const projectId = Number(req.params.projectId);
       const { reportDate, ...rest } = req.body;
@@ -546,7 +517,7 @@ export async function registerRoutes(
     }
   });
 
-  app.put(api.dailyReports.update.path, async (req, res) => {
+  app.put(api.dailyReports.update.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
     try {
       const reportId = Number(req.params.id);
       
@@ -584,7 +555,7 @@ export async function registerRoutes(
   });
 
   // Complete and sign report
-  app.post("/api/reports/:id/complete", async (req, res) => {
+  app.post("/api/reports/:id/complete", isAuthenticated, isAuthorizedUser, async (req, res) => {
     try {
       const reportId = Number(req.params.id);
       const { signatureType, signatureValue, completedBy, completedByName } = req.body;
@@ -618,7 +589,7 @@ export async function registerRoutes(
     }
   });
 
-  app.delete(api.dailyReports.delete.path, async (req, res) => {
+  app.delete(api.dailyReports.delete.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
     const report = await storage.getDailyReport(Number(req.params.id));
     if (report?.status === 'completed') {
       return res.status(403).json({ message: "Cannot delete a completed report" });
@@ -628,7 +599,7 @@ export async function registerRoutes(
   });
 
   // PDF Export for Daily Report
-  app.get("/api/reports/:id/pdf", async (req, res) => {
+  app.get("/api/reports/:id/pdf", isAuthenticated, isAuthorizedUser, async (req, res) => {
     try {
       const { PDFDocument, StandardFonts, rgb, degrees } = await import("pdf-lib");
       
@@ -1040,13 +1011,13 @@ export async function registerRoutes(
     }
   });
 
-  // Daily Report Task Entries
-  app.get("/api/reports/:reportId/task-entries", async (req, res) => {
+  // Daily Report Task Entries - all routes protected by authorization
+  app.get("/api/reports/:reportId/task-entries", isAuthenticated, isAuthorizedUser, async (req, res) => {
     const entries = await storage.getDailyReportTaskEntries(Number(req.params.reportId));
     res.json(entries);
   });
 
-  app.post("/api/reports/:reportId/task-entries", async (req, res) => {
+  app.post("/api/reports/:reportId/task-entries", isAuthenticated, isAuthorizedUser, async (req, res) => {
     try {
       const reportId = Number(req.params.reportId);
       const report = await storage.getDailyReport(reportId);
@@ -1072,7 +1043,7 @@ export async function registerRoutes(
     }
   });
 
-  app.put("/api/daily-report-task-entries/:id", async (req, res) => {
+  app.put("/api/daily-report-task-entries/:id", isAuthenticated, isAuthorizedUser, async (req, res) => {
     try {
       const entryId = Number(req.params.id);
       const entry = await storage.getDailyReportTaskEntry(entryId);
@@ -1170,7 +1141,7 @@ export async function registerRoutes(
     }
   });
 
-  app.delete("/api/daily-report-task-entries/:id", async (req, res) => {
+  app.delete("/api/daily-report-task-entries/:id", isAuthenticated, isAuthorizedUser, async (req, res) => {
     const entry = await storage.getDailyReportTaskEntry(Number(req.params.id));
     if (!entry) return res.status(404).json({ message: "Task entry not found" });
     
@@ -1181,8 +1152,8 @@ export async function registerRoutes(
     res.status(204).send();
   });
 
-  // Daily Report Labor Lines
-  app.post("/api/daily-report-task-entries/:taskEntryId/labor-lines", async (req, res) => {
+  // Daily Report Labor Lines - all routes protected by authorization
+  app.post("/api/daily-report-task-entries/:taskEntryId/labor-lines", isAuthenticated, isAuthorizedUser, async (req, res) => {
     try {
       const taskEntryId = Number(req.params.taskEntryId);
       const entry = await storage.getDailyReportTaskEntry(taskEntryId);
@@ -1205,7 +1176,7 @@ export async function registerRoutes(
     }
   });
 
-  app.put("/api/daily-report-labor-lines/:id", async (req, res) => {
+  app.put("/api/daily-report-labor-lines/:id", isAuthenticated, isAuthorizedUser, async (req, res) => {
     try {
       const updated = await storage.updateDailyReportLaborLine(Number(req.params.id), req.body);
       res.json(updated);
@@ -1214,13 +1185,13 @@ export async function registerRoutes(
     }
   });
 
-  app.delete("/api/daily-report-labor-lines/:id", async (req, res) => {
+  app.delete("/api/daily-report-labor-lines/:id", isAuthenticated, isAuthorizedUser, async (req, res) => {
     await storage.deleteDailyReportLaborLine(Number(req.params.id));
     res.status(204).send();
   });
 
-  // Daily Report Equipment Lines
-  app.post("/api/daily-report-task-entries/:taskEntryId/equipment-lines", async (req, res) => {
+  // Daily Report Equipment Lines - all routes protected by authorization
+  app.post("/api/daily-report-task-entries/:taskEntryId/equipment-lines", isAuthenticated, isAuthorizedUser, async (req, res) => {
     try {
       const taskEntryId = Number(req.params.taskEntryId);
       const entry = await storage.getDailyReportTaskEntry(taskEntryId);
@@ -1243,7 +1214,7 @@ export async function registerRoutes(
     }
   });
 
-  app.put("/api/daily-report-equipment-lines/:id", async (req, res) => {
+  app.put("/api/daily-report-equipment-lines/:id", isAuthenticated, isAuthorizedUser, async (req, res) => {
     try {
       const updated = await storage.updateDailyReportEquipmentLine(Number(req.params.id), req.body);
       res.json(updated);
@@ -1252,13 +1223,13 @@ export async function registerRoutes(
     }
   });
 
-  app.delete("/api/daily-report-equipment-lines/:id", async (req, res) => {
+  app.delete("/api/daily-report-equipment-lines/:id", isAuthenticated, isAuthorizedUser, async (req, res) => {
     await storage.deleteDailyReportEquipmentLine(Number(req.params.id));
     res.status(204).send();
   });
 
   // Daily Report Delivery Entries
-  app.post("/api/reports/:reportId/delivery-entries", async (req, res) => {
+  app.post("/api/reports/:reportId/delivery-entries", isAuthenticated, isAuthorizedUser, async (req, res) => {
     try {
       const reportId = Number(req.params.reportId);
       const report = await storage.getDailyReport(reportId);
@@ -1276,7 +1247,7 @@ export async function registerRoutes(
     }
   });
 
-  app.put("/api/daily-report-delivery-entries/:id", async (req, res) => {
+  app.put("/api/daily-report-delivery-entries/:id", isAuthenticated, isAuthorizedUser, async (req, res) => {
     try {
       const entry = await storage.getDailyReportDeliveryEntry(Number(req.params.id));
       if (!entry) return res.status(404).json({ message: "Delivery entry not found" });
@@ -1291,7 +1262,7 @@ export async function registerRoutes(
     }
   });
 
-  app.delete("/api/daily-report-delivery-entries/:id", async (req, res) => {
+  app.delete("/api/daily-report-delivery-entries/:id", isAuthenticated, isAuthorizedUser, async (req, res) => {
     const entry = await storage.getDailyReportDeliveryEntry(Number(req.params.id));
     if (!entry) return res.status(404).json({ message: "Delivery entry not found" });
     
@@ -1303,7 +1274,7 @@ export async function registerRoutes(
   });
 
   // Daily Report Photos
-  app.post("/api/daily-report-photos", async (req, res) => {
+  app.post("/api/daily-report-photos", isAuthenticated, isAuthorizedUser, async (req, res) => {
     try {
       const { reportId, taskEntryId, deliveryEntryId, url, caption, createdBy, createdByName, objectPath, fileName } = req.body;
       
@@ -1394,18 +1365,18 @@ export async function registerRoutes(
     }
   });
 
-  app.delete("/api/daily-report-photos/:id", async (req, res) => {
+  app.delete("/api/daily-report-photos/:id", isAuthenticated, isAuthorizedUser, async (req, res) => {
     await storage.deleteDailyReportPhoto(Number(req.params.id));
     res.status(204).send();
   });
 
   // Communications
-  app.get(api.communications.list.path, async (req, res) => {
+  app.get(api.communications.list.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
     const comms = await storage.getCommunications(Number(req.params.customerId));
     res.json(comms);
   });
 
-  app.post(api.communications.create.path, async (req, res) => {
+  app.post(api.communications.create.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
     try {
       const input = api.communications.create.input.parse(req.body);
       const comm = await storage.createCommunication({
@@ -1421,18 +1392,18 @@ export async function registerRoutes(
     }
   });
 
-  app.delete(api.communications.delete.path, async (req, res) => {
+  app.delete(api.communications.delete.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
     await storage.deleteCommunication(Number(req.params.id));
     res.status(204).send();
   });
 
   // Allocations
-  app.get(api.allocations.list.path, async (req, res) => {
+  app.get(api.allocations.list.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
     const list = await storage.getAllocations();
     res.json(list);
   });
 
-  app.post(api.allocations.create.path, async (req, res) => {
+  app.post(api.allocations.create.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
     try {
       const input = api.allocations.create.input.parse(req.body);
       const allocation = await storage.createAllocation(input);
@@ -1445,7 +1416,7 @@ export async function registerRoutes(
     }
   });
 
-  app.put(api.allocations.update.path, async (req, res) => {
+  app.put(api.allocations.update.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
     try {
       const input = api.allocations.update.input.parse(req.body);
       const allocation = await storage.updateAllocation(Number(req.params.id), input);
@@ -1455,18 +1426,18 @@ export async function registerRoutes(
     }
   });
 
-  app.delete(api.allocations.delete.path, async (req, res) => {
+  app.delete(api.allocations.delete.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
     await storage.deleteAllocation(Number(req.params.id));
     res.status(204).send();
   });
 
   // Folders & Files
-  app.get(api.folders.list.path, async (req, res) => {
+  app.get(api.folders.list.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
     const list = await storage.getFolders(Number(req.params.projectId));
     res.json(list);
   });
 
-  app.post(api.folders.create.path, async (req, res) => {
+  app.post(api.folders.create.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
     try {
       const input = api.folders.create.input.parse(req.body);
       const folder = await storage.createFolder({
@@ -1482,17 +1453,17 @@ export async function registerRoutes(
     }
   });
 
-  app.delete(api.folders.delete.path, async (req, res) => {
+  app.delete(api.folders.delete.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
     await storage.deleteFolder(Number(req.params.id));
     res.status(204).send();
   });
 
-  app.get(api.files.list.path, async (req, res) => {
+  app.get(api.files.list.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
     const list = await storage.getFiles(Number(req.params.projectId));
     res.json(list);
   });
 
-  app.post(api.files.create.path, async (req, res) => {
+  app.post(api.files.create.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
     try {
       const input = api.files.create.input.parse(req.body);
       if (!input.objectPath) {
@@ -1511,18 +1482,18 @@ export async function registerRoutes(
     }
   });
 
-  app.delete(api.files.delete.path, async (req, res) => {
+  app.delete(api.files.delete.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
     await storage.deleteFile(Number(req.params.id));
     res.status(204).send();
   });
 
   // Photo Albums
-  app.get(api.photoAlbums.list.path, async (req, res) => {
+  app.get(api.photoAlbums.list.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
     const albums = await storage.getPhotoAlbums(Number(req.params.projectId));
     res.json(albums);
   });
 
-  app.post(api.photoAlbums.create.path, async (req, res) => {
+  app.post(api.photoAlbums.create.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
     try {
       const input = api.photoAlbums.create.input.parse(req.body);
       const album = await storage.createPhotoAlbum({
@@ -1538,7 +1509,7 @@ export async function registerRoutes(
     }
   });
 
-  app.put(api.photoAlbums.update.path, async (req, res) => {
+  app.put(api.photoAlbums.update.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
     try {
       const input = api.photoAlbums.update.input.parse(req.body);
       const album = await storage.updatePhotoAlbum(Number(req.params.id), input);
@@ -1551,13 +1522,13 @@ export async function registerRoutes(
     }
   });
 
-  app.delete(api.photoAlbums.delete.path, async (req, res) => {
+  app.delete(api.photoAlbums.delete.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
     await storage.deletePhotoAlbum(Number(req.params.id));
     res.status(204).send();
   });
 
   // Update file to assign to album
-  app.put('/api/files/:id', async (req, res) => {
+  app.put('/api/files/:id', isAuthenticated, isAuthorizedUser, async (req, res) => {
     try {
       const file = await storage.updateFile(Number(req.params.id), req.body);
       res.json(file);
@@ -1567,19 +1538,19 @@ export async function registerRoutes(
   });
 
   // Check if report exists for a specific date
-  app.get('/api/projects/:projectId/reports/by-date/:date', async (req, res) => {
+  app.get('/api/projects/:projectId/reports/by-date/:date', isAuthenticated, isAuthorizedUser, async (req, res) => {
     const report = await storage.getDailyReportByDate(Number(req.params.projectId), req.params.date);
     if (!report) return res.status(404).json({ message: "No report for this date" });
     res.json(report);
   });
 
   // Report Tasks
-  app.get(api.reportTasks.list.path, async (req, res) => {
+  app.get(api.reportTasks.list.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
     const tasks = await storage.getReportTasks(Number(req.params.reportId));
     res.json(tasks);
   });
 
-  app.post(api.reportTasks.create.path, async (req, res) => {
+  app.post(api.reportTasks.create.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
     try {
       const input = api.reportTasks.create.input.parse(req.body);
       const task = await storage.createReportTask({
@@ -1595,7 +1566,7 @@ export async function registerRoutes(
     }
   });
 
-  app.put(api.reportTasks.update.path, async (req, res) => {
+  app.put(api.reportTasks.update.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
     try {
       const input = api.reportTasks.update.input.parse(req.body);
       const task = await storage.updateReportTask(Number(req.params.id), input);
@@ -1608,18 +1579,18 @@ export async function registerRoutes(
     }
   });
 
-  app.delete(api.reportTasks.delete.path, async (req, res) => {
+  app.delete(api.reportTasks.delete.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
     await storage.deleteReportTask(Number(req.params.id));
     res.status(204).send();
   });
 
   // Labor Entries
-  app.get(api.laborEntries.list.path, async (req, res) => {
+  app.get(api.laborEntries.list.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
     const entries = await storage.getLaborEntries(Number(req.params.reportTaskId));
     res.json(entries);
   });
 
-  app.post(api.laborEntries.create.path, async (req, res) => {
+  app.post(api.laborEntries.create.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
     try {
       const input = api.laborEntries.create.input.parse(req.body);
       const entry = await storage.createLaborEntry({
@@ -1635,7 +1606,7 @@ export async function registerRoutes(
     }
   });
 
-  app.put(api.laborEntries.update.path, async (req, res) => {
+  app.put(api.laborEntries.update.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
     try {
       const input = api.laborEntries.update.input.parse(req.body);
       const entry = await storage.updateLaborEntry(Number(req.params.id), input);
@@ -1648,18 +1619,18 @@ export async function registerRoutes(
     }
   });
 
-  app.delete(api.laborEntries.delete.path, async (req, res) => {
+  app.delete(api.laborEntries.delete.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
     await storage.deleteLaborEntry(Number(req.params.id));
     res.status(204).send();
   });
 
   // Equipment Entries
-  app.get(api.equipmentEntriesApi.list.path, async (req, res) => {
+  app.get(api.equipmentEntriesApi.list.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
     const entries = await storage.getEquipmentEntries(Number(req.params.reportTaskId));
     res.json(entries);
   });
 
-  app.post(api.equipmentEntriesApi.create.path, async (req, res) => {
+  app.post(api.equipmentEntriesApi.create.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
     try {
       const input = api.equipmentEntriesApi.create.input.parse(req.body);
       const entry = await storage.createEquipmentEntry({
@@ -1675,7 +1646,7 @@ export async function registerRoutes(
     }
   });
 
-  app.put(api.equipmentEntriesApi.update.path, async (req, res) => {
+  app.put(api.equipmentEntriesApi.update.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
     try {
       const input = api.equipmentEntriesApi.update.input.parse(req.body);
       const entry = await storage.updateEquipmentEntry(Number(req.params.id), input);
@@ -1688,18 +1659,18 @@ export async function registerRoutes(
     }
   });
 
-  app.delete(api.equipmentEntriesApi.delete.path, async (req, res) => {
+  app.delete(api.equipmentEntriesApi.delete.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
     await storage.deleteEquipmentEntry(Number(req.params.id));
     res.status(204).send();
   });
 
   // Deliveries
-  app.get(api.deliveriesApi.list.path, async (req, res) => {
+  app.get(api.deliveriesApi.list.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
     const deliveries = await storage.getDeliveries(Number(req.params.reportId));
     res.json(deliveries);
   });
 
-  app.post(api.deliveriesApi.create.path, async (req, res) => {
+  app.post(api.deliveriesApi.create.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
     try {
       const input = api.deliveriesApi.create.input.parse(req.body);
       const delivery = await storage.createDelivery({
@@ -1715,7 +1686,7 @@ export async function registerRoutes(
     }
   });
 
-  app.put(api.deliveriesApi.update.path, async (req, res) => {
+  app.put(api.deliveriesApi.update.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
     try {
       const input = api.deliveriesApi.update.input.parse(req.body);
       const delivery = await storage.updateDelivery(Number(req.params.id), input);
@@ -1728,7 +1699,7 @@ export async function registerRoutes(
     }
   });
 
-  app.delete(api.deliveriesApi.delete.path, async (req, res) => {
+  app.delete(api.deliveriesApi.delete.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
     await storage.deleteDelivery(Number(req.params.id));
     res.status(204).send();
   });

@@ -1,6 +1,6 @@
 import { users, authorizedUsers, type User, type UpsertUser } from "@shared/models/auth";
 import { db } from "../../db";
-import { eq } from "drizzle-orm";
+import { eq, count } from "drizzle-orm";
 
 // Interface for auth storage operations
 // (IMPORTANT) These user operations are mandatory for Replit Auth.
@@ -49,8 +49,8 @@ class AuthStorage implements IAuthStorage {
     let isAuthorized = "pending";
     
     // Check if this is the first user - make them admin
-    const [userCount] = await db.select({ count: users.id }).from(users);
-    const isFirstUser = !userCount || Object.keys(userCount).length === 0;
+    const [result] = await db.select({ userCount: count() }).from(users);
+    const isFirstUser = !result || Number(result.userCount) === 0;
     
     if (isFirstUser) {
       role = "admin";

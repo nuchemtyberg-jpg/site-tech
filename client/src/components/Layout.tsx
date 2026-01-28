@@ -9,15 +9,17 @@ import {
   LogOut, 
   Menu,
   X,
-  User
+  User,
+  Shield
 } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { Badge } from "@/components/ui/badge";
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
-  const { user, logout } = useAuth();
+  const { user, logout, isAdmin } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const navItems = [
@@ -26,6 +28,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
     { href: "/customers", label: "Customers", icon: Users },
     { href: "/schedule", label: "Scheduling", icon: Calendar },
     { href: "/equipment", label: "Equipment", icon: Truck },
+  ];
+  
+  const adminItems = [
+    { href: "/admin/users", label: "User Management", icon: Shield },
   ];
 
   return (
@@ -78,6 +84,35 @@ export function Layout({ children }: { children: React.ReactNode }) {
               </Link>
             );
           })}
+          
+          {isAdmin && (
+            <>
+              <div className="my-4 px-4">
+                <div className="h-px bg-border" />
+                <p className="text-xs text-muted-foreground uppercase tracking-wide mt-4 mb-2">Admin</p>
+              </div>
+              {adminItems.map((item) => {
+                const isActive = location.startsWith(item.href);
+                return (
+                  <Link key={item.href} href={item.href}>
+                    <div 
+                      className={cn(
+                        "flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all duration-200 cursor-pointer group",
+                        isActive 
+                          ? "bg-primary text-primary-foreground shadow-lg shadow-primary/25" 
+                          : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                      )}
+                      onClick={() => setMobileMenuOpen(false)}
+                      data-testid="link-user-management"
+                    >
+                      <item.icon className={cn("w-5 h-5", isActive ? "text-primary-foreground" : "text-muted-foreground group-hover:text-foreground")} />
+                      {item.label}
+                    </div>
+                  </Link>
+                );
+              })}
+            </>
+          )}
         </nav>
 
         <div className="p-4 border-t border-border mt-auto">

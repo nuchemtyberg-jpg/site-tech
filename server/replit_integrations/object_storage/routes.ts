@@ -1,16 +1,20 @@
 import type { Express } from "express";
 import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
+import { isAuthenticated } from "../auth";
+import { isAuthorizedUser } from "../../middleware/auth";
 
 /**
  * Register object storage routes for file uploads.
+ * All routes are protected by authentication and authorization middleware.
  */
 export function registerObjectStorageRoutes(app: Express): void {
   const objectStorageService = new ObjectStorageService();
 
   /**
    * Request a presigned URL for file upload.
+   * Protected: Only authenticated and authorized users can request upload URLs.
    */
-  app.post("/api/uploads/request-url", async (req, res) => {
+  app.post("/api/uploads/request-url", isAuthenticated, isAuthorizedUser, async (req, res) => {
     try {
       const { name, size, contentType } = req.body;
 
@@ -37,8 +41,9 @@ export function registerObjectStorageRoutes(app: Express): void {
   /**
    * Serve uploaded objects.
    * Matches /objects/uploads/:id
+   * Protected: Only authenticated and authorized users can access uploaded files.
    */
-  app.get("/objects/uploads/:id", (req, res) => {
+  app.get("/objects/uploads/:id", isAuthenticated, isAuthorizedUser, (req, res) => {
     const fullPath = `/objects/uploads/${req.params.id}`;
     
     objectStorageService.getObjectEntityFile(fullPath)
