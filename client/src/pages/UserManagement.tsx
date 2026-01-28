@@ -32,7 +32,7 @@ export default function UserManagement() {
 
   const updateUserMutation = useMutation({
     mutationFn: async ({ id, updates }: { id: string; updates: { role?: string; isAuthorized?: string } }) => {
-      return apiRequest(`/api/admin/users/${id}`, { method: "PUT", body: JSON.stringify(updates) });
+      return apiRequest("PUT", `/api/admin/users/${id}`, updates);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
@@ -45,7 +45,7 @@ export default function UserManagement() {
 
   const addAuthorizedUserMutation = useMutation({
     mutationFn: async (data: { email: string; role: string }) => {
-      return apiRequest("/api/admin/authorized-users", { method: "POST", body: JSON.stringify(data) });
+      return apiRequest("POST", "/api/admin/authorized-users", data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/authorized-users"] });
@@ -65,7 +65,7 @@ export default function UserManagement() {
 
   const deleteAuthorizedUserMutation = useMutation({
     mutationFn: async (id: string) => {
-      return apiRequest(`/api/admin/authorized-users/${id}`, { method: "DELETE" });
+      return apiRequest("DELETE", `/api/admin/authorized-users/${id}`);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/authorized-users"] });
