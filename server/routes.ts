@@ -1583,9 +1583,11 @@ export async function registerRoutes(
         ...req.body,
         projectId,
         albumId: req.body.albumId || generalAlbum.id,
+        takenAt: req.body.takenAt ? new Date(req.body.takenAt) : null,
       });
       res.status(201).json(photo);
     } catch (err) {
+      console.error("Error creating photo:", err);
       throw err;
     }
   });
