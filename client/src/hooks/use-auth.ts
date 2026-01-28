@@ -37,10 +37,21 @@ export function useAuth() {
     },
   });
 
+  const isApproved = user?.isAuthorized === "approved";
+  const isPending = user?.isAuthorized === "pending";
+  const isRejected = user?.isAuthorized === "rejected";
+  const isAdmin = user?.role === "admin";
+  const isManager = user?.role === "manager" || isAdmin;
+
   return {
     user,
     isLoading,
     isAuthenticated: !!user,
+    isApproved,
+    isPending,
+    isRejected,
+    isAdmin,
+    isManager,
     logout: logoutMutation.mutate,
     isLoggingOut: logoutMutation.isPending,
   };

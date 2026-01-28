@@ -1,11 +1,42 @@
-import type { Express } from "express";
+import type { Express, RequestHandler } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { api } from "@shared/routes";
 import { z } from "zod";
-import { setupAuth, registerAuthRoutes } from "./replit_integrations/auth";
+import { setupAuth, registerAuthRoutes, isAuthenticated } from "./replit_integrations/auth";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
 import type { User } from "@shared/schema";
+import { insertAuthorizedUserSchema } from "@shared/schema";
+
+// Middleware to check if user is an admin
+const isAdmin: RequestHandler = async (req, res, next) => {
+  const user = req.user as any;
+  if (!user?.claims?.sub) {
+    return res.status(401).json({ message: "Unauthorized" });
+  }
+  
+  const dbUser = await storage.getUser(user.claims.sub);
+  if (!dbUser || dbUser.role !== "admin") {
+    return res.status(403).json({ message: "Forbidden: Admin access required" });
+  }
+  
+  next();
+};
+
+// Middleware to check if user is authorized (approved)
+const isAuthorizedUser: RequestHandler = async (req, res, next) => {
+  const user = req.user as any;
+  if (!user?.claims?.sub) {
+    return res.status(401).json({ message: "Unauthorized" });
+  }
+  
+  const dbUser = await storage.getUser(user.claims.sub);
+  if (!dbUser || dbUser.isAuthorized !== "approved") {
+    return res.status(403).json({ message: "Access pending approval" });
+  }
+  
+  next();
+};
 
 // Weather fetch helper using Open-Meteo API
 async function fetchWeatherData(address: string, city: string, state: string): Promise<{
@@ -76,6 +107,70 @@ export async function registerRoutes(
   
   // Object Storage Setup
   registerObjectStorageRoutes(app);
+
+  // Admin Routes - User Management
+  
+  // Get all users (admin only)
+  app.get("/api/admin/users", isAuthenticated, isAdmin, async (req, res) => {
+    const allUsers = await storage.getAllUsers();
+    res.json(allUsers);
+  });
+
+  // Update user (admin only) - change role or authorization status
+  app.put("/api/admin/users/:id", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const { role, isAuthorized } = req.body;
+      const updates: any = {};
+      if (role) updates.role = role;
+      if (isAuthorized) updates.isAuthorized = isAuthorized;
+      
+      const user = await storage.updateUser(req.params.id, updates);
+      res.json(user);
+    } catch (err) {
+      res.status(500).json({ message: "Failed to update user" });
+    }
+  });
+
+  // Get all authorized emails (admin only)
+  app.get("/api/admin/authorized-users", isAuthenticated, isAdmin, async (req, res) => {
+    const authorizedUsers = await storage.getAuthorizedUsers();
+    res.json(authorizedUsers);
+  });
+
+  // Add authorized email (admin only)
+  app.post("/api/admin/authorized-users", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const input = insertAuthorizedUserSchema.parse(req.body);
+      
+      // Check if email already exists
+      const existing = await storage.getAuthorizedUserByEmail(input.email);
+      if (existing) {
+        return res.status(400).json({ message: "Email already authorized" });
+      }
+      
+      // Get admin user info
+      const adminUser = req.user as any;
+      const dbAdmin = await storage.getUser(adminUser.claims.sub);
+      
+      const authorized = await storage.createAuthorizedUser({
+        ...input,
+        addedBy: adminUser.claims.sub,
+        addedByName: dbAdmin ? `${dbAdmin.firstName || ''} ${dbAdmin.lastName || ''}`.trim() || dbAdmin.email : undefined,
+      });
+      res.status(201).json(authorized);
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0].message });
+      }
+      res.status(500).json({ message: "Failed to add authorized user" });
+    }
+  });
+
+  // Delete authorized email (admin only)
+  app.delete("/api/admin/authorized-users/:id", isAuthenticated, isAdmin, async (req, res) => {
+    await storage.deleteAuthorizedUser(req.params.id);
+    res.status(204).send();
+  });
 
   // Customers
   app.get(api.customers.list.path, async (req, res) => {

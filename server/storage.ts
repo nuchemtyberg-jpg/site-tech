@@ -2,15 +2,17 @@ import {
   projects, tasks, equipment, allocations, folders, files, users, customers, dailyReports, maintenanceLogs, communications, taskStatusHistory, photoAlbums,
   reportTasks, laborEntries, equipmentEntries, reportTaskPhotos, deliveries, deliveryPhotos,
   dailyReportTaskEntries, dailyReportLaborLines, dailyReportEquipmentLines, dailyReportDeliveryEntries, dailyReportPhotos,
+  authorizedUsers,
   type InsertProject, type InsertTask, type InsertEquipment, type InsertAllocation, type InsertFolder, type InsertFileMetadata,
   type InsertCustomer, type InsertDailyReport, type InsertMaintenanceLog, type InsertCommunication, type InsertTaskStatusHistory, type InsertPhotoAlbum,
   type InsertReportTask, type InsertLaborEntry, type InsertEquipmentEntry, type InsertReportTaskPhoto, type InsertDelivery, type InsertDeliveryPhoto,
   type InsertDailyReportTaskEntry, type InsertDailyReportLaborLine, type InsertDailyReportEquipmentLine, type InsertDailyReportDeliveryEntry, type InsertDailyReportPhoto,
+  type InsertAuthorizedUser,
   type Project, type Task, type Equipment, type Allocation, type Folder, type FileMetadata,
   type Customer, type DailyReport, type MaintenanceLog, type Communication, type TaskStatusHistory, type PhotoAlbum,
   type ReportTask, type LaborEntry, type EquipmentEntry, type ReportTaskPhoto, type Delivery, type DeliveryPhoto,
   type DailyReportTaskEntry, type DailyReportLaborLine, type DailyReportEquipmentLine, type DailyReportDeliveryEntry, type DailyReportPhoto,
-  type User, type UpsertUser
+  type User, type UpsertUser, type AuthorizedUser
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and } from "drizzle-orm";
@@ -19,6 +21,14 @@ export interface IStorage {
   // Auth
   getUser(id: string): Promise<User | undefined>;
   upsertUser(user: UpsertUser): Promise<User>;
+  getAllUsers(): Promise<User[]>;
+  updateUser(id: string, updates: Partial<User>): Promise<User>;
+  
+  // Authorized Users
+  getAuthorizedUsers(): Promise<AuthorizedUser[]>;
+  getAuthorizedUserByEmail(email: string): Promise<AuthorizedUser | undefined>;
+  createAuthorizedUser(user: InsertAuthorizedUser): Promise<AuthorizedUser>;
+  deleteAuthorizedUser(id: string): Promise<void>;
 
   // Customers
   getCustomers(): Promise<Customer[]>;
@@ -190,6 +200,37 @@ export class DatabaseStorage implements IStorage {
       })
       .returning();
     return user;
+  }
+
+  async getAllUsers(): Promise<User[]> {
+    return await db.select().from(users).orderBy(desc(users.createdAt));
+  }
+
+  async updateUser(id: string, updates: Partial<User>): Promise<User> {
+    const [user] = await db.update(users).set({ ...updates, updatedAt: new Date() }).where(eq(users.id, id)).returning();
+    return user;
+  }
+
+  // Authorized Users
+  async getAuthorizedUsers(): Promise<AuthorizedUser[]> {
+    return await db.select().from(authorizedUsers).orderBy(desc(authorizedUsers.createdAt));
+  }
+
+  async getAuthorizedUserByEmail(email: string): Promise<AuthorizedUser | undefined> {
+    const [authorized] = await db.select().from(authorizedUsers).where(eq(authorizedUsers.email, email.toLowerCase()));
+    return authorized;
+  }
+
+  async createAuthorizedUser(user: InsertAuthorizedUser): Promise<AuthorizedUser> {
+    const [authorized] = await db.insert(authorizedUsers).values({
+      ...user,
+      email: user.email.toLowerCase(),
+    }).returning();
+    return authorized;
+  }
+
+  async deleteAuthorizedUser(id: string): Promise<void> {
+    await db.delete(authorizedUsers).where(eq(authorizedUsers.id, id));
   }
 
   // Customers

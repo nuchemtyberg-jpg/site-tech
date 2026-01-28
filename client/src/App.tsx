@@ -17,12 +17,14 @@ import Schedule from "@/pages/Schedule";
 import Equipment from "@/pages/Equipment";
 import EquipmentDetails from "@/pages/EquipmentDetails";
 import AuthPage from "@/pages/AuthPage";
+import PendingAccessPage from "@/pages/PendingAccessPage";
 import PDFViewerPage from "@/pages/PDFViewerPage";
 import DailyReportPage from "@/pages/DailyReportPage";
+import UserManagement from "@/pages/UserManagement";
 import NotFound from "@/pages/not-found";
 
-function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
-  const { user, isLoading } = useAuth();
+function ProtectedRoute({ component: Component, adminOnly = false }: { component: React.ComponentType; adminOnly?: boolean }) {
+  const { user, isLoading, isApproved, isAdmin } = useAuth();
 
   if (isLoading) {
     return (
@@ -36,6 +38,14 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
     return <AuthPage />;
   }
 
+  if (!isApproved) {
+    return <PendingAccessPage />;
+  }
+
+  if (adminOnly && !isAdmin) {
+    return <NotFound />;
+  }
+
   return (
     <Layout>
       <Component />
@@ -44,7 +54,7 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
 }
 
 function ProtectedFullScreenRoute({ component: Component }: { component: React.ComponentType }) {
-  const { user, isLoading } = useAuth();
+  const { user, isLoading, isApproved } = useAuth();
 
   if (isLoading) {
     return (
@@ -56,6 +66,10 @@ function ProtectedFullScreenRoute({ component: Component }: { component: React.C
 
   if (!user) {
     return <AuthPage />;
+  }
+
+  if (!isApproved) {
+    return <PendingAccessPage />;
   }
 
   return <Component />;
@@ -75,6 +89,7 @@ function Router() {
       <Route path="/schedule" component={() => <ProtectedRoute component={Schedule} />} />
       <Route path="/equipment" component={() => <ProtectedRoute component={Equipment} />} />
       <Route path="/equipment/:id" component={() => <ProtectedRoute component={EquipmentDetails} />} />
+      <Route path="/admin/users" component={() => <ProtectedRoute component={UserManagement} adminOnly />} />
       <Route component={NotFound} />
     </Switch>
   );
