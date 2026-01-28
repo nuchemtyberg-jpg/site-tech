@@ -18,9 +18,10 @@ export const customers = pgTable("customers", {
   zip: text("zip"),
   notes: text("notes"),
   createdAt: timestamp("created_at").defaultNow(),
+  deletedAt: timestamp("deleted_at"), // Soft delete support
 });
 
-export const insertCustomerSchema = createInsertSchema(customers).omit({ id: true, createdAt: true });
+export const insertCustomerSchema = createInsertSchema(customers).omit({ id: true, createdAt: true, deletedAt: true });
 export type Customer = typeof customers.$inferSelect;
 export type InsertCustomer = z.infer<typeof insertCustomerSchema>;
 
@@ -43,9 +44,10 @@ export const projects = pgTable("projects", {
   notes: text("notes"),
   color: text("color").notNull().default("#f97316"),
   createdAt: timestamp("created_at").defaultNow(),
+  deletedAt: timestamp("deleted_at"), // Soft delete support
 });
 
-export const insertProjectSchema = createInsertSchema(projects).omit({ id: true, projectNumber: true, createdAt: true });
+export const insertProjectSchema = createInsertSchema(projects).omit({ id: true, projectNumber: true, createdAt: true, deletedAt: true });
 export type Project = typeof projects.$inferSelect;
 export type InsertProject = z.infer<typeof insertProjectSchema>;
 
@@ -63,9 +65,10 @@ export const tasks = pgTable("tasks", {
   estimatedHours: integer("estimated_hours"),
   assignedTo: text("assigned_to"),
   createdAt: timestamp("created_at").defaultNow(),
+  deletedAt: timestamp("deleted_at"), // Soft delete support
 });
 
-export const insertTaskSchema = createInsertSchema(tasks).omit({ id: true, createdAt: true }).extend({
+export const insertTaskSchema = createInsertSchema(tasks).omit({ id: true, createdAt: true, deletedAt: true }).extend({
   title: z.string().min(1, "Task title is required"),
   dueDate: z.string().optional().nullable(),
   scheduledDate: z.string().optional().nullable(),
@@ -109,9 +112,10 @@ export const equipment = pgTable("equipment", {
   lastServiceDate: date("last_service_date"),
   nextServiceDate: date("next_service_date"),
   createdAt: timestamp("created_at").defaultNow(),
+  deletedAt: timestamp("deleted_at"), // Soft delete support
 });
 
-export const insertEquipmentSchema = createInsertSchema(equipment).omit({ id: true, createdAt: true });
+export const insertEquipmentSchema = createInsertSchema(equipment).omit({ id: true, createdAt: true, deletedAt: true });
 export type Equipment = typeof equipment.$inferSelect;
 export type InsertEquipment = z.infer<typeof insertEquipmentSchema>;
 
@@ -127,9 +131,10 @@ export const maintenanceLogs = pgTable("maintenance_logs", {
   nextDueDate: date("next_due_date"),
   notes: text("notes"),
   createdAt: timestamp("created_at").defaultNow(),
+  deletedAt: timestamp("deleted_at"), // Soft delete support
 });
 
-export const insertMaintenanceLogSchema = createInsertSchema(maintenanceLogs).omit({ id: true, createdAt: true });
+export const insertMaintenanceLogSchema = createInsertSchema(maintenanceLogs).omit({ id: true, createdAt: true, deletedAt: true });
 export type MaintenanceLog = typeof maintenanceLogs.$inferSelect;
 export type InsertMaintenanceLog = z.infer<typeof insertMaintenanceLogSchema>;
 
@@ -162,9 +167,10 @@ export const dailyReports = pgTable("daily_reports", {
   completedByName: text("completed_by_name"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
+  deletedAt: timestamp("deleted_at"), // Soft delete support
 });
 
-export const insertDailyReportSchema = createInsertSchema(dailyReports).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertDailyReportSchema = createInsertSchema(dailyReports).omit({ id: true, createdAt: true, updatedAt: true, deletedAt: true });
 export type DailyReport = typeof dailyReports.$inferSelect;
 export type InsertDailyReport = z.infer<typeof insertDailyReportSchema>;
 
@@ -177,9 +183,10 @@ export const dailyReportTaskEntries = pgTable("daily_report_task_entries", {
   percentComplete: integer("percent_complete").notNull().default(0), // 0-100
   comments: text("comments"),
   createdAt: timestamp("created_at").defaultNow(),
+  deletedAt: timestamp("deleted_at"), // Soft delete support
 });
 
-export const insertDailyReportTaskEntrySchema = createInsertSchema(dailyReportTaskEntries).omit({ id: true, createdAt: true });
+export const insertDailyReportTaskEntrySchema = createInsertSchema(dailyReportTaskEntries).omit({ id: true, createdAt: true, deletedAt: true });
 export type DailyReportTaskEntry = typeof dailyReportTaskEntries.$inferSelect;
 export type InsertDailyReportTaskEntry = z.infer<typeof insertDailyReportTaskEntrySchema>;
 
@@ -191,9 +198,10 @@ export const dailyReportLaborLines = pgTable("daily_report_labor_lines", {
   quantity: integer("quantity").notNull().default(1),
   hours: integer("hours").notNull().default(0),
   createdAt: timestamp("created_at").defaultNow(),
+  deletedAt: timestamp("deleted_at"), // Soft delete support
 });
 
-export const insertDailyReportLaborLineSchema = createInsertSchema(dailyReportLaborLines).omit({ id: true, createdAt: true });
+export const insertDailyReportLaborLineSchema = createInsertSchema(dailyReportLaborLines).omit({ id: true, createdAt: true, deletedAt: true });
 export type DailyReportLaborLine = typeof dailyReportLaborLines.$inferSelect;
 export type InsertDailyReportLaborLine = z.infer<typeof insertDailyReportLaborLineSchema>;
 
@@ -205,9 +213,10 @@ export const dailyReportEquipmentLines = pgTable("daily_report_equipment_lines",
   quantity: integer("quantity").notNull().default(1),
   hours: integer("hours").notNull().default(0),
   createdAt: timestamp("created_at").defaultNow(),
+  deletedAt: timestamp("deleted_at"), // Soft delete support
 });
 
-export const insertDailyReportEquipmentLineSchema = createInsertSchema(dailyReportEquipmentLines).omit({ id: true, createdAt: true });
+export const insertDailyReportEquipmentLineSchema = createInsertSchema(dailyReportEquipmentLines).omit({ id: true, createdAt: true, deletedAt: true });
 export type DailyReportEquipmentLine = typeof dailyReportEquipmentLines.$inferSelect;
 export type InsertDailyReportEquipmentLine = z.infer<typeof insertDailyReportEquipmentLineSchema>;
 
@@ -221,9 +230,10 @@ export const dailyReportDeliveryEntries = pgTable("daily_report_delivery_entries
   allDelivered: boolean("all_delivered").default(true),
   missingItemsDetails: text("missing_items_details"), // Required if allDelivered = false
   createdAt: timestamp("created_at").defaultNow(),
+  deletedAt: timestamp("deleted_at"), // Soft delete support
 });
 
-export const insertDailyReportDeliveryEntrySchema = createInsertSchema(dailyReportDeliveryEntries).omit({ id: true, createdAt: true });
+export const insertDailyReportDeliveryEntrySchema = createInsertSchema(dailyReportDeliveryEntries).omit({ id: true, createdAt: true, deletedAt: true });
 export type DailyReportDeliveryEntry = typeof dailyReportDeliveryEntries.$inferSelect;
 export type InsertDailyReportDeliveryEntry = z.infer<typeof insertDailyReportDeliveryEntrySchema>;
 
@@ -238,9 +248,10 @@ export const dailyReportPhotos = pgTable("daily_report_photos", {
   createdBy: text("created_by"),
   createdByName: text("created_by_name"),
   createdAt: timestamp("created_at").defaultNow(),
+  deletedAt: timestamp("deleted_at"), // Soft delete support
 });
 
-export const insertDailyReportPhotoSchema = createInsertSchema(dailyReportPhotos).omit({ id: true, createdAt: true });
+export const insertDailyReportPhotoSchema = createInsertSchema(dailyReportPhotos).omit({ id: true, createdAt: true, deletedAt: true });
 export type DailyReportPhoto = typeof dailyReportPhotos.$inferSelect;
 export type InsertDailyReportPhoto = z.infer<typeof insertDailyReportPhotoSchema>;
 
@@ -327,9 +338,10 @@ export const communications = pgTable("communications", {
   followUpDate: date("follow_up_date"),
   createdBy: text("created_by"),
   createdAt: timestamp("created_at").defaultNow(),
+  deletedAt: timestamp("deleted_at"), // Soft delete support
 });
 
-export const insertCommunicationSchema = createInsertSchema(communications).omit({ id: true, createdAt: true });
+export const insertCommunicationSchema = createInsertSchema(communications).omit({ id: true, createdAt: true, deletedAt: true });
 export type Communication = typeof communications.$inferSelect;
 export type InsertCommunication = z.infer<typeof insertCommunicationSchema>;
 
@@ -345,9 +357,10 @@ export const allocations = pgTable("allocations", {
   endDate: date("end_date").notNull(),
   notes: text("notes"),
   createdAt: timestamp("created_at").defaultNow(),
+  deletedAt: timestamp("deleted_at"), // Soft delete support
 });
 
-export const insertAllocationSchema = createInsertSchema(allocations).omit({ id: true, createdAt: true });
+export const insertAllocationSchema = createInsertSchema(allocations).omit({ id: true, createdAt: true, deletedAt: true });
 export type Allocation = typeof allocations.$inferSelect;
 export type InsertAllocation = z.infer<typeof insertAllocationSchema>;
 
@@ -358,9 +371,10 @@ export const folders = pgTable("folders", {
   parentId: integer("parent_id"),
   name: text("name").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
+  deletedAt: timestamp("deleted_at"), // Soft delete support
 });
 
-export const insertFolderSchema = createInsertSchema(folders).omit({ id: true, createdAt: true });
+export const insertFolderSchema = createInsertSchema(folders).omit({ id: true, createdAt: true, deletedAt: true });
 export type Folder = typeof folders.$inferSelect;
 export type InsertFolder = z.infer<typeof insertFolderSchema>;
 
@@ -370,9 +384,10 @@ export const photoAlbums = pgTable("photo_albums", {
   projectId: integer("project_id").notNull(),
   name: text("name").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
+  deletedAt: timestamp("deleted_at"), // Soft delete support
 });
 
-export const insertPhotoAlbumSchema = createInsertSchema(photoAlbums).omit({ id: true, createdAt: true });
+export const insertPhotoAlbumSchema = createInsertSchema(photoAlbums).omit({ id: true, createdAt: true, deletedAt: true });
 export type PhotoAlbum = typeof photoAlbums.$inferSelect;
 export type InsertPhotoAlbum = z.infer<typeof insertPhotoAlbumSchema>;
 
@@ -386,10 +401,12 @@ export const files = pgTable("files", {
   objectPath: text("object_path").notNull(),
   contentType: text("content_type"),
   size: integer("size"),
-  takenAt: timestamp("taken_at"),  // Photo timestamp from EXIF data
+  takenAt: timestamp("taken_at"),  // Photo timestamp from EXIF metadata
+  tags: text("tags").array(), // Document tags for categorization
   createdAt: timestamp("created_at").defaultNow(),
+  deletedAt: timestamp("deleted_at"), // Soft delete support
 });
 
-export const insertFileSchema = createInsertSchema(files).omit({ id: true, createdAt: true });
+export const insertFileSchema = createInsertSchema(files).omit({ id: true, createdAt: true, deletedAt: true });
 export type FileMetadata = typeof files.$inferSelect;
 export type InsertFileMetadata = z.infer<typeof insertFileSchema>;

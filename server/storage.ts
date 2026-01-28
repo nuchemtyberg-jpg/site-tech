@@ -15,7 +15,7 @@ import {
   type User, type UpsertUser, type AuthorizedUser
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, and } from "drizzle-orm";
+import { eq, desc, and, isNull } from "drizzle-orm";
 
 export interface IStorage {
   // Auth
@@ -242,12 +242,12 @@ export class DatabaseStorage implements IStorage {
     await db.delete(authorizedUsers).where(eq(authorizedUsers.id, id));
   }
 
-  // Customers
+  // Customers (with soft delete)
   async getCustomers(): Promise<Customer[]> {
-    return await db.select().from(customers).orderBy(customers.name);
+    return await db.select().from(customers).where(isNull(customers.deletedAt)).orderBy(customers.name);
   }
   async getCustomer(id: number): Promise<Customer | undefined> {
-    const [customer] = await db.select().from(customers).where(eq(customers.id, id));
+    const [customer] = await db.select().from(customers).where(and(eq(customers.id, id), isNull(customers.deletedAt)));
     return customer;
   }
   async createCustomer(insertCustomer: InsertCustomer): Promise<Customer> {
@@ -259,19 +259,19 @@ export class DatabaseStorage implements IStorage {
     return customer;
   }
   async deleteCustomer(id: number): Promise<void> {
-    await db.delete(customers).where(eq(customers.id, id));
+    await db.update(customers).set({ deletedAt: new Date() }).where(eq(customers.id, id));
   }
 
-  // Projects
+  // Projects (with soft delete)
   async getProjects(): Promise<Project[]> {
-    return await db.select().from(projects).orderBy(desc(projects.createdAt));
+    return await db.select().from(projects).where(isNull(projects.deletedAt)).orderBy(desc(projects.createdAt));
   }
   async getProject(id: number): Promise<Project | undefined> {
-    const [project] = await db.select().from(projects).where(eq(projects.id, id));
+    const [project] = await db.select().from(projects).where(and(eq(projects.id, id), isNull(projects.deletedAt)));
     return project;
   }
   async getProjectsByCustomer(customerId: number): Promise<Project[]> {
-    return await db.select().from(projects).where(eq(projects.customerId, customerId));
+    return await db.select().from(projects).where(and(eq(projects.customerId, customerId), isNull(projects.deletedAt)));
   }
   
   async getNextProjectNumber(): Promise<string> {
@@ -351,18 +351,18 @@ export class DatabaseStorage implements IStorage {
     return project;
   }
   async deleteProject(id: number): Promise<void> {
-    await db.delete(projects).where(eq(projects.id, id));
+    await db.update(projects).set({ deletedAt: new Date() }).where(eq(projects.id, id));
   }
 
-  // Tasks
+  // Tasks (with soft delete)
   async getTasks(projectId?: number): Promise<Task[]> {
     if (projectId) {
-      return await db.select().from(tasks).where(eq(tasks.projectId, projectId)).orderBy(tasks.scheduledDate);
+      return await db.select().from(tasks).where(and(eq(tasks.projectId, projectId), isNull(tasks.deletedAt))).orderBy(tasks.scheduledDate);
     }
-    return await db.select().from(tasks).orderBy(tasks.scheduledDate);
+    return await db.select().from(tasks).where(isNull(tasks.deletedAt)).orderBy(tasks.scheduledDate);
   }
   async getTask(id: number): Promise<Task | undefined> {
-    const [task] = await db.select().from(tasks).where(eq(tasks.id, id));
+    const [task] = await db.select().from(tasks).where(and(eq(tasks.id, id), isNull(tasks.deletedAt)));
     return task;
   }
   async createTask(insertTask: InsertTask): Promise<Task> {
@@ -374,7 +374,7 @@ export class DatabaseStorage implements IStorage {
     return task;
   }
   async deleteTask(id: number): Promise<void> {
-    await db.delete(tasks).where(eq(tasks.id, id));
+    await db.update(tasks).set({ deletedAt: new Date() }).where(eq(tasks.id, id));
   }
 
   // Task Status History
@@ -386,12 +386,12 @@ export class DatabaseStorage implements IStorage {
     return record;
   }
 
-  // Equipment
+  // Equipment (with soft delete)
   async getEquipmentList(): Promise<Equipment[]> {
-    return await db.select().from(equipment).orderBy(equipment.type, equipment.name);
+    return await db.select().from(equipment).where(isNull(equipment.deletedAt)).orderBy(equipment.type, equipment.name);
   }
   async getEquipment(id: number): Promise<Equipment | undefined> {
-    const [item] = await db.select().from(equipment).where(eq(equipment.id, id));
+    const [item] = await db.select().from(equipment).where(and(eq(equipment.id, id), isNull(equipment.deletedAt)));
     return item;
   }
   async createEquipment(insertEquipment: InsertEquipment): Promise<Equipment> {
@@ -403,32 +403,32 @@ export class DatabaseStorage implements IStorage {
     return item;
   }
   async deleteEquipment(id: number): Promise<void> {
-    await db.delete(equipment).where(eq(equipment.id, id));
+    await db.update(equipment).set({ deletedAt: new Date() }).where(eq(equipment.id, id));
   }
 
-  // Maintenance Logs
+  // Maintenance Logs (with soft delete)
   async getMaintenanceLogs(equipmentId: number): Promise<MaintenanceLog[]> {
-    return await db.select().from(maintenanceLogs).where(eq(maintenanceLogs.equipmentId, equipmentId)).orderBy(desc(maintenanceLogs.performedDate));
+    return await db.select().from(maintenanceLogs).where(and(eq(maintenanceLogs.equipmentId, equipmentId), isNull(maintenanceLogs.deletedAt))).orderBy(desc(maintenanceLogs.performedDate));
   }
   async createMaintenanceLog(insertLog: InsertMaintenanceLog): Promise<MaintenanceLog> {
     const [log] = await db.insert(maintenanceLogs).values(insertLog).returning();
     return log;
   }
   async deleteMaintenanceLog(id: number): Promise<void> {
-    await db.delete(maintenanceLogs).where(eq(maintenanceLogs.id, id));
+    await db.update(maintenanceLogs).set({ deletedAt: new Date() }).where(eq(maintenanceLogs.id, id));
   }
 
-  // Daily Reports
+  // Daily Reports (with soft delete)
   async getDailyReports(projectId: number): Promise<DailyReport[]> {
-    return await db.select().from(dailyReports).where(eq(dailyReports.projectId, projectId)).orderBy(desc(dailyReports.reportDate), desc(dailyReports.updatedAt));
+    return await db.select().from(dailyReports).where(and(eq(dailyReports.projectId, projectId), isNull(dailyReports.deletedAt))).orderBy(desc(dailyReports.reportDate), desc(dailyReports.updatedAt));
   }
   async getDailyReport(id: number): Promise<DailyReport | undefined> {
-    const [report] = await db.select().from(dailyReports).where(eq(dailyReports.id, id));
+    const [report] = await db.select().from(dailyReports).where(and(eq(dailyReports.id, id), isNull(dailyReports.deletedAt)));
     return report;
   }
   async getDailyReportByDate(projectId: number, reportDate: string): Promise<DailyReport | undefined> {
     const [report] = await db.select().from(dailyReports).where(
-      and(eq(dailyReports.projectId, projectId), eq(dailyReports.reportDate, reportDate))
+      and(eq(dailyReports.projectId, projectId), eq(dailyReports.reportDate, reportDate), isNull(dailyReports.deletedAt))
     );
     return report;
   }
@@ -441,7 +441,7 @@ export class DatabaseStorage implements IStorage {
     return report;
   }
   async deleteDailyReport(id: number): Promise<void> {
-    await db.delete(dailyReports).where(eq(dailyReports.id, id));
+    await db.update(dailyReports).set({ deletedAt: new Date() }).where(eq(dailyReports.id, id));
   }
 
   // Report Tasks
@@ -545,21 +545,21 @@ export class DatabaseStorage implements IStorage {
     await db.delete(deliveryPhotos).where(eq(deliveryPhotos.id, id));
   }
 
-  // Communications
+  // Communications (with soft delete)
   async getCommunications(customerId: number): Promise<Communication[]> {
-    return await db.select().from(communications).where(eq(communications.customerId, customerId)).orderBy(desc(communications.contactDate));
+    return await db.select().from(communications).where(and(eq(communications.customerId, customerId), isNull(communications.deletedAt))).orderBy(desc(communications.contactDate));
   }
   async createCommunication(insertComm: InsertCommunication): Promise<Communication> {
     const [comm] = await db.insert(communications).values(insertComm).returning();
     return comm;
   }
   async deleteCommunication(id: number): Promise<void> {
-    await db.delete(communications).where(eq(communications.id, id));
+    await db.update(communications).set({ deletedAt: new Date() }).where(eq(communications.id, id));
   }
 
-  // Allocations
+  // Allocations (with soft delete)
   async getAllocations(): Promise<Allocation[]> {
-    return await db.select().from(allocations).orderBy(allocations.startDate);
+    return await db.select().from(allocations).where(isNull(allocations.deletedAt)).orderBy(allocations.startDate);
   }
   async createAllocation(insertAllocation: InsertAllocation): Promise<Allocation> {
     const [allocation] = await db.insert(allocations).values(insertAllocation).returning();
@@ -570,27 +570,27 @@ export class DatabaseStorage implements IStorage {
     return allocation;
   }
   async deleteAllocation(id: number): Promise<void> {
-    await db.delete(allocations).where(eq(allocations.id, id));
+    await db.update(allocations).set({ deletedAt: new Date() }).where(eq(allocations.id, id));
   }
 
-  // Folders
+  // Folders (with soft delete)
   async getFolders(projectId: number): Promise<Folder[]> {
-    return await db.select().from(folders).where(eq(folders.projectId, projectId));
+    return await db.select().from(folders).where(and(eq(folders.projectId, projectId), isNull(folders.deletedAt)));
   }
   async createFolder(insertFolder: InsertFolder): Promise<Folder> {
     const [folder] = await db.insert(folders).values(insertFolder).returning();
     return folder;
   }
   async deleteFolder(id: number): Promise<void> {
-    await db.delete(folders).where(eq(folders.id, id));
+    await db.update(folders).set({ deletedAt: new Date() }).where(eq(folders.id, id));
   }
 
-  // Files
+  // Files (with soft delete)
   async getFiles(projectId: number): Promise<FileMetadata[]> {
-    return await db.select().from(files).where(eq(files.projectId, projectId));
+    return await db.select().from(files).where(and(eq(files.projectId, projectId), isNull(files.deletedAt)));
   }
   async getFile(id: number): Promise<FileMetadata | undefined> {
-    const [file] = await db.select().from(files).where(eq(files.id, id));
+    const [file] = await db.select().from(files).where(and(eq(files.id, id), isNull(files.deletedAt)));
     return file;
   }
   async createFile(insertFile: InsertFileMetadata): Promise<FileMetadata> {
@@ -602,20 +602,20 @@ export class DatabaseStorage implements IStorage {
     return file;
   }
   async deleteFile(id: number): Promise<void> {
-    await db.delete(files).where(eq(files.id, id));
+    await db.update(files).set({ deletedAt: new Date() }).where(eq(files.id, id));
   }
 
-  // Photo Albums
+  // Photo Albums (with soft delete)
   async getPhotoAlbums(projectId: number): Promise<PhotoAlbum[]> {
-    return await db.select().from(photoAlbums).where(eq(photoAlbums.projectId, projectId)).orderBy(desc(photoAlbums.createdAt));
+    return await db.select().from(photoAlbums).where(and(eq(photoAlbums.projectId, projectId), isNull(photoAlbums.deletedAt))).orderBy(desc(photoAlbums.createdAt));
   }
   async getPhotoAlbum(id: number): Promise<PhotoAlbum | undefined> {
-    const [album] = await db.select().from(photoAlbums).where(eq(photoAlbums.id, id));
+    const [album] = await db.select().from(photoAlbums).where(and(eq(photoAlbums.id, id), isNull(photoAlbums.deletedAt)));
     return album;
   }
   async getPhotoAlbumByName(projectId: number, name: string): Promise<PhotoAlbum | undefined> {
     const [album] = await db.select().from(photoAlbums)
-      .where(and(eq(photoAlbums.projectId, projectId), eq(photoAlbums.name, name)));
+      .where(and(eq(photoAlbums.projectId, projectId), eq(photoAlbums.name, name), isNull(photoAlbums.deletedAt)));
     return album;
   }
   async getOrCreateDailyReportAlbum(projectId: number): Promise<PhotoAlbum> {
@@ -635,15 +635,15 @@ export class DatabaseStorage implements IStorage {
     return album;
   }
   async deletePhotoAlbum(id: number): Promise<void> {
-    await db.delete(photoAlbums).where(eq(photoAlbums.id, id));
+    await db.update(photoAlbums).set({ deletedAt: new Date() }).where(eq(photoAlbums.id, id));
   }
 
-  // New Daily Report Task Entries
+  // New Daily Report Task Entries (with soft delete)
   async getDailyReportTaskEntries(reportId: number): Promise<DailyReportTaskEntry[]> {
-    return await db.select().from(dailyReportTaskEntries).where(eq(dailyReportTaskEntries.reportId, reportId));
+    return await db.select().from(dailyReportTaskEntries).where(and(eq(dailyReportTaskEntries.reportId, reportId), isNull(dailyReportTaskEntries.deletedAt)));
   }
   async getDailyReportTaskEntry(id: number): Promise<DailyReportTaskEntry | undefined> {
-    const [entry] = await db.select().from(dailyReportTaskEntries).where(eq(dailyReportTaskEntries.id, id));
+    const [entry] = await db.select().from(dailyReportTaskEntries).where(and(eq(dailyReportTaskEntries.id, id), isNull(dailyReportTaskEntries.deletedAt)));
     return entry;
   }
   async createDailyReportTaskEntry(entry: InsertDailyReportTaskEntry): Promise<DailyReportTaskEntry> {
@@ -655,16 +655,16 @@ export class DatabaseStorage implements IStorage {
     return record;
   }
   async deleteDailyReportTaskEntry(id: number): Promise<void> {
-    // Delete associated labor and equipment lines first
-    await db.delete(dailyReportLaborLines).where(eq(dailyReportLaborLines.taskEntryId, id));
-    await db.delete(dailyReportEquipmentLines).where(eq(dailyReportEquipmentLines.taskEntryId, id));
-    await db.delete(dailyReportPhotos).where(eq(dailyReportPhotos.taskEntryId, id));
-    await db.delete(dailyReportTaskEntries).where(eq(dailyReportTaskEntries.id, id));
+    // Soft delete associated labor and equipment lines first
+    await db.update(dailyReportLaborLines).set({ deletedAt: new Date() }).where(eq(dailyReportLaborLines.taskEntryId, id));
+    await db.update(dailyReportEquipmentLines).set({ deletedAt: new Date() }).where(eq(dailyReportEquipmentLines.taskEntryId, id));
+    await db.update(dailyReportPhotos).set({ deletedAt: new Date() }).where(eq(dailyReportPhotos.taskEntryId, id));
+    await db.update(dailyReportTaskEntries).set({ deletedAt: new Date() }).where(eq(dailyReportTaskEntries.id, id));
   }
 
-  // New Daily Report Labor Lines
+  // New Daily Report Labor Lines (with soft delete)
   async getDailyReportLaborLines(taskEntryId: number): Promise<DailyReportLaborLine[]> {
-    return await db.select().from(dailyReportLaborLines).where(eq(dailyReportLaborLines.taskEntryId, taskEntryId));
+    return await db.select().from(dailyReportLaborLines).where(and(eq(dailyReportLaborLines.taskEntryId, taskEntryId), isNull(dailyReportLaborLines.deletedAt)));
   }
   async createDailyReportLaborLine(line: InsertDailyReportLaborLine): Promise<DailyReportLaborLine> {
     const [record] = await db.insert(dailyReportLaborLines).values(line).returning();
@@ -675,12 +675,12 @@ export class DatabaseStorage implements IStorage {
     return record;
   }
   async deleteDailyReportLaborLine(id: number): Promise<void> {
-    await db.delete(dailyReportLaborLines).where(eq(dailyReportLaborLines.id, id));
+    await db.update(dailyReportLaborLines).set({ deletedAt: new Date() }).where(eq(dailyReportLaborLines.id, id));
   }
 
-  // New Daily Report Equipment Lines
+  // New Daily Report Equipment Lines (with soft delete)
   async getDailyReportEquipmentLines(taskEntryId: number): Promise<DailyReportEquipmentLine[]> {
-    return await db.select().from(dailyReportEquipmentLines).where(eq(dailyReportEquipmentLines.taskEntryId, taskEntryId));
+    return await db.select().from(dailyReportEquipmentLines).where(and(eq(dailyReportEquipmentLines.taskEntryId, taskEntryId), isNull(dailyReportEquipmentLines.deletedAt)));
   }
   async createDailyReportEquipmentLine(line: InsertDailyReportEquipmentLine): Promise<DailyReportEquipmentLine> {
     const [record] = await db.insert(dailyReportEquipmentLines).values(line).returning();
@@ -691,15 +691,15 @@ export class DatabaseStorage implements IStorage {
     return record;
   }
   async deleteDailyReportEquipmentLine(id: number): Promise<void> {
-    await db.delete(dailyReportEquipmentLines).where(eq(dailyReportEquipmentLines.id, id));
+    await db.update(dailyReportEquipmentLines).set({ deletedAt: new Date() }).where(eq(dailyReportEquipmentLines.id, id));
   }
 
-  // New Daily Report Delivery Entries
+  // New Daily Report Delivery Entries (with soft delete)
   async getDailyReportDeliveryEntries(reportId: number): Promise<DailyReportDeliveryEntry[]> {
-    return await db.select().from(dailyReportDeliveryEntries).where(eq(dailyReportDeliveryEntries.reportId, reportId));
+    return await db.select().from(dailyReportDeliveryEntries).where(and(eq(dailyReportDeliveryEntries.reportId, reportId), isNull(dailyReportDeliveryEntries.deletedAt)));
   }
   async getDailyReportDeliveryEntry(id: number): Promise<DailyReportDeliveryEntry | undefined> {
-    const [entry] = await db.select().from(dailyReportDeliveryEntries).where(eq(dailyReportDeliveryEntries.id, id));
+    const [entry] = await db.select().from(dailyReportDeliveryEntries).where(and(eq(dailyReportDeliveryEntries.id, id), isNull(dailyReportDeliveryEntries.deletedAt)));
     return entry;
   }
   async createDailyReportDeliveryEntry(entry: InsertDailyReportDeliveryEntry): Promise<DailyReportDeliveryEntry> {
@@ -711,20 +711,20 @@ export class DatabaseStorage implements IStorage {
     return record;
   }
   async deleteDailyReportDeliveryEntry(id: number): Promise<void> {
-    await db.delete(dailyReportPhotos).where(eq(dailyReportPhotos.deliveryEntryId, id));
-    await db.delete(dailyReportDeliveryEntries).where(eq(dailyReportDeliveryEntries.id, id));
+    await db.update(dailyReportPhotos).set({ deletedAt: new Date() }).where(eq(dailyReportPhotos.deliveryEntryId, id));
+    await db.update(dailyReportDeliveryEntries).set({ deletedAt: new Date() }).where(eq(dailyReportDeliveryEntries.id, id));
   }
 
-  // New Daily Report Photos
+  // New Daily Report Photos (with soft delete)
   async getDailyReportPhotos(reportId?: number, taskEntryId?: number, deliveryEntryId?: number): Promise<DailyReportPhoto[]> {
     if (taskEntryId) {
-      return await db.select().from(dailyReportPhotos).where(eq(dailyReportPhotos.taskEntryId, taskEntryId));
+      return await db.select().from(dailyReportPhotos).where(and(eq(dailyReportPhotos.taskEntryId, taskEntryId), isNull(dailyReportPhotos.deletedAt)));
     }
     if (deliveryEntryId) {
-      return await db.select().from(dailyReportPhotos).where(eq(dailyReportPhotos.deliveryEntryId, deliveryEntryId));
+      return await db.select().from(dailyReportPhotos).where(and(eq(dailyReportPhotos.deliveryEntryId, deliveryEntryId), isNull(dailyReportPhotos.deletedAt)));
     }
     if (reportId) {
-      return await db.select().from(dailyReportPhotos).where(eq(dailyReportPhotos.reportId, reportId));
+      return await db.select().from(dailyReportPhotos).where(and(eq(dailyReportPhotos.reportId, reportId), isNull(dailyReportPhotos.deletedAt)));
     }
     return [];
   }
@@ -733,16 +733,16 @@ export class DatabaseStorage implements IStorage {
     return record;
   }
   async deleteDailyReportPhoto(id: number): Promise<void> {
-    await db.delete(dailyReportPhotos).where(eq(dailyReportPhotos.id, id));
+    await db.update(dailyReportPhotos).set({ deletedAt: new Date() }).where(eq(dailyReportPhotos.id, id));
   }
 
-  // Snapshot validation helpers
+  // Snapshot validation helpers (with soft delete filtering)
   async getLatestDailyReportForProject(projectId: number): Promise<DailyReport | undefined> {
     // Get the latest report by reportDate, then by updatedAt as tie-breaker
     const [report] = await db
       .select()
       .from(dailyReports)
-      .where(eq(dailyReports.projectId, projectId))
+      .where(and(eq(dailyReports.projectId, projectId), isNull(dailyReports.deletedAt)))
       .orderBy(desc(dailyReports.reportDate), desc(dailyReports.updatedAt))
       .limit(1);
     return report;
@@ -754,7 +754,7 @@ export class DatabaseStorage implements IStorage {
     currentReportId: number, 
     currentReportDate: Date
   ): Promise<{ prevSnapshot: number; nextSnapshot: number }> {
-    // Get all reports for this project containing this task, ordered by date
+    // Get all reports for this project containing this task, ordered by date (excluding soft-deleted)
     const reportsWithTask = await db
       .select({
         reportId: dailyReports.id,
@@ -767,7 +767,9 @@ export class DatabaseStorage implements IStorage {
       .where(
         and(
           eq(dailyReports.projectId, projectId),
-          eq(dailyReportTaskEntries.taskId, taskId)
+          eq(dailyReportTaskEntries.taskId, taskId),
+          isNull(dailyReports.deletedAt),
+          isNull(dailyReportTaskEntries.deletedAt)
         )
       )
       .orderBy(dailyReports.reportDate, dailyReports.updatedAt);
