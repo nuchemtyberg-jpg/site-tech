@@ -128,3 +128,13 @@ Photos and documents are now stored in completely separate database tables:
   - Files: `GET /api/projects/:projectId/files`, `POST /api/projects/:projectId/files`, `DELETE /api/files/:id`
 - **Hooks**: `client/src/hooks/use-photos.ts` provides `useProjectPhotos`, `useCreatePhoto`, `useDeletePhoto`
 - **Benefits**: Complete separation ensures photos and documents don't interfere with each other
+
+### Default Photo Albums (January 2026)
+All projects automatically receive two default photo albums:
+- **General**: For photos uploaded directly through the Photos tab
+- **Daily Report Photos**: For photos uploaded through the Daily Reports tool (one per project)
+- **Auto-Creation**: When a new project is created, both albums are automatically created via `ensureDefaultAlbums()`
+- **Routing**:
+  - Photos uploaded via Photos tab → assigned to "General" album (via `getOrCreateGeneralAlbum`)
+  - Photos uploaded via Daily Reports → assigned to "Daily Report Photos" album (via `getOrCreateDailyReportAlbum`)
+- **Storage Methods**: `getOrCreateGeneralAlbum()`, `getOrCreateDailyReportAlbum()`, `ensureDefaultAlbums()`
