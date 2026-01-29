@@ -156,7 +156,8 @@ SiteTech is a comprehensive web-based sitework management platform designed for 
 
 ### 5. Document Management
 - **Folder Structure**: Office/ and Field/ with subfolders (Takeoffs, Proposals, Drawings, etc.)
-- **Upload**: Uppy-powered drag-and-drop file upload
+- **Upload**: Native file uploader with drag-and-drop and folder upload support (preserves folder hierarchy)
+- **Move Feature**: Hierarchical folder picker with breadcrumb navigation, cycle prevention
 - **PDF Viewer**: Annotation tools (pen, highlighter, shapes, text, eraser)
 - **Export**: Save annotated PDFs
 
@@ -324,6 +325,8 @@ Folders & Albums:
 GET    /api/projects/:id/folders - List folders
 POST   /api/projects/:id/folders - Create folder
 DELETE /api/folders/:id          - Delete folder
+GET    /api/projects/:id/folders/children - Get child folders (for hierarchical picker)
+GET    /api/folders/:id/path     - Get folder breadcrumb path
 GET    /api/projects/:id/albums  - List albums
 POST   /api/projects/:id/albums  - Create album
 DELETE /api/albums/:id           - Delete album
@@ -440,6 +443,24 @@ Protected Routes:
 ---
 
 ## Changelog
+
+### January 29, 2026
+- **Hierarchical Folder Picker for Move Feature**: Replaced flat folder list in move dialog with intuitive drill-down navigation
+  - Users can now navigate into subfolders to select destination
+  - Breadcrumb navigation shows current path (Root > Folder > Subfolder)
+  - Back button for easy return to parent folder
+  - Folders with children display navigation arrow indicator
+  - Cycle prevention: Cannot move folder into itself or descendants
+  - "Move Here" button disabled with "Cannot move here" text for invalid destinations
+  - No-op detection: Shows message if items already in target folder
+- **New API Endpoints**:
+  - `GET /api/projects/:projectId/folders/children?parentId=X` - Returns child folders
+  - `GET /api/folders/:id/path` - Returns breadcrumb path for folder
+- **Storage Layer Updates**:
+  - Added `getChildFolders(projectId, parentId)` method
+  - Added `getFolder(id)` method  
+  - Added `getFolderPath(id)` method for breadcrumb generation
+- **Folder Upload Bug Fix**: Fixed critical bug where `useCreateFolder` returned Response object instead of parsed JSON, causing folder hierarchy to flatten during folder uploads
 
 ### January 28, 2026 (Late Night)
 - **Router-Safe Tab URLs**: Implemented URL-synced tabs on project details page using wouter's `useSearch` and `navigate` hooks instead of direct window.history manipulation
