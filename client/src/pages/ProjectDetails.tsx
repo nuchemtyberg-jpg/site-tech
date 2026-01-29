@@ -3159,25 +3159,62 @@ export default function ProjectDetails() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Move Files Dialog */}
+      {/* Move Files/Folders Dialog */}
       <Dialog open={moveDialogOpen} onOpenChange={setMoveDialogOpen}>
         <DialogContent className="bg-white dark:bg-zinc-900 sm:max-w-md">
           <DialogHeader>
-            <DialogTitle className="text-black dark:text-white">Move {selectedFiles.size} File{selectedFiles.size !== 1 ? 's' : ''}</DialogTitle>
+            <DialogTitle className="text-black dark:text-white">
+              Move {selectedFiles.size + selectedFolders.size} Item{selectedFiles.size + selectedFolders.size !== 1 ? 's' : ''}
+              {selectedFolders.size > 0 && ` (${selectedFolders.size} folder${selectedFolders.size !== 1 ? 's' : ''})`}
+            </DialogTitle>
             <DialogDescription>
-              Select a destination folder for the selected files.
+              Select a destination folder for the selected items.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-2 max-h-64 overflow-y-auto">
             <button
-              onClick={() => {
-                batchMoveFilesMutation.mutate({ ids: Array.from(selectedFiles), folderId: null });
+              disabled={batchMoveFilesMutation.isPending || updateFolderMutation.isPending}
+              onClick={async () => {
+                const failedFolderNames: string[] = [];
+                
+                // Move files to root
+                if (selectedFiles.size > 0) {
+                  try {
+                    await batchMoveFilesMutation.mutateAsync({ ids: Array.from(selectedFiles), folderId: null });
+                  } catch (error) {
+                    toast({ title: "Error", description: "Failed to move some files", variant: "destructive" });
+                  }
+                }
+                // Move folders to root
+                const failedFolderIds: Set<number> = new Set();
+                for (const folderId of Array.from(selectedFolders)) {
+                  try {
+                    await updateFolderMutation.mutateAsync({ id: folderId, parentId: null });
+                  } catch (error) {
+                    failedFolderIds.add(folderId);
+                    const folder = folders?.find(f => f.id === folderId);
+                    failedFolderNames.push(folder?.name || String(folderId));
+                  }
+                }
+                
+                if (failedFolderNames.length > 0) {
+                  toast({ 
+                    title: "Some folders could not be moved", 
+                    description: `Failed: ${failedFolderNames.join(', ')}`,
+                    variant: "destructive"
+                  });
+                  setSelectedFolders(failedFolderIds);
+                } else {
+                  setSelectedFolders(new Set());
+                }
                 setSelectedFiles(new Set());
-                setIsFileSelectMode(false);
+                if (failedFolderIds.size === 0) {
+                  setIsFileSelectMode(false);
+                }
                 setMoveDialogOpen(false);
               }}
               className={cn(
-                "w-full flex items-center gap-2 p-3 rounded-lg text-left hover:bg-muted transition-colors",
+                "w-full flex items-center gap-2 p-3 rounded-lg text-left hover:bg-muted transition-colors disabled:opacity-50",
                 currentFolderId === null && "bg-muted"
               )}
               data-testid="move-to-root"
@@ -3185,25 +3222,86 @@ export default function ProjectDetails() {
               <Home className="w-5 h-5 text-muted-foreground" />
               <span>Root (Documents)</span>
             </button>
-            {folders?.filter(f => !selectedFiles.has(f.id)).map(folder => (
-              <button
-                key={folder.id}
-                onClick={() => {
-                  batchMoveFilesMutation.mutate({ ids: Array.from(selectedFiles), folderId: folder.id });
-                  setSelectedFiles(new Set());
-                  setIsFileSelectMode(false);
-                  setMoveDialogOpen(false);
-                }}
-                className={cn(
-                  "w-full flex items-center gap-2 p-3 rounded-lg text-left hover:bg-muted transition-colors",
-                  folder.id === currentFolderId && "bg-muted"
-                )}
-                data-testid={`move-to-folder-${folder.id}`}
-              >
-                <Folder className="w-5 h-5 text-primary" />
-                <span>{folder.name}</span>
-              </button>
-            ))}
+            {(() => {
+              // Build set of folder IDs that are descendants of selected folders (to prevent cycles)
+              const getDescendantIds = (parentId: number): Set<number> => {
+                const descendants: Set<number> = new Set();
+                const stack = [parentId];
+                while (stack.length > 0) {
+                  const current = stack.pop()!;
+                  const children = folders?.filter(f => f.parentId === current) || [];
+                  for (const child of children) {
+                    descendants.add(child.id);
+                    stack.push(child.id);
+                  }
+                }
+                return descendants;
+              };
+              
+              // Get all descendants of selected folders
+              const invalidTargets = new Set<number>();
+              for (const folderId of Array.from(selectedFolders)) {
+                invalidTargets.add(folderId); // Can't move into itself
+                const descendants = getDescendantIds(folderId);
+                for (const d of Array.from(descendants)) {
+                  invalidTargets.add(d);
+                }
+              }
+              
+              return folders?.filter(f => !invalidTargets.has(f.id)).map(folder => (
+                <button
+                  key={folder.id}
+                  disabled={batchMoveFilesMutation.isPending || updateFolderMutation.isPending}
+                  onClick={async () => {
+                    const failedFolderNames: string[] = [];
+                    const failedFolderIds: Set<number> = new Set();
+                    
+                    // Move files to folder
+                    if (selectedFiles.size > 0) {
+                      try {
+                        await batchMoveFilesMutation.mutateAsync({ ids: Array.from(selectedFiles), folderId: folder.id });
+                      } catch (error) {
+                        toast({ title: "Error", description: "Failed to move some files", variant: "destructive" });
+                      }
+                    }
+                    // Move folders to this folder (update parentId)
+                    for (const folderId of Array.from(selectedFolders)) {
+                      try {
+                        await updateFolderMutation.mutateAsync({ id: folderId, parentId: folder.id });
+                      } catch (error) {
+                        failedFolderIds.add(folderId);
+                        const f = folders?.find(x => x.id === folderId);
+                        failedFolderNames.push(f?.name || String(folderId));
+                      }
+                    }
+                    
+                    if (failedFolderNames.length > 0) {
+                      toast({ 
+                        title: "Some folders could not be moved", 
+                        description: `Failed: ${failedFolderNames.join(', ')}`,
+                        variant: "destructive"
+                      });
+                      setSelectedFolders(failedFolderIds);
+                    } else {
+                      setSelectedFolders(new Set());
+                    }
+                    setSelectedFiles(new Set());
+                    if (failedFolderIds.size === 0) {
+                      setIsFileSelectMode(false);
+                    }
+                    setMoveDialogOpen(false);
+                  }}
+                  className={cn(
+                    "w-full flex items-center gap-2 p-3 rounded-lg text-left hover:bg-muted transition-colors disabled:opacity-50",
+                    folder.id === currentFolderId && "bg-muted"
+                  )}
+                  data-testid={`move-to-folder-${folder.id}`}
+                >
+                  <Folder className="w-5 h-5 text-primary" />
+                  <span>{folder.name}</span>
+                </button>
+              ));
+            })()}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setMoveDialogOpen(false)} data-testid="button-cancel-move">
