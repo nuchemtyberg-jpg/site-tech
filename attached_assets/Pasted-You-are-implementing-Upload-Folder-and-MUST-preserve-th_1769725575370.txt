@@ -1,0 +1,63 @@
+You are implementing “Upload Folder” and MUST preserve the client’s directory structure exactly.
+
+BUG:
+When uploading a folder, the app currently creates the top-level folder but then uploads all nested folders/files at the same level (flattened). This is incorrect.
+
+GOAL:
+If the user uploads a folder, reconstruct the full folder tree on the server and store files at their correct relative paths. The stored structure must match the original folder structure byte-for-byte (relative path names, nesting, and file placement).
+
+NON-NEGOTIABLE REQUIREMENTS:
+1) Preserve relative paths:
+   - For each file, compute its relative path from the selected root folder.
+   - Use the browser-provided path field when available (e.g., webkitRelativePath).
+   - Do NOT derive structure from file names or do any “smart” guessing.
+2) Create folders from paths before saving files:
+   - Ensure every directory in the relative path exists in storage (DB + object store key prefix, or filesystem mkdirp).
+3) Store files using a canonical key:
+   - storage_key = <project_or_user_scope>/<upload_session_id>/<root_folder_name>/<relative_path>
+   - Never store only “basename”; always store full relative path.
+4) UI must display a real tree:
+   - The library view must build hierarchy by splitting stored relative paths on “/”.
+   - No flattening. Ever.
+5) Validation tests (must implement and pass):
+   - Upload a folder with at least 3 nested levels and duplicate filenames in different subfolders (e.g., /a/report.pdf and /b/report.pdf). Both must exist separately and render in correct subfolders.
+   - Upload mixed content: empty folders (if browser provides them), images, PDFs, and JSON. Tree must match.
+   - Re-upload same folder name: do not collide; scope by upload_session_id or unique root id.
+6) Error handling:
+   - If relative path is missing (rare cases), fail the folder upload with a clear message: “Folder uploads require relative paths; your browser did not provide them.”
+7) Keep existing libraries:
+   - Use a battle-tested multipart parser on server (e.g., multer/busboy for Node) and do NOT reinvent upload parsing.
+   - Do NOT flatten arrays of files. Maintain each file’s relativePath.
+
+IMPLEMENTATION SPEC (Web):
+Client:
+- Use <input type="file" webkitdirectory directory multiple>
+- When building FormData, include each file AND include its relative path:
+  - Prefer file.webkitRelativePath
+  - Also send root folder name separately.
+- Send metadata array: [{ originalName, size, type, relativePath }]
+
+Server:
+- Parse multipart upload.
+- For each received file:
+  - Read relativePath from metadata or from field name mapping.
+  - Normalize path (convert backslashes to forward slashes, strip leading “/”, reject “..” traversal).
+  - Create directories as needed (logical in DB or physical mkdirp).
+  - Store file at storage_key that includes full relative path.
+- Persist records:
+  - root_folder_id, parent_folder_id, name, isFolder
+  - file records must reference folder node derived from relativePath.
+
+OUTPUT:
+- Provide the exact code changes needed in the current codebase:
+  1) client folder input + FormData construction that carries relative paths
+  2) server endpoint parsing that reads relative paths correctly
+  3) storage key strategy that includes relative path
+  4) tree reconstruction logic for UI
+  5) the automated tests described above
+
+DO NOT:
+- Do not flatten paths.
+- Do not store nested items at the root.
+- Do not “simulate” folders; actually model them via path segments.
+- Do not skip tests.

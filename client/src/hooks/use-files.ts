@@ -50,8 +50,9 @@ export function useDeleteFile(projectId: number) {
 
 export function useCreateFolder(projectId: number) {
   return useMutation({
-    mutationFn: async (data: { name: string; parentId?: number | null }) => {
-      return apiRequest("POST", `/api/projects/${projectId}/folders`, data);
+    mutationFn: async (data: { name: string; parentId?: number | null }): Promise<Folder> => {
+      const res = await apiRequest("POST", `/api/projects/${projectId}/folders`, data);
+      return res.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/projects', projectId, 'folders'] });
