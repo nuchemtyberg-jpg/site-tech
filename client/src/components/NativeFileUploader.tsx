@@ -19,6 +19,7 @@ interface UploadedFile {
   file: File;
   objectPath?: string;
   takenAt?: Date;
+  relativePath?: string;
   status: 'pending' | 'uploading' | 'success' | 'error';
   progress: number;
   error?: string;
@@ -28,7 +29,8 @@ interface NativeFileUploaderProps {
   maxNumberOfFiles?: number;
   maxFileSize?: number;
   accept?: string;
-  onUploadComplete?: (files: Array<{ name: string; objectPath: string; size: number; type: string; takenAt?: Date }>) => void;
+  allowFolders?: boolean;
+  onUploadComplete?: (files: Array<{ name: string; objectPath: string; size: number; type: string; takenAt?: Date; relativePath?: string }>) => void;
   buttonClassName?: string;
   children: ReactNode;
 }
@@ -100,6 +102,7 @@ export function NativeFileUploader({
   maxNumberOfFiles = 1,
   maxFileSize = 10485760,
   accept,
+  allowFolders = false,
   onUploadComplete,
   buttonClassName,
   children,
@@ -108,6 +111,7 @@ export function NativeFileUploader({
   const [files, setFiles] = useState<UploadedFile[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const folderInputRef = useRef<HTMLInputElement>(null);
 
   const formatFileSize = (bytes: number) => {
     if (bytes === 0) return '0 Bytes';
@@ -127,6 +131,12 @@ export function NativeFileUploader({
     const newFiles: UploadedFile[] = await Promise.all(
       validFiles.map(async file => {
         const takenAt = await extractExifDate(file);
+        // Extract relative path from webkitRelativePath (folder path without filename)
+        const webkitPath = (file as any).webkitRelativePath || '';
+        const pathParts = webkitPath.split('/');
+        // Remove filename from path, keep folder structure
+        const relativePath = pathParts.length > 1 ? pathParts.slice(0, -1).join('/') : '';
+        
         return {
           id: Math.random().toString(36).substring(7),
           name: file.name,
@@ -134,6 +144,7 @@ export function NativeFileUploader({
           type: file.type || 'application/octet-stream',
           file,
           takenAt,
+          relativePath: relativePath || undefined,
           status: 'pending' as const,
           progress: 0,
         };
@@ -145,6 +156,9 @@ export function NativeFileUploader({
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
+    if (folderInputRef.current) {
+      folderInputRef.current.value = '';
+    }
   };
 
   const removeFile = (id: string) => {
@@ -155,7 +169,7 @@ export function NativeFileUploader({
     if (files.length === 0) return;
 
     setIsUploading(true);
-    const uploadedFiles: Array<{ name: string; objectPath: string; size: number; type: string; takenAt?: Date }> = [];
+    const uploadedFiles: Array<{ name: string; objectPath: string; size: number; type: string; takenAt?: Date; relativePath?: string }> = [];
 
     for (const uploadFile of files) {
       if (uploadFile.status === 'success') {
@@ -166,6 +180,7 @@ export function NativeFileUploader({
             size: uploadFile.size,
             type: uploadFile.type,
             takenAt: uploadFile.takenAt,
+            relativePath: uploadFile.relativePath,
           });
         }
         continue;
@@ -218,6 +233,7 @@ export function NativeFileUploader({
           size: uploadFile.size,
           type: uploadFile.type,
           takenAt: uploadFile.takenAt,
+          relativePath: uploadFile.relativePath,
         });
       } catch (error) {
         setFiles(prev => prev.map(f => 
@@ -265,26 +281,50 @@ export function NativeFileUploader({
           </DialogHeader>
 
           <div className="space-y-4">
-            <div 
-              className="border-2 border-dashed rounded-lg p-6 text-center cursor-pointer hover-elevate transition-colors"
-              onClick={() => fileInputRef.current?.click()}
-              data-testid="upload-drop-zone"
-            >
-              <input
-                ref={fileInputRef}
-                type="file"
-                multiple={maxNumberOfFiles > 1}
-                accept={accept}
-                onChange={handleFileSelect}
-                className="hidden"
-                data-testid="input-file-native"
-              />
-              <p className="text-sm text-muted-foreground">
-                Click to select files
-              </p>
-              <p className="text-xs text-muted-foreground mt-1">
-                Max {maxNumberOfFiles} file{maxNumberOfFiles > 1 ? 's' : ''}, up to {formatFileSize(maxFileSize)} each
-              </p>
+            <div className="flex gap-2">
+              <div 
+                className="flex-1 border-2 border-dashed rounded-lg p-6 text-center cursor-pointer hover-elevate transition-colors"
+                onClick={() => fileInputRef.current?.click()}
+                data-testid="upload-drop-zone"
+              >
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  multiple={maxNumberOfFiles > 1}
+                  accept={accept}
+                  onChange={handleFileSelect}
+                  className="hidden"
+                  data-testid="input-file-native"
+                />
+                <p className="text-sm text-muted-foreground">
+                  Click to select files
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Max {maxNumberOfFiles} file{maxNumberOfFiles > 1 ? 's' : ''}, up to {formatFileSize(maxFileSize)} each
+                </p>
+              </div>
+              {allowFolders && (
+                <div 
+                  className="flex-1 border-2 border-dashed rounded-lg p-6 text-center cursor-pointer hover-elevate transition-colors"
+                  onClick={() => folderInputRef.current?.click()}
+                  data-testid="upload-folder-zone"
+                >
+                  <input
+                    ref={folderInputRef}
+                    type="file"
+                    {...{ webkitdirectory: "", directory: "" } as any}
+                    onChange={handleFileSelect}
+                    className="hidden"
+                    data-testid="input-folder-native"
+                  />
+                  <p className="text-sm text-muted-foreground">
+                    Click to select folder
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Preserves folder structure
+                  </p>
+                </div>
+              )}
             </div>
 
             {files.length > 0 && (

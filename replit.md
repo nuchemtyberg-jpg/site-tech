@@ -40,7 +40,7 @@ Key entities defined in `shared/schema.ts` include: Projects, Tasks, TaskStatusH
 ### Specific Features
 - **Address Autocomplete**: OpenStreetMap's Nominatim API with debounced search.
 - **PDF Viewer**: iframe and canvas overlay for viewing and annotating PDFs. Annotations are stored locally and exportable.
-- **Document Management**: Grid and list views, with automatic folder generation for new projects. Supports tagging, search, starring, multi-select batch operations (move, delete), drag-and-drop uploads with folder structure preservation, and direct file downloads.
+- **Document Management**: Grid and list views, with automatic folder generation for new projects. Supports tagging, search, starring, multi-select batch operations (move files and folders, delete), drag-and-drop uploads with folder structure preservation, button-upload folder selection with structure preservation, and direct file downloads.
 - **Photo Management**: Organizes photos into albums ("General" and "Daily Report Photos" by default), offers variable tile sizes, multi-select for bulk actions, and date-based grouping. Photos are sorted by EXIF `takenAt` date, with a fallback to `createdAt`. Includes client-side EXIF extraction, lazy loading, and a professional lightbox gallery.
 - **Daily Report Weather Integration**: Open-Meteo geocoding and weather APIs for local weather conditions.
 - **Signature Capture**: Freehand or typed signatures for completing daily reports.

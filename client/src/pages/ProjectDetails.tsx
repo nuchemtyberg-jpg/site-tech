@@ -998,23 +998,166 @@ export default function ProjectDetails() {
     });
   };
 
-  const handleUploadComplete = async (uploadedFiles: Array<{ name: string; objectPath: string; size: number; type: string }>) => {
+  const handleUploadComplete = async (uploadedFiles: Array<{ name: string; objectPath: string; size: number; type: string; relativePath?: string }>) => {
     let successCount = 0;
+    const skippedFiles: string[] = [];
     
+    // Collect all unique folder paths from uploaded files
+    const allFolderPaths: string[] = [];
     for (const file of uploadedFiles) {
+      if (file.relativePath) {
+        // Add all parent paths as well
+        const pathParts = file.relativePath.split('/');
+        for (let i = 1; i <= pathParts.length; i++) {
+          const partialPath = pathParts.slice(0, i).join('/');
+          if (!allFolderPaths.includes(partialPath)) {
+            allFolderPaths.push(partialPath);
+          }
+        }
+      }
+    }
+    
+    // Sort folders by depth to create parent folders first
+    const sortedFolderPaths = allFolderPaths.sort((a, b) => 
+      a.split('/').length - b.split('/').length
+    );
+    
+    // Create folders and map paths to IDs
+    const folderPathToId: Map<string, number> = new Map();
+    const failedFolderPaths: Set<string> = new Set();
+    
+    for (const folderPath of sortedFolderPaths) {
+      const pathParts = folderPath.split('/');
+      const folderName = pathParts[pathParts.length - 1];
+      const parentPath = pathParts.slice(0, -1).join('/');
+      
+      // If parent folder failed, this child folder also fails
+      if (parentPath && failedFolderPaths.has(parentPath)) {
+        failedFolderPaths.add(folderPath);
+        continue;
+      }
+      
+      // Determine parent folder ID
+      let parentFolderId = currentFolderIdRef.current;
+      if (parentPath && folderPathToId.has(parentPath)) {
+        parentFolderId = folderPathToId.get(parentPath)!;
+      }
+      
+      let resolved = false;
       try {
+        // Create folder using mutation
+        const newFolder = await createFolderMutation.mutateAsync({
+          name: folderName,
+          parentId: parentFolderId,
+        });
+        folderPathToId.set(folderPath, newFolder.id);
+        resolved = true;
+      } catch (error) {
+        // Folder might already exist - try to find it
+        try {
+          const freshFoldersRes = await fetch(`/api/projects/${projectId}/folders`);
+          if (freshFoldersRes.ok) {
+            const freshFolders = await freshFoldersRes.json();
+            const existingFolder = freshFolders.find((f: { name: string; parentId: number | null }) => 
+              f.name === folderName && f.parentId === parentFolderId
+            );
+            if (existingFolder) {
+              folderPathToId.set(folderPath, existingFolder.id);
+              resolved = true;
+            }
+          }
+        } catch {
+          // Fallback failed
+        }
+      }
+      
+      if (!resolved) {
+        failedFolderPaths.add(folderPath);
+      }
+    }
+    
+    // Refresh folders after creation
+    if (sortedFolderPaths.length > 0) {
+      await queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "folders"] });
+    }
+    
+    // Validate all required folder paths are resolved before proceeding with file saves
+    const requiredPaths = new Set<string>();
+    for (const file of uploadedFiles) {
+      if (file.relativePath) {
+        requiredPaths.add(file.relativePath);
+      }
+    }
+    
+    const unresolvedPaths: string[] = [];
+    for (const path of requiredPaths) {
+      if (!folderPathToId.has(path) && !failedFolderPaths.has(path)) {
+        unresolvedPaths.push(path);
+        failedFolderPaths.add(path);
+      }
+    }
+    
+    if (failedFolderPaths.size > 0) {
+      const failedList = Array.from(failedFolderPaths).slice(0, 3);
+      toast({ 
+        title: "Folder structure incomplete", 
+        description: `Could not create: ${failedList.join(', ')}${failedFolderPaths.size > 3 ? '...' : ''}`,
+        variant: "destructive"
+      });
+    }
+    
+    // Save file metadata with correct folder IDs - skip files in failed folders
+    for (const file of uploadedFiles) {
+      // Check if this file's folder failed to be created
+      if (file.relativePath) {
+        if (failedFolderPaths.has(file.relativePath) || !folderPathToId.has(file.relativePath)) {
+          skippedFiles.push(`${file.relativePath}/${file.name}`);
+          continue;
+        }
+        // Also check parent paths
+        const pathParts = file.relativePath.split('/');
+        let failedPath = false;
+        for (let i = 1; i <= pathParts.length; i++) {
+          const checkPath = pathParts.slice(0, i).join('/');
+          if (failedFolderPaths.has(checkPath)) {
+            failedPath = true;
+            break;
+          }
+        }
+        if (failedPath) {
+          skippedFiles.push(`${file.relativePath}/${file.name}`);
+          continue;
+        }
+      }
+      
+      try {
+        // Determine target folder ID based on relativePath
+        let targetFolderId = currentFolderIdRef.current;
+        if (file.relativePath && folderPathToId.has(file.relativePath)) {
+          targetFolderId = folderPathToId.get(file.relativePath)!;
+        }
+        
         await createFileMutation.mutateAsync({
           name: file.name,
           objectPath: file.objectPath,
           contentType: file.type,
           size: file.size,
-          folderId: currentFolderIdRef.current,
+          folderId: targetFolderId,
         });
         successCount++;
       } catch (err) {
         console.error("Failed to save file metadata:", err);
         toast({ title: "Error", description: `Failed to save ${file.name}`, variant: "destructive" });
       }
+    }
+    
+    // Show appropriate toast messages
+    if (skippedFiles.length > 0) {
+      toast({ 
+        title: "Some files skipped", 
+        description: `${skippedFiles.length} file(s) were not saved because their folders couldn't be created.`,
+        variant: "destructive"
+      });
     }
     
     if (successCount > 0) {
@@ -1883,6 +2026,7 @@ export default function ProjectDetails() {
                   <NativeFileUploader
                     maxNumberOfFiles={50}
                     maxFileSize={52428800}
+                    allowFolders={true}
                     buttonClassName="w-full sm:w-auto"
                     onUploadComplete={handleUploadComplete}
                   >
