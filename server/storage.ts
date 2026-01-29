@@ -127,6 +127,9 @@ export interface IStorage {
 
   // Folders & Files
   getFolders(projectId: number): Promise<Folder[]>;
+  getFolder(id: number): Promise<Folder | undefined>;
+  getChildFolders(projectId: number, parentId: number | null): Promise<Folder[]>;
+  getFolderPath(folderId: number): Promise<Array<{ id: number; name: string }>>;
   createFolder(folder: InsertFolder): Promise<Folder>;
   updateFolder(id: number, folder: Partial<InsertFolder>): Promise<Folder>;
   deleteFolder(id: number): Promise<void>;
@@ -587,6 +590,33 @@ export class DatabaseStorage implements IStorage {
   // Folders (with soft delete)
   async getFolders(projectId: number): Promise<Folder[]> {
     return await db.select().from(folders).where(and(eq(folders.projectId, projectId), isNull(folders.deletedAt)));
+  }
+  async getFolder(id: number): Promise<Folder | undefined> {
+    const [folder] = await db.select().from(folders).where(and(eq(folders.id, id), isNull(folders.deletedAt)));
+    return folder;
+  }
+  async getChildFolders(projectId: number, parentId: number | null): Promise<Folder[]> {
+    if (parentId === null) {
+      return await db.select().from(folders).where(
+        and(eq(folders.projectId, projectId), isNull(folders.parentId), isNull(folders.deletedAt))
+      );
+    }
+    return await db.select().from(folders).where(
+      and(eq(folders.projectId, projectId), eq(folders.parentId, parentId), isNull(folders.deletedAt))
+    );
+  }
+  async getFolderPath(folderId: number): Promise<Array<{ id: number; name: string }>> {
+    const path: Array<{ id: number; name: string }> = [];
+    let currentId: number | null = folderId;
+    
+    while (currentId !== null) {
+      const folder = await this.getFolder(currentId);
+      if (!folder) break;
+      path.unshift({ id: folder.id, name: folder.name });
+      currentId = folder.parentId;
+    }
+    
+    return path;
   }
   async createFolder(insertFolder: InsertFolder): Promise<Folder> {
     const [folder] = await db.insert(folders).values(insertFolder).returning();

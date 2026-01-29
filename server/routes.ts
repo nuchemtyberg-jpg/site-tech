@@ -1574,6 +1574,48 @@ export async function registerRoutes(
     res.status(204).send();
   });
 
+  // Get child folders for hierarchical folder picker
+  app.get('/api/projects/:projectId/folders/children', isAuthenticated, isAuthorizedUser, async (req, res) => {
+    const projectId = Number(req.params.projectId);
+    const parentId = req.query.parentId === 'null' || req.query.parentId === undefined 
+      ? null 
+      : Number(req.query.parentId);
+    
+    const childFolders = await storage.getChildFolders(projectId, parentId);
+    
+    // Add hasChildren flag to each folder
+    const foldersWithChildren = await Promise.all(
+      childFolders.map(async (folder) => {
+        const children = await storage.getChildFolders(projectId, folder.id);
+        return {
+          ...folder,
+          hasChildren: children.length > 0
+        };
+      })
+    );
+    
+    // Sort alphabetically by name
+    foldersWithChildren.sort((a, b) => a.name.localeCompare(b.name));
+    
+    res.json(foldersWithChildren);
+  });
+
+  // Get folder breadcrumb path
+  app.get('/api/folders/:id/path', isAuthenticated, isAuthorizedUser, async (req, res) => {
+    const folderId = Number(req.params.id);
+    const path = await storage.getFolderPath(folderId);
+    res.json(path);
+  });
+
+  // Get single folder
+  app.get('/api/folders/:id', isAuthenticated, isAuthorizedUser, async (req, res) => {
+    const folder = await storage.getFolder(Number(req.params.id));
+    if (!folder) {
+      return res.status(404).json({ message: "Folder not found" });
+    }
+    res.json(folder);
+  });
+
   app.get(api.files.list.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
     const list = await storage.getFiles(Number(req.params.projectId));
     res.json(list);

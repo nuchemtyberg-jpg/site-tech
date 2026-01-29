@@ -1,0 +1,110 @@
+You are fixing the “Move” feature’s destination folder selector. Right now it shows ALL folders in one flat list. This is wrong.
+
+GOAL:
+The destination selector must behave like a real folder picker:
+- Preserve folder hierarchy (tree structure)
+- Allow navigation: click into a folder to view its child folders
+- Provide breadcrumbs and Back navigation
+- Allow selecting the CURRENT folder as the destination
+- Never flatten folders into one list
+
+CONTEXT:
+We already store folders/files with real hierarchy (parent_folder_id relationships OR paths). Use that to render a navigable folder picker.
+
+NON-NEGOTIABLE REQUIREMENTS:
+1) Hierarchical navigation
+   - The selector opens at a defined starting point:
+     a) Root of the library, OR
+     b) The current parent folder of the item being moved (preferred)
+   - Display ONLY the subfolders of the currently viewed folder (not all folders globally).
+   - Clicking a folder drills down into that folder and refreshes the list to show its subfolders.
+2) Breadcrumbs + Back
+   - Show breadcrumbs: Root > … > Current Folder
+   - Clicking any breadcrumb jumps to that folder.
+   - Provide a Back button (or up-arrow) to go up one level.
+3) Select destination
+   - Provide a clear “Move here” button that moves item(s) to the currently viewed folder.
+   - Also allow selecting a subfolder and pressing “Move” to move into that selected folder.
+   - If user is viewing Root, “Move here” moves to Root.
+4) Validations / constraints
+   - Prevent moving a folder into itself or any of its descendants (cycle prevention).
+   - Prevent no-op moves (moving into the same parent) with a gentle message.
+   - If moving multiple items, all validations must apply (no partial silent failures).
+5) Performance
+   - Do not fetch every folder and build a tree client-side if there are many folders.
+   - Fetch only what you need per navigation step:
+     - GET /folders?parentId=<currentFolderId> returns direct child folders.
+     - Optional: GET /folders/breadcrumbs?folderId=<currentFolderId> for breadcrumb path.
+6) Data model compatibility
+   - If backend uses parent_folder_id: use it directly.
+   - If backend uses stored relative paths: build parent-child map once server-side and expose parentId queries anyway.
+7) UX details
+   - Show folder icon + folder name.
+   - Sort folders alphabetically (or by your library sorting rules).
+   - Show an explicit Root entry at top when appropriate.
+   - Show loading state while fetching child folders.
+   - Empty state: “No subfolders here.”
+8) Accessibility
+   - Keyboard navigation: arrow keys to move selection, Enter to open folder, Esc to close modal.
+   - Proper aria labels for the modal and folder list.
+
+API CHANGES (implement exactly):
+A) List child folders:
+   GET /api/folders?parentId=<id or null>
+   Response: [{ id, name, parentId, hasChildren }]
+   - parentId=null means root
+   - hasChildren can be computed
+
+B) Breadcrumb path:
+   GET /api/folders/<id>/path
+   Response: [{ id, name }] starting at root and ending at current folder
+
+C) Move endpoint:
+   POST /api/items/move
+   Body: { itemIds: [...], destinationFolderId: <id or null> }
+   - destinationFolderId=null means root
+   - Server must enforce cycle prevention and authorization
+
+CLIENT IMPLEMENTATION (must do):
+1) Replace flat folder list with navigable picker state:
+   - currentFolderId (null for root)
+   - breadcrumbPath []
+   - selectedFolderId (optional)
+2) On modal open:
+   - set currentFolderId = current parent folder (or root)
+   - fetch child folders for currentFolderId
+   - fetch breadcrumb path for currentFolderId
+3) On folder click:
+   - currentFolderId = clickedFolderId
+   - fetch its child folders
+   - update breadcrumb path
+4) “Move here”:
+   - calls move endpoint with destinationFolderId=currentFolderId
+5) After successful move:
+   - close modal
+   - refresh file tree view so item disappears from old location and appears in new location
+
+TESTS (must implement and pass):
+1) Tree navigation test:
+   - given nested folders Root/A/B/C, opening picker at Root shows only A (not B/C)
+   - clicking A shows only B
+   - clicking B shows only C
+2) Breadcrumb test:
+   - at folder C, breadcrumbs show Root > A > B > C and each is clickable
+3) Cycle prevention:
+   - moving folder A into A/B must be blocked with a clear error
+4) No-op move:
+   - moving an item into its current parent should show “Already in this folder”
+5) Large library performance:
+   - ensure picker does not fetch all folders at once (verify calls are per parentId)
+
+DELIVERABLE:
+Provide the exact code changes in the existing codebase:
+- API routes/controllers for folder children + path + move validation
+- Frontend modal component state machine and UI
+- Tests for the above scenarios
+
+DO NOT:
+- Do not render all folders in one list.
+- Do not build the full tree by fetching everything up front.
+- Do not allow invalid moves that create cycles.
