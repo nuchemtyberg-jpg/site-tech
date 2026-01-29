@@ -402,6 +402,13 @@ export const photos = pgTable("photos", {
   contentType: text("content_type"),
   size: integer("size"),
   takenAt: timestamp("taken_at"),  // Photo timestamp from EXIF metadata
+  displayDate: timestamp("display_date").notNull().defaultNow(), // Normalized date for sorting (takenAt or createdAt)
+  thumbnailPath: text("thumbnail_path"), // Path to thumbnail (150px)
+  mediumPath: text("medium_path"), // Path to medium size (600px)
+  blurHash: text("blur_hash"), // BlurHash for LQIP placeholder
+  width: integer("width"), // Original image width
+  height: integer("height"), // Original image height
+  processingStatus: text("processing_status").default("pending"), // pending, processing, completed, failed
   createdAt: timestamp("created_at").defaultNow(),
   deletedAt: timestamp("deleted_at"), // Soft delete support
 });
@@ -409,6 +416,14 @@ export const photos = pgTable("photos", {
 export const insertPhotoSchema = createInsertSchema(photos).omit({ id: true, createdAt: true, deletedAt: true });
 export type Photo = typeof photos.$inferSelect;
 export type InsertPhoto = z.infer<typeof insertPhotoSchema>;
+
+// Paginated photos response type
+export type PaginatedPhotosResponse = {
+  photos: Photo[];
+  nextCursor: string | null;
+  totalCount: number;
+  hasMore: boolean;
+};
 
 // Files - Documents only (separate from photos)
 // Note: albumId and takenAt are deprecated - photos now stored in photos table

@@ -15,7 +15,7 @@ import {
   type User, type UpsertUser, type AuthorizedUser
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, and, isNull } from "drizzle-orm";
+import { eq, desc, and, isNull, sql, lt } from "drizzle-orm";
 
 export interface IStorage {
   // Auth
@@ -155,9 +155,12 @@ export interface IStorage {
 
   // Photos (separate from files/documents)
   getPhotos(projectId: number): Promise<Photo[]>;
+  getPhotosPaginated(projectId: number, options: { cursor?: string; limit?: number; albumId?: number | null }): Promise<{ photos: Photo[]; nextCursor: string | null; totalCount: number; hasMore: boolean }>;
   getPhoto(id: number): Promise<Photo | undefined>;
   createPhoto(photo: InsertPhoto): Promise<Photo>;
+  updatePhoto(id: number, photo: Partial<InsertPhoto>): Promise<Photo>;
   deletePhoto(id: number): Promise<void>;
+  getPhotosCount(projectId: number, albumId?: number | null): Promise<number>;
 
   // New Daily Report Task Entries
   getDailyReportTaskEntries(reportId: number): Promise<DailyReportTaskEntry[]>;
@@ -708,18 +711,76 @@ export class DatabaseStorage implements IStorage {
 
   // Photos (separate from files/documents)
   async getPhotos(projectId: number): Promise<Photo[]> {
-    return await db.select().from(photos).where(and(eq(photos.projectId, projectId), isNull(photos.deletedAt)));
+    return await db.select().from(photos)
+      .where(and(eq(photos.projectId, projectId), isNull(photos.deletedAt)))
+      .orderBy(desc(photos.displayDate));
   }
+
+  async getPhotosPaginated(projectId: number, options: { cursor?: string; limit?: number; albumId?: number | null }): Promise<{ photos: Photo[]; nextCursor: string | null; totalCount: number; hasMore: boolean }> {
+    const limit = options.limit || 50;
+    const conditions = [eq(photos.projectId, projectId), isNull(photos.deletedAt)];
+    
+    if (options.albumId !== undefined && options.albumId !== null) {
+      conditions.push(eq(photos.albumId, options.albumId));
+    }
+
+    if (options.cursor) {
+      const cursorDate = new Date(options.cursor);
+      conditions.push(sql`${photos.displayDate} < ${cursorDate}`);
+    }
+
+    const results = await db.select().from(photos)
+      .where(and(...conditions))
+      .orderBy(desc(photos.displayDate))
+      .limit(limit + 1);
+
+    const hasMore = results.length > limit;
+    const photosResult = hasMore ? results.slice(0, limit) : results;
+    const nextCursor = hasMore && photosResult.length > 0 
+      ? photosResult[photosResult.length - 1].displayDate?.toISOString() || null
+      : null;
+
+    const countConditions = [eq(photos.projectId, projectId), isNull(photos.deletedAt)];
+    if (options.albumId !== undefined && options.albumId !== null) {
+      countConditions.push(eq(photos.albumId, options.albumId));
+    }
+    const [{ count }] = await db.select({ count: sql<number>`count(*)` }).from(photos).where(and(...countConditions));
+
+    return {
+      photos: photosResult,
+      nextCursor,
+      totalCount: Number(count),
+      hasMore,
+    };
+  }
+
   async getPhoto(id: number): Promise<Photo | undefined> {
     const [photo] = await db.select().from(photos).where(and(eq(photos.id, id), isNull(photos.deletedAt)));
     return photo;
   }
+
   async createPhoto(photo: InsertPhoto): Promise<Photo> {
-    const [record] = await db.insert(photos).values(photo).returning();
+    const displayDate = photo.takenAt || new Date();
+    const [record] = await db.insert(photos).values({ ...photo, displayDate }).returning();
     return record;
   }
+
+  async updatePhoto(id: number, updates: Partial<InsertPhoto>): Promise<Photo> {
+    const [record] = await db.update(photos).set(updates).where(eq(photos.id, id)).returning();
+    return record;
+  }
+
   async deletePhoto(id: number): Promise<void> {
     await db.update(photos).set({ deletedAt: new Date() }).where(eq(photos.id, id));
+  }
+
+  async getPhotosCount(projectId: number, albumId?: number | null): Promise<number> {
+    const conditions = [eq(photos.projectId, projectId), isNull(photos.deletedAt)];
+    if (albumId !== undefined && albumId !== null) {
+      conditions.push(eq(photos.albumId, albumId));
+    }
+    const [{ count }] = await db.select({ count: sql<number>`count(*)` }).from(photos).where(and(...conditions));
+    return Number(count);
   }
 
   // New Daily Report Task Entries (with soft delete)

@@ -9,6 +9,33 @@ import type { User } from "@shared/schema";
 import { insertAuthorizedUserSchema } from "@shared/schema";
 import { isAdmin, isAuthorizedUser } from "./middleware/auth";
 import { sendInviteEmail } from "./services/email";
+import { processImage } from "./services/imageProcessor";
+
+async function processPhotoInBackground(photoId: number, objectPath: string) {
+  try {
+    await storage.updatePhoto(photoId, { processingStatus: 'processing' } as any);
+    
+    const result = await processImage(objectPath);
+    
+    if (result) {
+      await storage.updatePhoto(photoId, {
+        thumbnailPath: result.thumbnailPath,
+        mediumPath: result.mediumPath,
+        blurHash: result.blurHash,
+        width: result.width,
+        height: result.height,
+        processingStatus: 'completed',
+      } as any);
+    } else {
+      await storage.updatePhoto(photoId, { processingStatus: 'failed' } as any);
+    }
+  } catch (error) {
+    console.error("Background photo processing error:", error);
+    try {
+      await storage.updatePhoto(photoId, { processingStatus: 'failed' } as any);
+    } catch {}
+  }
+}
 
 // Weather fetch helper using Open-Meteo API
 async function fetchWeatherData(address: string, city: string, state: string): Promise<{
@@ -1716,20 +1743,37 @@ export async function registerRoutes(
 
   // Photos (separate from documents/files)
   app.get('/api/projects/:projectId/photos', isAuthenticated, isAuthorizedUser, async (req, res) => {
-    const photos = await storage.getPhotos(Number(req.params.projectId));
-    res.json(photos);
+    const { cursor, limit, albumId } = req.query;
+    
+    if (cursor || limit) {
+      const result = await storage.getPhotosPaginated(Number(req.params.projectId), {
+        cursor: cursor as string | undefined,
+        limit: limit ? Number(limit) : 50,
+        albumId: albumId ? Number(albumId) : undefined,
+      });
+      res.json(result);
+    } else {
+      const photos = await storage.getPhotos(Number(req.params.projectId));
+      res.json(photos);
+    }
   });
 
   app.post('/api/projects/:projectId/photos', isAuthenticated, isAuthorizedUser, async (req, res) => {
     try {
       const projectId = Number(req.params.projectId);
       const generalAlbum = await storage.getOrCreateGeneralAlbum(projectId);
+      const takenAt = req.body.takenAt ? new Date(req.body.takenAt) : null;
       const photo = await storage.createPhoto({
         ...req.body,
         projectId,
         albumId: req.body.albumId || generalAlbum.id,
-        takenAt: req.body.takenAt ? new Date(req.body.takenAt) : null,
+        takenAt,
+        displayDate: takenAt || new Date(),
+        processingStatus: 'pending',
       });
+      
+      processPhotoInBackground(photo.id, photo.objectPath);
+      
       res.status(201).json(photo);
     } catch (err) {
       console.error("Error creating photo:", err);
@@ -1737,9 +1781,33 @@ export async function registerRoutes(
     }
   });
 
+  app.patch('/api/photos/:id', isAuthenticated, isAuthorizedUser, async (req, res) => {
+    try {
+      const photo = await storage.updatePhoto(Number(req.params.id), req.body);
+      res.json(photo);
+    } catch (err) {
+      console.error("Error updating photo:", err);
+      throw err;
+    }
+  });
+
   app.delete('/api/photos/:id', isAuthenticated, isAuthorizedUser, async (req, res) => {
     await storage.deletePhoto(Number(req.params.id));
     res.status(204).send();
+  });
+
+  app.post('/api/photos/:id/process', isAuthenticated, isAuthorizedUser, async (req, res) => {
+    try {
+      const photo = await storage.getPhoto(Number(req.params.id));
+      if (!photo) {
+        return res.status(404).json({ message: "Photo not found" });
+      }
+      processPhotoInBackground(photo.id, photo.objectPath);
+      res.json({ message: "Processing started" });
+    } catch (err) {
+      console.error("Error processing photo:", err);
+      throw err;
+    }
   });
 
   // Update file to assign to album
