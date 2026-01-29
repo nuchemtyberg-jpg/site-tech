@@ -354,6 +354,9 @@ export default function ProjectDetails() {
   const [moveDialogOpen, setMoveDialogOpen] = useState(false);
   const [fileDetailsPanel, setFileDetailsPanel] = useState<FileMetadata | null>(null);
   const [showBatchDeleteFilesConfirm, setShowBatchDeleteFilesConfirm] = useState(false);
+  const [isDragOver, setIsDragOver] = useState(false);
+  const [isUploadingDragDrop, setIsUploadingDragDrop] = useState(false);
+  const [dragDropProgress, setDragDropProgress] = useState({ current: 0, total: 0 });
   
   // Photo tool state
   const [photoTileSize, setPhotoTileSize] = useState<'small' | 'medium' | 'large'>('medium');
@@ -422,6 +425,139 @@ export default function ProjectDetails() {
 
   const isPdfFile = (contentType: string | null) => {
     return contentType === 'application/pdf';
+  };
+
+  // Handle drag and drop file upload
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(false);
+  };
+
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(false);
+
+    const droppedFiles = Array.from(e.dataTransfer.files);
+    if (droppedFiles.length === 0) return;
+
+    setIsUploadingDragDrop(true);
+    setDragDropProgress({ current: 0, total: droppedFiles.length });
+
+    const maxFileSize = 52428800; // 50MB
+    const validFiles = droppedFiles.filter(file => file.size <= maxFileSize);
+
+    if (validFiles.length < droppedFiles.length) {
+      toast({ 
+        title: "Some files skipped", 
+        description: `${droppedFiles.length - validFiles.length} file(s) exceeded the 50MB limit.`,
+        variant: "destructive"
+      });
+    }
+
+    if (validFiles.length === 0) {
+      setIsUploadingDragDrop(false);
+      return;
+    }
+
+    let successCount = 0;
+    const failedFiles: string[] = [];
+
+    for (let i = 0; i < validFiles.length; i++) {
+      const file = validFiles[i];
+      setDragDropProgress({ current: i + 1, total: validFiles.length });
+
+      try {
+        // Get upload URL
+        const res = await fetch("/api/uploads/request-url", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: file.name,
+            size: file.size,
+            contentType: file.type || 'application/octet-stream',
+          }),
+        });
+
+        if (!res.ok) throw new Error("Failed to get upload URL");
+        const { uploadURL, objectPath } = await res.json();
+
+        // Upload file
+        const uploadRes = await fetch(uploadURL, {
+          method: "PUT",
+          body: file,
+          headers: { "Content-Type": file.type || 'application/octet-stream' },
+        });
+
+        if (!uploadRes.ok) throw new Error("Upload failed");
+
+        // Create file record - use mutateAsync to await and catch errors
+        await createFileMutation.mutateAsync({
+          name: file.name,
+          objectPath,
+          folderId: currentFolderIdRef.current,
+          contentType: file.type || 'application/octet-stream',
+          size: file.size,
+        });
+        successCount++;
+      } catch (error) {
+        failedFiles.push(file.name);
+      }
+    }
+
+    setIsUploadingDragDrop(false);
+
+    // Show appropriate toast based on results
+    if (successCount > 0 && failedFiles.length === 0) {
+      toast({ 
+        title: "Upload complete", 
+        description: `${successCount} file(s) uploaded successfully.`
+      });
+    } else if (successCount > 0 && failedFiles.length > 0) {
+      toast({ 
+        title: "Partial upload", 
+        description: `${successCount} file(s) uploaded. ${failedFiles.length} failed: ${failedFiles.slice(0, 2).join(', ')}${failedFiles.length > 2 ? '...' : ''}`,
+        variant: "destructive"
+      });
+    } else if (failedFiles.length > 0) {
+      toast({ 
+        title: "Upload failed", 
+        description: `All ${failedFiles.length} file(s) failed to upload.`,
+        variant: "destructive"
+      });
+    }
+  };
+
+  // Direct download helper
+  const handleDirectDownload = async (file: FileMetadata) => {
+    try {
+      const response = await fetch(getProxyUrl(file.objectPath));
+      if (!response.ok) {
+        throw new Error(`Download failed with status ${response.status}`);
+      }
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = file.name;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      toast({ 
+        title: "Download failed", 
+        description: error instanceof Error ? error.message : "Unable to download the file.", 
+        variant: "destructive" 
+      });
+    }
   };
 
   const currentFolders = folders?.filter(f => f.parentId === currentFolderId) || [];
@@ -1348,6 +1484,39 @@ export default function ProjectDetails() {
         </TabsContent>
 
         <TabsContent value="documents" className="space-y-4">
+          {/* Drag and Drop Zone Wrapper */}
+          <div
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+            className={cn(
+              "relative rounded-lg transition-all",
+              isDragOver && "ring-2 ring-primary ring-offset-2 bg-primary/5"
+            )}
+          >
+            {/* Drag overlay - pointer-events-auto ensures overlay captures all events */}
+            {isDragOver && (
+              <div className="absolute inset-0 z-50 flex items-center justify-center bg-primary/10 backdrop-blur-sm rounded-lg border-2 border-dashed border-primary pointer-events-auto">
+                <div className="text-center pointer-events-none">
+                  <Upload className="w-12 h-12 mx-auto text-primary mb-2" />
+                  <p className="text-lg font-medium text-primary">Drop files here to upload</p>
+                  <p className="text-sm text-muted-foreground">Files will be uploaded to the current folder</p>
+                </div>
+              </div>
+            )}
+
+            {/* Upload progress indicator */}
+            {isUploadingDragDrop && (
+              <div className="mb-4 p-4 bg-muted rounded-lg">
+                <div className="flex items-center gap-3">
+                  <div className="animate-spin rounded-full h-5 w-5 border-2 border-primary border-t-transparent" />
+                  <span className="text-sm">
+                    Uploading file {dragDropProgress.current} of {dragDropProgress.total}...
+                  </span>
+                </div>
+              </div>
+            )}
+
           {/* Search Bar */}
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -1677,6 +1846,16 @@ export default function ProjectDetails() {
                                 className="p-1.5 rounded bg-black/50 text-white hover-elevate"
                                 onClick={(e) => {
                                   e.stopPropagation();
+                                  handleDirectDownload(file);
+                                }}
+                                data-testid={`button-download-file-${file.id}`}
+                              >
+                                <Download className="w-3.5 h-3.5" />
+                              </button>
+                              <button 
+                                className="p-1.5 rounded bg-black/50 text-white hover-elevate"
+                                onClick={(e) => {
+                                  e.stopPropagation();
                                   setDeleteFileId(file.id);
                                 }}
                                 data-testid={`button-delete-file-${file.id}`}
@@ -1809,6 +1988,15 @@ export default function ProjectDetails() {
                             variant="ghost" 
                             size="icon" 
                             className="opacity-0 group-hover:opacity-100 h-8 w-8"
+                            onClick={() => handleDirectDownload(file)}
+                            data-testid={`button-download-file-${file.id}`}
+                          >
+                            <Download className="w-4 h-4" />
+                          </Button>
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="opacity-0 group-hover:opacity-100 h-8 w-8"
                             onClick={() => setDeleteFileId(file.id)}
                             data-testid={`button-delete-file-${file.id}`}
                           >
@@ -1822,6 +2010,8 @@ export default function ProjectDetails() {
               )}
             </div>
           )}
+          </div>
+          {/* End Drag and Drop Zone Wrapper */}
         </TabsContent>
 
         <TabsContent value="photos" className="space-y-4">
@@ -2815,10 +3005,7 @@ export default function ProjectDetails() {
               variant="outline" 
               onClick={() => {
                 if (fileDetailsPanel) {
-                  const link = document.createElement('a');
-                  link.href = getProxyUrl(fileDetailsPanel.objectPath);
-                  link.download = fileDetailsPanel.name;
-                  link.click();
+                  handleDirectDownload(fileDetailsPanel);
                 }
               }}
               data-testid="button-download-file"

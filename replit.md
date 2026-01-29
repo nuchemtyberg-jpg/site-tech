@@ -175,3 +175,11 @@ Added comprehensive file management capabilities with a Dropbox-like experience:
   - **File Details Panel**: View file info including name, size, type, date, tags, and download option
   - **View Modes**: Grid (date-grouped) and List views with all new features
 - **State Management**: Uses `useMemo` for efficient client-side filtering
+  - **Drag-and-Drop Upload**: Drop files anywhere in Documents tab to upload to current folder
+    - Visual overlay with dashed border during drag-over
+    - Progress indicator for multi-file uploads
+    - 50MB max file size per file
+    - Success/failure tracking with appropriate toast notifications
+  - **Direct Download**: Download button on each file (grid overlay, list row, and details panel)
+    - Fetches file as blob and triggers browser download
+    - Proper error handling with status code reporting
