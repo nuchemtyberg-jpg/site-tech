@@ -353,6 +353,10 @@ export default function ProjectDetails() {
   const [renamingFolder, setRenamingFolder] = useState<{ id: number; name: string } | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [moveDialogOpen, setMoveDialogOpen] = useState(false);
+  const [moveDialogViewFolderId, setMoveDialogViewFolderId] = useState<number | null>(null);
+  const [moveDialogBreadcrumbs, setMoveDialogBreadcrumbs] = useState<Array<{ id: number; name: string }>>([]);
+  const [moveDialogChildFolders, setMoveDialogChildFolders] = useState<Array<{ id: number; name: string; hasChildren: boolean }>>([]);
+  const [moveDialogLoading, setMoveDialogLoading] = useState(false);
   const [fileDetailsPanel, setFileDetailsPanel] = useState<FileMetadata | null>(null);
   const [showBatchDeleteFilesConfirm, setShowBatchDeleteFilesConfirm] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
@@ -996,6 +1000,150 @@ export default function ProjectDetails() {
         toast({ title: "Error", description: err.message, variant: "destructive" });
       }
     });
+  };
+
+  // Move dialog helper functions
+  const fetchMoveDialogFolders = async (parentId: number | null) => {
+    setMoveDialogLoading(true);
+    try {
+      const parentParam = parentId === null ? 'null' : String(parentId);
+      const res = await fetch(`/api/projects/${projectId}/folders/children?parentId=${parentParam}`);
+      if (res.ok) {
+        const data = await res.json();
+        setMoveDialogChildFolders(data);
+      }
+    } finally {
+      setMoveDialogLoading(false);
+    }
+  };
+
+  const fetchMoveDialogBreadcrumbs = async (folderId: number | null) => {
+    if (folderId === null) {
+      setMoveDialogBreadcrumbs([]);
+      return;
+    }
+    try {
+      const res = await fetch(`/api/folders/${folderId}/path`);
+      if (res.ok) {
+        const data = await res.json();
+        setMoveDialogBreadcrumbs(data);
+      }
+    } catch {
+      setMoveDialogBreadcrumbs([]);
+    }
+  };
+
+  const openMoveDialog = async () => {
+    setMoveDialogOpen(true);
+    setMoveDialogViewFolderId(null);
+    setMoveDialogBreadcrumbs([]);
+    await fetchMoveDialogFolders(null);
+  };
+
+  const navigateToFolder = async (folderId: number | null) => {
+    setMoveDialogViewFolderId(folderId);
+    await Promise.all([
+      fetchMoveDialogFolders(folderId),
+      fetchMoveDialogBreadcrumbs(folderId)
+    ]);
+  };
+
+  // Check if moving to a folder would create a cycle (moving folder into itself or descendant)
+  const wouldCreateCycle = (targetFolderId: number | null): boolean => {
+    if (selectedFolders.size === 0) return false;
+    if (targetFolderId === null) return false;
+    
+    const getDescendantIds = (parentId: number): Set<number> => {
+      const descendants: Set<number> = new Set();
+      const stack = [parentId];
+      while (stack.length > 0) {
+        const current = stack.pop()!;
+        const children = folders?.filter(f => f.parentId === current) || [];
+        for (const child of children) {
+          descendants.add(child.id);
+          stack.push(child.id);
+        }
+      }
+      return descendants;
+    };
+    
+    for (const folderId of Array.from(selectedFolders)) {
+      if (folderId === targetFolderId) return true;
+      const descendants = getDescendantIds(folderId);
+      if (descendants.has(targetFolderId)) return true;
+    }
+    return false;
+  };
+
+  // Check if items are already in the target folder
+  const isNoOpMove = (targetFolderId: number | null): boolean => {
+    const targetFilesAlreadyThere = Array.from(selectedFiles).every(fileId => {
+      const file = files?.find(f => f.id === fileId);
+      return file?.folderId === targetFolderId;
+    });
+    const targetFoldersAlreadyThere = Array.from(selectedFolders).every(folderId => {
+      const folder = folders?.find(f => f.id === folderId);
+      return folder?.parentId === targetFolderId;
+    });
+    return targetFilesAlreadyThere && targetFoldersAlreadyThere;
+  };
+
+  const handleMoveToFolder = async (targetFolderId: number | null) => {
+    if (wouldCreateCycle(targetFolderId)) {
+      toast({ 
+        title: "Cannot move here", 
+        description: "Moving a folder into itself or its subfolder would create a loop.",
+        variant: "destructive"
+      });
+      return;
+    }
+    
+    if (isNoOpMove(targetFolderId)) {
+      toast({ 
+        title: "Already in this folder", 
+        description: "The selected items are already in this location."
+      });
+      return;
+    }
+
+    const failedFolderNames: string[] = [];
+    const failedFolderIds: Set<number> = new Set();
+    
+    // Move files
+    if (selectedFiles.size > 0) {
+      try {
+        await batchMoveFilesMutation.mutateAsync({ ids: Array.from(selectedFiles), folderId: targetFolderId });
+      } catch (error) {
+        toast({ title: "Error", description: "Failed to move some files", variant: "destructive" });
+      }
+    }
+    
+    // Move folders
+    for (const folderId of Array.from(selectedFolders)) {
+      try {
+        await updateFolderMutation.mutateAsync({ id: folderId, parentId: targetFolderId });
+      } catch (error) {
+        failedFolderIds.add(folderId);
+        const folder = folders?.find(f => f.id === folderId);
+        failedFolderNames.push(folder?.name || String(folderId));
+      }
+    }
+    
+    if (failedFolderNames.length > 0) {
+      toast({ 
+        title: "Some folders could not be moved", 
+        description: `Failed: ${failedFolderNames.join(', ')}`,
+        variant: "destructive"
+      });
+      setSelectedFolders(failedFolderIds);
+    } else {
+      setSelectedFolders(new Set());
+    }
+    setSelectedFiles(new Set());
+    if (failedFolderIds.size === 0) {
+      setIsFileSelectMode(false);
+    }
+    setMoveDialogOpen(false);
   };
 
   const handleUploadComplete = async (uploadedFiles: Array<{ name: string; objectPath: string; size: number; type: string; relativePath?: string }>) => {
@@ -1973,7 +2121,7 @@ export default function ProjectDetails() {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => setMoveDialogOpen(true)}
+                    onClick={openMoveDialog}
                     data-testid="button-batch-move"
                   >
                     <FolderInput className="w-4 h-4 mr-1" /> Move
@@ -3303,7 +3451,7 @@ export default function ProjectDetails() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Move Files/Folders Dialog */}
+      {/* Move Files/Folders Dialog - Hierarchical Folder Picker */}
       <Dialog open={moveDialogOpen} onOpenChange={setMoveDialogOpen}>
         <DialogContent className="bg-white dark:bg-zinc-900 sm:max-w-md">
           <DialogHeader>
@@ -3312,144 +3460,113 @@ export default function ProjectDetails() {
               {selectedFolders.size > 0 && ` (${selectedFolders.size} folder${selectedFolders.size !== 1 ? 's' : ''})`}
             </DialogTitle>
             <DialogDescription>
-              Select a destination folder for the selected items.
+              Navigate to a destination folder and click "Move Here".
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-2 max-h-64 overflow-y-auto">
+          
+          {/* Breadcrumb navigation */}
+          <div className="flex items-center gap-1 text-sm flex-wrap" data-testid="move-dialog-breadcrumbs">
             <button
-              disabled={batchMoveFilesMutation.isPending || updateFolderMutation.isPending}
-              onClick={async () => {
-                const failedFolderNames: string[] = [];
-                
-                // Move files to root
-                if (selectedFiles.size > 0) {
-                  try {
-                    await batchMoveFilesMutation.mutateAsync({ ids: Array.from(selectedFiles), folderId: null });
-                  } catch (error) {
-                    toast({ title: "Error", description: "Failed to move some files", variant: "destructive" });
-                  }
-                }
-                // Move folders to root
-                const failedFolderIds: Set<number> = new Set();
-                for (const folderId of Array.from(selectedFolders)) {
-                  try {
-                    await updateFolderMutation.mutateAsync({ id: folderId, parentId: null });
-                  } catch (error) {
-                    failedFolderIds.add(folderId);
-                    const folder = folders?.find(f => f.id === folderId);
-                    failedFolderNames.push(folder?.name || String(folderId));
-                  }
-                }
-                
-                if (failedFolderNames.length > 0) {
-                  toast({ 
-                    title: "Some folders could not be moved", 
-                    description: `Failed: ${failedFolderNames.join(', ')}`,
-                    variant: "destructive"
-                  });
-                  setSelectedFolders(failedFolderIds);
-                } else {
-                  setSelectedFolders(new Set());
-                }
-                setSelectedFiles(new Set());
-                if (failedFolderIds.size === 0) {
-                  setIsFileSelectMode(false);
-                }
-                setMoveDialogOpen(false);
-              }}
-              className={cn(
-                "w-full flex items-center gap-2 p-3 rounded-lg text-left hover:bg-muted transition-colors disabled:opacity-50",
-                currentFolderId === null && "bg-muted"
-              )}
-              data-testid="move-to-root"
+              onClick={() => navigateToFolder(null)}
+              className="hover:underline text-muted-foreground hover:text-foreground"
+              data-testid="breadcrumb-root"
             >
-              <Home className="w-5 h-5 text-muted-foreground" />
-              <span>Root (Documents)</span>
+              Root
             </button>
-            {(() => {
-              // Build set of folder IDs that are descendants of selected folders (to prevent cycles)
-              const getDescendantIds = (parentId: number): Set<number> => {
-                const descendants: Set<number> = new Set();
-                const stack = [parentId];
-                while (stack.length > 0) {
-                  const current = stack.pop()!;
-                  const children = folders?.filter(f => f.parentId === current) || [];
-                  for (const child of children) {
-                    descendants.add(child.id);
-                    stack.push(child.id);
-                  }
-                }
-                return descendants;
-              };
-              
-              // Get all descendants of selected folders
-              const invalidTargets = new Set<number>();
-              for (const folderId of Array.from(selectedFolders)) {
-                invalidTargets.add(folderId); // Can't move into itself
-                const descendants = getDescendantIds(folderId);
-                for (const d of Array.from(descendants)) {
-                  invalidTargets.add(d);
-                }
-              }
-              
-              return folders?.filter(f => !invalidTargets.has(f.id)).map(folder => (
+            {moveDialogBreadcrumbs.map((crumb, idx) => (
+              <span key={crumb.id} className="flex items-center gap-1">
+                <ChevronRight className="w-4 h-4 text-muted-foreground" />
                 <button
-                  key={folder.id}
-                  disabled={batchMoveFilesMutation.isPending || updateFolderMutation.isPending}
-                  onClick={async () => {
-                    const failedFolderNames: string[] = [];
-                    const failedFolderIds: Set<number> = new Set();
-                    
-                    // Move files to folder
-                    if (selectedFiles.size > 0) {
-                      try {
-                        await batchMoveFilesMutation.mutateAsync({ ids: Array.from(selectedFiles), folderId: folder.id });
-                      } catch (error) {
-                        toast({ title: "Error", description: "Failed to move some files", variant: "destructive" });
-                      }
-                    }
-                    // Move folders to this folder (update parentId)
-                    for (const folderId of Array.from(selectedFolders)) {
-                      try {
-                        await updateFolderMutation.mutateAsync({ id: folderId, parentId: folder.id });
-                      } catch (error) {
-                        failedFolderIds.add(folderId);
-                        const f = folders?.find(x => x.id === folderId);
-                        failedFolderNames.push(f?.name || String(folderId));
-                      }
-                    }
-                    
-                    if (failedFolderNames.length > 0) {
-                      toast({ 
-                        title: "Some folders could not be moved", 
-                        description: `Failed: ${failedFolderNames.join(', ')}`,
-                        variant: "destructive"
-                      });
-                      setSelectedFolders(failedFolderIds);
-                    } else {
-                      setSelectedFolders(new Set());
-                    }
-                    setSelectedFiles(new Set());
-                    if (failedFolderIds.size === 0) {
-                      setIsFileSelectMode(false);
-                    }
-                    setMoveDialogOpen(false);
-                  }}
+                  onClick={() => navigateToFolder(crumb.id)}
                   className={cn(
-                    "w-full flex items-center gap-2 p-3 rounded-lg text-left hover:bg-muted transition-colors disabled:opacity-50",
-                    folder.id === currentFolderId && "bg-muted"
+                    "hover:underline",
+                    idx === moveDialogBreadcrumbs.length - 1 
+                      ? "text-foreground font-medium" 
+                      : "text-muted-foreground hover:text-foreground"
                   )}
-                  data-testid={`move-to-folder-${folder.id}`}
+                  data-testid={`breadcrumb-folder-${crumb.id}`}
                 >
-                  <Folder className="w-5 h-5 text-primary" />
-                  <span>{folder.name}</span>
+                  {crumb.name}
                 </button>
-              ));
-            })()}
+              </span>
+            ))}
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setMoveDialogOpen(false)} data-testid="button-cancel-move">
+
+          {/* Folder list */}
+          <div className="space-y-1 max-h-64 overflow-y-auto border rounded-lg p-2">
+            {/* Back/Up button when not at root */}
+            {moveDialogViewFolderId !== null && (
+              <button
+                onClick={() => {
+                  const parentId = moveDialogBreadcrumbs.length > 1 
+                    ? moveDialogBreadcrumbs[moveDialogBreadcrumbs.length - 2].id 
+                    : null;
+                  navigateToFolder(parentId);
+                }}
+                className="w-full flex items-center gap-2 p-2 rounded-lg text-left hover:bg-muted transition-colors text-muted-foreground"
+                data-testid="move-dialog-back"
+              >
+                <ArrowLeft className="w-4 h-4" />
+                <span>Back</span>
+              </button>
+            )}
+            
+            {moveDialogLoading ? (
+              <div className="p-4 text-center text-muted-foreground">
+                Loading folders...
+              </div>
+            ) : moveDialogChildFolders.length === 0 ? (
+              <div className="p-4 text-center text-muted-foreground">
+                No subfolders here.
+              </div>
+            ) : (
+              moveDialogChildFolders
+                .filter(folder => !selectedFolders.has(folder.id))
+                .map(folder => (
+                  <button
+                    key={folder.id}
+                    onClick={() => navigateToFolder(folder.id)}
+                    disabled={wouldCreateCycle(folder.id)}
+                    className={cn(
+                      "w-full flex items-center gap-2 p-2 rounded-lg text-left hover:bg-muted transition-colors",
+                      wouldCreateCycle(folder.id) && "opacity-50 cursor-not-allowed"
+                    )}
+                    data-testid={`move-nav-folder-${folder.id}`}
+                  >
+                    <Folder className="w-5 h-5 text-primary" />
+                    <span className="flex-1">{folder.name}</span>
+                    {folder.hasChildren && (
+                      <ChevronRight className="w-4 h-4 text-muted-foreground" />
+                    )}
+                  </button>
+                ))
+            )}
+          </div>
+
+          <DialogFooter className="flex-col sm:flex-row gap-2">
+            <Button 
+              variant="outline" 
+              onClick={() => setMoveDialogOpen(false)} 
+              className="w-full sm:w-auto"
+              data-testid="button-cancel-move"
+            >
               Cancel
+            </Button>
+            <Button 
+              onClick={() => handleMoveToFolder(moveDialogViewFolderId)}
+              disabled={
+                batchMoveFilesMutation.isPending || 
+                updateFolderMutation.isPending || 
+                wouldCreateCycle(moveDialogViewFolderId)
+              }
+              className="w-full sm:w-auto"
+              data-testid="button-move-here"
+            >
+              {batchMoveFilesMutation.isPending || updateFolderMutation.isPending 
+                ? "Moving..." 
+                : wouldCreateCycle(moveDialogViewFolderId)
+                  ? "Cannot move here"
+                  : `Move Here${moveDialogViewFolderId === null ? ' (Root)' : ''}`}
             </Button>
           </DialogFooter>
         </DialogContent>
