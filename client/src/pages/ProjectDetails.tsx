@@ -189,6 +189,7 @@ export default function ProjectDetails() {
   const batchMoveFilesMutation = useBatchMoveFiles(projectId);
   
   // Photos (separate from files/documents)
+  const [currentAlbumId, setCurrentAlbumId] = useState<number | null>(null);
   const { data: photos = [], isLoading: isPhotosLoading } = useProjectPhotos(projectId);
   const paginatedPhotos = useAllPhotosFlat(projectId, currentAlbumId);
   const createPhotoMutation = useCreatePhoto(projectId);
@@ -369,7 +370,6 @@ export default function ProjectDetails() {
   const [photoTileSize, setPhotoTileSize] = useState<'small' | 'medium' | 'large'>('medium');
   const [selectedPhotos, setSelectedPhotos] = useState<Set<number>>(new Set());
   const [isPhotoSelectMode, setIsPhotoSelectMode] = useState(false);
-  const [currentAlbumId, setCurrentAlbumId] = useState<number | null>(null);
   const [isCreateAlbumOpen, setIsCreateAlbumOpen] = useState(false);
   const [newAlbumName, setNewAlbumName] = useState("");
   const [deleteAlbumId, setDeleteAlbumId] = useState<number | null>(null);
