@@ -40,61 +40,76 @@ async function extractExifDate(file: File): Promise<Date | undefined> {
     const arrayBuffer = await file.arrayBuffer();
     const tags = ExifReader.load(arrayBuffer);
     
-    // Try DateTimeOriginal first (when photo was actually taken)
-    const dateTimeOriginal = tags['DateTimeOriginal'];
-    if (dateTimeOriginal) {
-      // ExifReader provides value as Date object in newer versions
-      if (dateTimeOriginal.value instanceof Date && !isNaN(dateTimeOriginal.value.getTime())) {
-        return dateTimeOriginal.value;
+    // Debug: Log all available EXIF tags
+    console.log('EXIF tags for', file.name, ':', Object.keys(tags));
+    console.log('DateTimeOriginal:', JSON.stringify(tags['DateTimeOriginal']));
+    console.log('CreateDate:', JSON.stringify(tags['CreateDate']));
+    console.log('DateTime:', JSON.stringify(tags['DateTime']));
+    
+    // Helper function to parse EXIF date tag
+    const parseExifDateTag = (tag: any): Date | undefined => {
+      if (!tag) return undefined;
+      
+      // If value is already a Date object
+      if (tag.value instanceof Date && !isNaN(tag.value.getTime())) {
+        console.log('Found Date object:', tag.value);
+        return tag.value;
       }
-      // Fallback to parsing description string (format: "2023:05:20 17:02:00")
-      if (dateTimeOriginal.description) {
-        const dateStr = dateTimeOriginal.description;
+      
+      // If value is an array of numbers (some ExifReader versions return this)
+      if (Array.isArray(tag.value) && tag.value.length >= 1) {
+        // Sometimes it's an array with a single string element
+        const valStr = String(tag.value[0]);
+        if (valStr.includes(':')) {
+          const [datePart, timePart] = valStr.split(' ');
+          if (datePart && timePart) {
+            const [year, month, day] = datePart.split(':');
+            const isoDate = `${year}-${month}-${day}T${timePart}`;
+            const date = new Date(isoDate);
+            console.log('Parsed from array value:', isoDate, '->', date);
+            if (!isNaN(date.getTime())) return date;
+          }
+        }
+      }
+      
+      // Parse description string (format: "2023:05:20 17:02:00")
+      if (tag.description && typeof tag.description === 'string') {
+        const dateStr = tag.description;
         const [datePart, timePart] = dateStr.split(' ');
         if (datePart && timePart) {
           const [year, month, day] = datePart.split(':');
           const isoDate = `${year}-${month}-${day}T${timePart}`;
           const date = new Date(isoDate);
+          console.log('Parsed from description:', isoDate, '->', date);
           if (!isNaN(date.getTime())) return date;
         }
       }
+      
+      return undefined;
+    };
+    
+    // Try DateTimeOriginal first (when photo was actually taken)
+    const dateFromOriginal = parseExifDateTag(tags['DateTimeOriginal']);
+    if (dateFromOriginal) {
+      console.log('Using DateTimeOriginal:', dateFromOriginal);
+      return dateFromOriginal;
     }
     
     // Try CreateDate as fallback
-    const createDate = tags['CreateDate'];
-    if (createDate) {
-      if (createDate.value instanceof Date && !isNaN(createDate.value.getTime())) {
-        return createDate.value;
-      }
-      if (createDate.description) {
-        const dateStr = createDate.description;
-        const [datePart, timePart] = dateStr.split(' ');
-        if (datePart && timePart) {
-          const [year, month, day] = datePart.split(':');
-          const isoDate = `${year}-${month}-${day}T${timePart}`;
-          const date = new Date(isoDate);
-          if (!isNaN(date.getTime())) return date;
-        }
-      }
+    const dateFromCreate = parseExifDateTag(tags['CreateDate']);
+    if (dateFromCreate) {
+      console.log('Using CreateDate:', dateFromCreate);
+      return dateFromCreate;
     }
     
     // Try DateTime as last resort
-    const dateTime = tags['DateTime'];
-    if (dateTime) {
-      if (dateTime.value instanceof Date && !isNaN(dateTime.value.getTime())) {
-        return dateTime.value;
-      }
-      if (dateTime.description) {
-        const dateStr = dateTime.description;
-        const [datePart, timePart] = dateStr.split(' ');
-        if (datePart && timePart) {
-          const [year, month, day] = datePart.split(':');
-          const isoDate = `${year}-${month}-${day}T${timePart}`;
-          const date = new Date(isoDate);
-          if (!isNaN(date.getTime())) return date;
-        }
-      }
+    const dateFromDateTime = parseExifDateTag(tags['DateTime']);
+    if (dateFromDateTime) {
+      console.log('Using DateTime:', dateFromDateTime);
+      return dateFromDateTime;
     }
+    
+    console.log('No EXIF date found for', file.name);
   } catch (error) {
     console.log('Could not extract EXIF data:', error);
   }
@@ -133,6 +148,7 @@ export function NativeFileUploader({
     const newFiles: UploadedFile[] = await Promise.all(
       validFiles.map(async file => {
         const takenAt = await extractExifDate(file);
+        console.log('Extracted takenAt for', file.name, ':', takenAt);
         return {
           id: Math.random().toString(36).substring(7),
           name: file.name,
@@ -218,6 +234,7 @@ export function NativeFileUploader({
           f.id === uploadFile.id ? { ...f, status: 'success' as const, progress: 100, objectPath } : f
         ));
 
+        console.log('Pushing uploaded file with takenAt:', uploadFile.takenAt);
         uploadedFiles.push({
           name: uploadFile.name,
           objectPath,
