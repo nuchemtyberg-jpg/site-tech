@@ -115,6 +115,9 @@ export const VirtualizedPhotoGrid = memo(function VirtualizedPhotoGrid({
   const loadStartTimeRef = useRef<number>(performance.now());
   const hasLoggedFirstLoad = useRef(false);
   const scrollTrackerRef = useRef<(() => void) | null>(null);
+  const scrollerElementRef = useRef<Window | HTMLElement | null>(null);
+  const scrollHandlerRef = useRef<(() => void) | null>(null);
+  const scrollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [columnsCount, setColumnsCount] = useState(() => getGridColumns(tileSize));
 
@@ -126,6 +129,22 @@ export const VirtualizedPhotoGrid = memo(function VirtualizedPhotoGrid({
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, [tileSize]);
+
+  // Cleanup scroll listeners on unmount
+  useEffect(() => {
+    return () => {
+      if (scrollTimeoutRef.current) {
+        clearTimeout(scrollTimeoutRef.current);
+      }
+      if (scrollerElementRef.current && scrollHandlerRef.current) {
+        scrollerElementRef.current.removeEventListener('scroll', scrollHandlerRef.current);
+      }
+      if (scrollTrackerRef.current) {
+        scrollTrackerRef.current();
+        scrollTrackerRef.current = null;
+      }
+    };
+  }, []);
 
   const { items, flatIndexMap } = useMemo(
     () => buildVirtualItems(photos, columnsCount),
@@ -259,12 +278,23 @@ export const VirtualizedPhotoGrid = memo(function VirtualizedPhotoGrid({
         rangeChanged={handleRangeChanged}
         onScroll={handleScrollStart}
         scrollerRef={(ref) => {
-          if (ref) {
-            let scrollTimeout: ReturnType<typeof setTimeout>;
-            ref.addEventListener('scroll', () => {
-              clearTimeout(scrollTimeout);
-              scrollTimeout = setTimeout(handleScrollStop, 150);
-            });
+          if (ref && ref !== scrollerElementRef.current) {
+            // Remove old listener if exists
+            if (scrollerElementRef.current && scrollHandlerRef.current) {
+              scrollerElementRef.current.removeEventListener('scroll', scrollHandlerRef.current);
+            }
+            
+            // Create new scroll handler
+            scrollHandlerRef.current = () => {
+              if (scrollTimeoutRef.current) {
+                clearTimeout(scrollTimeoutRef.current);
+              }
+              scrollTimeoutRef.current = setTimeout(handleScrollStop, 150);
+            };
+            
+            // Add listener to new element
+            ref.addEventListener('scroll', scrollHandlerRef.current);
+            scrollerElementRef.current = ref;
           }
         }}
         overscan={200}

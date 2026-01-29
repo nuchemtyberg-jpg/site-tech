@@ -32,8 +32,12 @@ export function trackScrollPerformance(): () => void {
   let frameCount = 0;
   let jankCount = 0;
   const startTime = performance.now();
+  let rafId: number | null = null;
+  let stopped = false;
   
   const checkFrame = (timestamp: number) => {
+    if (stopped) return;
+    
     if (lastFrameTime > 0) {
       const delta = timestamp - lastFrameTime;
       if (delta > 32) {
@@ -43,14 +47,19 @@ export function trackScrollPerformance(): () => void {
     lastFrameTime = timestamp;
     frameCount++;
     
-    if (performance.now() - startTime < 5000) {
-      requestAnimationFrame(checkFrame);
+    if (performance.now() - startTime < 5000 && !stopped) {
+      rafId = requestAnimationFrame(checkFrame);
     }
   };
   
-  requestAnimationFrame(checkFrame);
+  rafId = requestAnimationFrame(checkFrame);
   
   return () => {
+    stopped = true;
+    if (rafId !== null) {
+      cancelAnimationFrame(rafId);
+    }
+    
     const duration = performance.now() - startTime;
     const fps = (frameCount / duration) * 1000;
     scrollJankCount = jankCount;

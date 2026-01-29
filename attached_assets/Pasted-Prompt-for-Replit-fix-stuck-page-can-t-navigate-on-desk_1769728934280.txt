@@ -1,0 +1,89 @@
+Prompt for Replit (fix “stuck page” / can’t navigate on desktop)
+
+The photo library page renders correctly, but on desktop the app becomes “stuck”: I can’t navigate to other pages (links/buttons don’t work or the UI becomes unresponsive). Fix the issue while keeping the performance improvements.
+
+1) Find what is blocking interaction
+
+Inspect the Photo Library route for any element covering the viewport:
+
+overlays, modals, loading screens, invisible divs
+
+Use devtools to confirm whether clicks are intercepted:
+
+check top-most element under cursor
+
+Ensure no component sets pointer-events: none incorrectly on a parent, and no overlay has pointer-events: auto when it shouldn’t.
+
+2) Fix scroll-lock / body lock cleanup
+
+If the library or viewer sets document.body.style.overflow = "hidden" (or similar), ensure it is only applied when a modal is open and is always reverted on cleanup:
+
+revert on modal close
+
+revert on route change/unmount (React effect cleanup)
+
+Also check position: fixed body locks and restore previous scroll position properly.
+
+3) Remove global preventDefault traps
+
+Search for event listeners added in the library/viewer:
+
+wheel, touchmove, keydown, pointermove, scroll
+
+Ensure we do not globally call preventDefault() on desktop except when necessary (e.g., when actively panning/zooming inside viewer).
+
+Event listeners must be removed on unmount:
+
+use useEffect(() => { add...; return () => remove... })
+
+4) Ensure modal/viewer is not permanently active
+
+Verify viewer open/close state cannot get “stuck” true.
+
+If using a fullscreen viewer, ensure:
+
+overlay is only rendered when open
+
+overlay is dismissed correctly
+
+z-index doesn’t remain above the app after close
+
+If using a portal, ensure it unmounts fully.
+
+5) Check navigation specifically
+
+If using React Router / Next.js:
+
+confirm no beforeunload or route guard is preventing navigation
+
+confirm no “unsaved changes” logic is always returning true
+
+Confirm clicks are not blocked by an element with position: fixed spanning the screen.
+
+6) Performance sanity check
+
+Confirm no infinite render loop or state update loop:
+
+avoid setting state during render
+
+memoize heavy computations
+
+ensure virtualization callbacks don’t trigger continuous state updates
+
+Use the browser Performance tab: verify main thread is not pegged at 100%.
+
+Deliverables
+
+Identify the root cause (overlay, scroll-lock, event listener, render loop, etc.)
+
+Implement the fix with proper cleanup.
+
+Add a small regression test checklist:
+
+can click nav links on desktop
+
+can scroll and interact
+
+open/close viewer restores scrolling and clicking
+
+navigating away from library works every time
