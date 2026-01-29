@@ -1391,7 +1391,7 @@ export async function registerRoutes(
   // Daily Report Photos
   app.post("/api/daily-report-photos", isAuthenticated, isAuthorizedUser, async (req, res) => {
     try {
-      const { reportId, taskEntryId, deliveryEntryId, url, caption, createdBy, createdByName, objectPath, fileName } = req.body;
+      const { reportId, taskEntryId, deliveryEntryId, url, caption, createdBy, createdByName, objectPath, fileName, takenAt } = req.body;
       
       // Validate that at least one reference is provided
       if (!reportId && !taskEntryId && !deliveryEntryId) {
@@ -1425,6 +1425,7 @@ export async function registerRoutes(
         caption,
         createdBy,
         createdByName,
+        takenAt: takenAt ? new Date(takenAt) : null,
       });
       
       // Also add the photo to the "Daily Report Photos" album in Project Photos

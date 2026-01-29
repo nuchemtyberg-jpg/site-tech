@@ -245,6 +245,7 @@ export const dailyReportPhotos = pgTable("daily_report_photos", {
   deliveryEntryId: integer("delivery_entry_id"), // Optional - for delivery photos
   url: text("url").notNull(),
   caption: text("caption"),
+  takenAt: timestamp("taken_at"), // EXIF date when photo was taken
   createdBy: text("created_by"),
   createdByName: text("created_by_name"),
   createdAt: timestamp("created_at").defaultNow(),

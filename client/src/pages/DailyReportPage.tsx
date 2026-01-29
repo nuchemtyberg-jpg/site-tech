@@ -489,7 +489,7 @@ export default function DailyReportPage() {
 
   // Photo mutations
   const createPhotoMutation = useMutation({
-    mutationFn: async (data: { taskEntryId?: number; deliveryEntryId?: number; url: string; objectPath?: string; fileName?: string }) => {
+    mutationFn: async (data: { taskEntryId?: number; deliveryEntryId?: number; url: string; objectPath?: string; fileName?: string; takenAt?: string }) => {
       return apiRequest("POST", `/api/daily-report-photos`, data);
     },
     onSuccess: () => refetchReport(),
@@ -1093,6 +1093,7 @@ export default function DailyReportPage() {
                                     url: file.objectPath,
                                     objectPath: file.objectPath,
                                     fileName: file.name,
+                                    takenAt: file.takenAt?.toISOString(),
                                   });
                                 });
                               }}
@@ -1259,6 +1260,7 @@ export default function DailyReportPage() {
                                   url: file.objectPath,
                                   objectPath: file.objectPath,
                                   fileName: file.name,
+                                  takenAt: file.takenAt?.toISOString(),
                                 });
                               });
                             }}

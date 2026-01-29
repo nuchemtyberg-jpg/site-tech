@@ -40,25 +40,17 @@ async function extractExifDate(file: File): Promise<Date | undefined> {
     const arrayBuffer = await file.arrayBuffer();
     const tags = ExifReader.load(arrayBuffer);
     
-    // Debug: Log all available EXIF tags
-    console.log('EXIF tags for', file.name, ':', Object.keys(tags));
-    console.log('DateTimeOriginal:', JSON.stringify(tags['DateTimeOriginal']));
-    console.log('CreateDate:', JSON.stringify(tags['CreateDate']));
-    console.log('DateTime:', JSON.stringify(tags['DateTime']));
-    
     // Helper function to parse EXIF date tag
     const parseExifDateTag = (tag: any): Date | undefined => {
       if (!tag) return undefined;
       
       // If value is already a Date object
       if (tag.value instanceof Date && !isNaN(tag.value.getTime())) {
-        console.log('Found Date object:', tag.value);
         return tag.value;
       }
       
-      // If value is an array of numbers (some ExifReader versions return this)
+      // If value is an array (some ExifReader versions return this)
       if (Array.isArray(tag.value) && tag.value.length >= 1) {
-        // Sometimes it's an array with a single string element
         const valStr = String(tag.value[0]);
         if (valStr.includes(':')) {
           const [datePart, timePart] = valStr.split(' ');
@@ -66,7 +58,6 @@ async function extractExifDate(file: File): Promise<Date | undefined> {
             const [year, month, day] = datePart.split(':');
             const isoDate = `${year}-${month}-${day}T${timePart}`;
             const date = new Date(isoDate);
-            console.log('Parsed from array value:', isoDate, '->', date);
             if (!isNaN(date.getTime())) return date;
           }
         }
@@ -80,7 +71,6 @@ async function extractExifDate(file: File): Promise<Date | undefined> {
           const [year, month, day] = datePart.split(':');
           const isoDate = `${year}-${month}-${day}T${timePart}`;
           const date = new Date(isoDate);
-          console.log('Parsed from description:', isoDate, '->', date);
           if (!isNaN(date.getTime())) return date;
         }
       }
@@ -90,28 +80,17 @@ async function extractExifDate(file: File): Promise<Date | undefined> {
     
     // Try DateTimeOriginal first (when photo was actually taken)
     const dateFromOriginal = parseExifDateTag(tags['DateTimeOriginal']);
-    if (dateFromOriginal) {
-      console.log('Using DateTimeOriginal:', dateFromOriginal);
-      return dateFromOriginal;
-    }
+    if (dateFromOriginal) return dateFromOriginal;
     
     // Try CreateDate as fallback
     const dateFromCreate = parseExifDateTag(tags['CreateDate']);
-    if (dateFromCreate) {
-      console.log('Using CreateDate:', dateFromCreate);
-      return dateFromCreate;
-    }
+    if (dateFromCreate) return dateFromCreate;
     
     // Try DateTime as last resort
     const dateFromDateTime = parseExifDateTag(tags['DateTime']);
-    if (dateFromDateTime) {
-      console.log('Using DateTime:', dateFromDateTime);
-      return dateFromDateTime;
-    }
-    
-    console.log('No EXIF date found for', file.name);
+    if (dateFromDateTime) return dateFromDateTime;
   } catch (error) {
-    console.log('Could not extract EXIF data:', error);
+    // Silently fail if EXIF extraction fails
   }
   
   return undefined;
@@ -148,7 +127,6 @@ export function NativeFileUploader({
     const newFiles: UploadedFile[] = await Promise.all(
       validFiles.map(async file => {
         const takenAt = await extractExifDate(file);
-        console.log('Extracted takenAt for', file.name, ':', takenAt);
         return {
           id: Math.random().toString(36).substring(7),
           name: file.name,
@@ -234,7 +212,6 @@ export function NativeFileUploader({
           f.id === uploadFile.id ? { ...f, status: 'success' as const, progress: 100, objectPath } : f
         ));
 
-        console.log('Pushing uploaded file with takenAt:', uploadFile.takenAt);
         uploadedFiles.push({
           name: uploadFile.name,
           objectPath,
