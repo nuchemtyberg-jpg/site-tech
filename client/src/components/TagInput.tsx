@@ -35,7 +35,7 @@ export function TagInput({ value, onChange, placeholder = "Add tag...", classNam
   };
 
   return (
-    <div className={`flex flex-wrap gap-1 p-2 border rounded-md bg-background ${className || ""}`}>
+    <div className="flex flex-wrap gap-1 p-2 border rounded-md bg-[#ffffff]">
       {value.map((tag, index) => (
         <Badge 
           key={tag} 
