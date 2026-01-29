@@ -1,7 +1,7 @@
 import { useParams, Link, useLocation, useSearch } from "wouter";
 import { useProject, useDeleteProject, useUpdateProject } from "@/hooks/use-projects";
 import { useProjectTasks, useCreateTask, useDeleteTask, useUpdateTask, useTaskStatusHistory } from "@/hooks/use-tasks";
-import { useProjectFiles, useProjectFolders, useCreateFile, useDeleteFile, useCreateFolder, useDeleteFolder, useUpdateFile } from "@/hooks/use-files";
+import { useProjectFiles, useProjectFolders, useCreateFile, useDeleteFile, useCreateFolder, useDeleteFolder, useUpdateFile, useUpdateFolder, useBatchDeleteFiles, useBatchMoveFiles } from "@/hooks/use-files";
 import { useProjectPhotos, useCreatePhoto, useDeletePhoto } from "@/hooks/use-photos";
 import { TagInput } from "@/components/TagInput";
 import Lightbox from "yet-another-react-lightbox";
@@ -46,7 +46,13 @@ import {
   CheckSquare,
   Maximize2,
   Tag,
-  Tags
+  Tags,
+  Star,
+  Search,
+  FolderInput,
+  Info,
+  FileType,
+  HardDrive
 } from "lucide-react";
 import { 
   DropdownMenu, 
@@ -174,8 +180,12 @@ export default function ProjectDetails() {
   const updateTaskMutation = useUpdateTask();
   const createFileMutation = useCreateFile(projectId);
   const deleteFileMutation = useDeleteFile(projectId);
+  const updateFileMutation = useUpdateFile(projectId);
   const createFolderMutation = useCreateFolder(projectId);
+  const updateFolderMutation = useUpdateFolder(projectId);
   const deleteFolderMutation = useDeleteFolder(projectId);
+  const batchDeleteFilesMutation = useBatchDeleteFiles(projectId);
+  const batchMoveFilesMutation = useBatchMoveFiles(projectId);
   
   // Photos (separate from files/documents)
   const { data: photos = [], isLoading: isPhotosLoading } = useProjectPhotos(projectId);
@@ -210,18 +220,6 @@ export default function ProjectDetails() {
       if (currentAlbumId === deleteAlbumId) {
         setCurrentAlbumId(null);
       }
-    },
-  });
-
-  const updateFileMutation = useMutation({
-    mutationFn: async ({ fileId, albumId, tags }: { fileId: number; albumId?: number | null; tags?: string[] | null }) => {
-      const body: { albumId?: number | null; tags?: string[] | null } = {};
-      if (albumId !== undefined) body.albumId = albumId;
-      if (tags !== undefined) body.tags = tags;
-      return apiRequest('PUT', `/api/files/${fileId}`, body);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/projects', projectId, 'files'] });
     },
   });
 
@@ -345,6 +343,18 @@ export default function ProjectDetails() {
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const currentFolderIdRef = useRef<number | null>(null);
   
+  // Document search and selection state
+  const [docSearchQuery, setDocSearchQuery] = useState("");
+  const [selectedFiles, setSelectedFiles] = useState<Set<number>>(new Set());
+  const [isFileSelectMode, setIsFileSelectMode] = useState(false);
+  const [showStarredOnly, setShowStarredOnly] = useState(false);
+  const [renamingFile, setRenamingFile] = useState<FileMetadata | null>(null);
+  const [renamingFolder, setRenamingFolder] = useState<{ id: number; name: string } | null>(null);
+  const [renameValue, setRenameValue] = useState("");
+  const [moveDialogOpen, setMoveDialogOpen] = useState(false);
+  const [fileDetailsPanel, setFileDetailsPanel] = useState<FileMetadata | null>(null);
+  const [showBatchDeleteFilesConfirm, setShowBatchDeleteFilesConfirm] = useState(false);
+  
   // Photo tool state
   const [photoTileSize, setPhotoTileSize] = useState<'small' | 'medium' | 'large'>('medium');
   const [selectedPhotos, setSelectedPhotos] = useState<Set<number>>(new Set());
@@ -418,8 +428,33 @@ export default function ProjectDetails() {
   // Filter to only show documents (files without albumId) - photos have albumId set
   const currentFiles = files?.filter(f => f.folderId === currentFolderId && !f.albumId) || [];
   
+  // Get starred files across all folders (for starred section)
+  const starredFiles = files?.filter(f => f.starred && !f.albumId) || [];
+  
+  // Search and filter files
+  const filteredFiles = useMemo(() => {
+    let result = showStarredOnly ? starredFiles : currentFiles;
+    
+    if (docSearchQuery.trim()) {
+      const query = docSearchQuery.toLowerCase();
+      result = result.filter(f => 
+        f.name.toLowerCase().includes(query) ||
+        (f.tags && f.tags.some(tag => tag.toLowerCase().includes(query)))
+      );
+    }
+    
+    return result;
+  }, [currentFiles, starredFiles, showStarredOnly, docSearchQuery]);
+  
+  // Filter folders by search
+  const filteredFolders = useMemo(() => {
+    if (!docSearchQuery.trim() || showStarredOnly) return currentFolders;
+    const query = docSearchQuery.toLowerCase();
+    return currentFolders.filter(f => f.name.toLowerCase().includes(query));
+  }, [currentFolders, docSearchQuery, showStarredOnly]);
+  
   // All files combined for unified view
-  const allFiles = currentFiles;
+  const allFiles = filteredFiles;
   
   // Group all files by date (month and day) for grid view
   const groupedFiles = allFiles.reduce((groups, file) => {
@@ -1313,67 +1348,151 @@ export default function ProjectDetails() {
         </TabsContent>
 
         <TabsContent value="documents" className="space-y-4">
+          {/* Search Bar */}
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input 
+              placeholder="Search files and folders..."
+              value={docSearchQuery}
+              onChange={(e) => setDocSearchQuery(e.target.value)}
+              className="pl-10 bg-white dark:bg-zinc-900"
+              data-testid="input-doc-search"
+            />
+            {docSearchQuery && (
+              <button 
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                onClick={() => setDocSearchQuery("")}
+                data-testid="button-clear-search"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:justify-between relative z-10">
-            {/* View Toggle */}
-            <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
+            {/* Left side controls */}
+            <div className="flex items-center gap-2 flex-wrap">
+              {/* View Toggle */}
+              <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
+                <Button
+                  variant={viewMode === 'grid' ? 'default' : 'ghost'}
+                  size="sm"
+                  onClick={() => setViewMode('grid')}
+                  data-testid="button-view-grid"
+                >
+                  <LayoutGrid className="w-4 h-4" />
+                </Button>
+                <Button
+                  variant={viewMode === 'list' ? 'default' : 'ghost'}
+                  size="sm"
+                  onClick={() => setViewMode('list')}
+                  data-testid="button-view-list"
+                >
+                  <List className="w-4 h-4" />
+                </Button>
+              </div>
+
+              {/* Starred Toggle */}
               <Button
-                variant={viewMode === 'grid' ? 'default' : 'ghost'}
+                variant={showStarredOnly ? 'default' : 'outline'}
                 size="sm"
-                onClick={() => setViewMode('grid')}
-                data-testid="button-view-grid"
+                onClick={() => {
+                  setShowStarredOnly(!showStarredOnly);
+                  if (!showStarredOnly) setCurrentFolderId(null);
+                }}
+                data-testid="button-toggle-starred"
               >
-                <LayoutGrid className="w-4 h-4" />
+                <Star className={cn("w-4 h-4 mr-1", showStarredOnly && "fill-current")} />
+                Starred
+                {starredFiles.length > 0 && (
+                  <Badge variant="secondary" className="ml-1 text-xs">{starredFiles.length}</Badge>
+                )}
               </Button>
+
+              {/* Select Mode Toggle */}
               <Button
-                variant={viewMode === 'list' ? 'default' : 'ghost'}
+                variant={isFileSelectMode ? 'default' : 'outline'}
                 size="sm"
-                onClick={() => setViewMode('list')}
-                data-testid="button-view-list"
+                onClick={() => {
+                  setIsFileSelectMode(!isFileSelectMode);
+                  if (isFileSelectMode) setSelectedFiles(new Set());
+                }}
+                data-testid="button-toggle-select-mode"
               >
-                <List className="w-4 h-4" />
+                <CheckSquare className="w-4 h-4 mr-1" />
+                {isFileSelectMode ? 'Cancel' : 'Select'}
               </Button>
             </div>
             
+            {/* Right side actions */}
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-            <Dialog open={isFolderOpen} onOpenChange={setIsFolderOpen}>
-              <DialogTrigger asChild>
-                <Button variant="outline" className="w-full sm:w-auto" data-testid="button-new-folder">
-                  <FolderPlus className="w-4 h-4 mr-2" /> New Folder
-                </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Create New Folder</DialogTitle>
-                </DialogHeader>
-                <div className="space-y-4 mt-4">
-                  <div className="grid gap-2">
-                    <Label htmlFor="folderName">Folder Name</Label>
-                    <Input 
-                      id="folderName" 
-                      value={folderName} 
-                      onChange={(e) => setFolderName(e.target.value)} 
-                      placeholder="e.g. Site Photos"
-                      data-testid="input-folder-name"
-                      className="bg-white dark:bg-zinc-900 text-black dark:text-white"
-                    />
-                  </div>
-                  <DialogFooter>
-                    <Button onClick={handleCreateFolder} disabled={createFolderMutation.isPending} data-testid="button-create-folder">
-                      {createFolderMutation.isPending ? "Creating..." : "Create Folder"}
-                    </Button>
-                  </DialogFooter>
+              {/* Batch actions when files are selected */}
+              {isFileSelectMode && selectedFiles.size > 0 && (
+                <div className="flex items-center gap-2">
+                  <Badge variant="secondary">{selectedFiles.size} selected</Badge>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setMoveDialogOpen(true)}
+                    data-testid="button-batch-move"
+                  >
+                    <FolderInput className="w-4 h-4 mr-1" /> Move
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowBatchDeleteFilesConfirm(true)}
+                    className="text-destructive hover:text-destructive"
+                    data-testid="button-batch-delete"
+                  >
+                    <Trash2 className="w-4 h-4 mr-1" /> Delete
+                  </Button>
                 </div>
-              </DialogContent>
-            </Dialog>
+              )}
 
-            <NativeFileUploader
-              maxNumberOfFiles={50}
-              maxFileSize={52428800}
-              buttonClassName="w-full sm:w-auto"
-              onUploadComplete={handleUploadComplete}
-            >
-              <Upload className="w-4 h-4 mr-2" /> Upload Files
-            </NativeFileUploader>
+              {!isFileSelectMode && (
+                <>
+                  <Dialog open={isFolderOpen} onOpenChange={setIsFolderOpen}>
+                    <DialogTrigger asChild>
+                      <Button variant="outline" className="w-full sm:w-auto" data-testid="button-new-folder">
+                        <FolderPlus className="w-4 h-4 mr-2" /> New Folder
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent>
+                      <DialogHeader>
+                        <DialogTitle>Create New Folder</DialogTitle>
+                      </DialogHeader>
+                      <div className="space-y-4 mt-4">
+                        <div className="grid gap-2">
+                          <Label htmlFor="folderName">Folder Name</Label>
+                          <Input 
+                            id="folderName" 
+                            value={folderName} 
+                            onChange={(e) => setFolderName(e.target.value)} 
+                            placeholder="e.g. Site Photos"
+                            data-testid="input-folder-name"
+                            className="bg-white dark:bg-zinc-900 text-black dark:text-white"
+                          />
+                        </div>
+                        <DialogFooter>
+                          <Button onClick={handleCreateFolder} disabled={createFolderMutation.isPending} data-testid="button-create-folder">
+                            {createFolderMutation.isPending ? "Creating..." : "Create Folder"}
+                          </Button>
+                        </DialogFooter>
+                      </div>
+                    </DialogContent>
+                  </Dialog>
+
+                  <NativeFileUploader
+                    maxNumberOfFiles={50}
+                    maxFileSize={52428800}
+                    buttonClassName="w-full sm:w-auto"
+                    onUploadComplete={handleUploadComplete}
+                  >
+                    <Upload className="w-4 h-4 mr-2" /> Upload Files
+                  </NativeFileUploader>
+                </>
+              )}
             </div>
           </div>
 
@@ -1398,18 +1517,22 @@ export default function ProjectDetails() {
 
           {(isFilesLoading || isFoldersLoading) ? (
             <div className="py-10 text-center text-muted-foreground">Loading documents...</div>
-          ) : (currentFolders.length === 0 && currentFiles.length === 0) ? (
+          ) : (filteredFolders.length === 0 && allFiles.length === 0) ? (
             <div className="py-20 text-center bg-card border border-dashed border-border rounded-xl">
               <FileText className="w-12 h-12 mx-auto text-muted-foreground/50 mb-4" />
-              <p className="text-muted-foreground">No documents yet. Upload files or create folders to organize your project documents.</p>
+              <p className="text-muted-foreground">
+                {docSearchQuery ? "No matching files or folders found." : 
+                 showStarredOnly ? "No starred files yet. Star files to access them quickly." :
+                 "No documents yet. Upload files or create folders to organize your project documents."}
+              </p>
             </div>
           ) : (
             <div className="space-y-4">
               {/* Folders */}
-              {currentFolders.length > 0 && (
+              {!showStarredOnly && filteredFolders.length > 0 && (
                 <div className="grid gap-2">
                   <h3 className="text-sm font-medium text-muted-foreground mb-2">Folders</h3>
-                  {currentFolders.map(folder => (
+                  {filteredFolders.map(folder => (
                     <div key={folder.id} className="group bg-card border border-border rounded-lg p-3 hover:border-primary/50 transition-all flex items-center justify-between" data-testid={`folder-item-${folder.id}`}>
                       <button 
                         className="flex items-center gap-3 flex-1 text-left hover:text-primary transition-colors"
@@ -1419,18 +1542,33 @@ export default function ProjectDetails() {
                         <Folder className="w-5 h-5 text-primary" />
                         <span className="font-medium">{folder.name}</span>
                       </button>
-                      <Button 
-                        variant="ghost" 
-                        size="icon" 
-                        className="opacity-0 group-hover:opacity-100"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setDeleteFolderId(folder.id);
-                        }}
-                        data-testid={`button-delete-folder-${folder.id}`}
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
+                      <div className="flex gap-1">
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className="opacity-0 group-hover:opacity-100 h-8 w-8"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setRenamingFolder({ id: folder.id, name: folder.name });
+                            setRenameValue(folder.name);
+                          }}
+                          data-testid={`button-rename-folder-${folder.id}`}
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </Button>
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className="opacity-0 group-hover:opacity-100 h-8 w-8"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDeleteFolderId(folder.id);
+                          }}
+                          data-testid={`button-delete-folder-${folder.id}`}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -1447,23 +1585,83 @@ export default function ProjectDetails() {
                         {groupFiles.map((file: FileMetadata) => (
                           <div 
                             key={file.id} 
-                            className="group relative aspect-square bg-card border border-border rounded-lg overflow-hidden hover:border-primary/50 transition-all cursor-pointer"
+                            className={cn(
+                              "group relative aspect-square bg-card border rounded-lg overflow-hidden hover:border-primary/50 transition-all cursor-pointer",
+                              selectedFiles.has(file.id) ? "border-primary ring-2 ring-primary/30" : "border-border"
+                            )}
                             data-testid={`file-item-${file.id}`}
+                            onClick={() => {
+                              if (isFileSelectMode) {
+                                const newSelected = new Set(selectedFiles);
+                                if (newSelected.has(file.id)) {
+                                  newSelected.delete(file.id);
+                                } else {
+                                  newSelected.add(file.id);
+                                }
+                                setSelectedFiles(newSelected);
+                              } else {
+                                handleFileClick(file);
+                              }
+                            }}
                           >
-                            <button 
-                              onClick={() => handleFileClick(file)}
-                              className="w-full h-full"
-                              data-testid={`button-view-file-${file.id}`}
-                            >
-                              {getFileThumbnail(file)}
-                            </button>
+                            {getFileThumbnail(file)}
                             <div className="absolute bottom-0 left-0 right-0 bg-black/60 backdrop-blur-sm px-2 py-1">
                               <p className="text-white text-xs truncate">{file.name}</p>
                               {file.tags && file.tags.length > 0 && (
                                 <p className="text-white/70 text-xs truncate">{file.tags.length} tag{file.tags.length !== 1 ? 's' : ''}</p>
                               )}
                             </div>
-                            <div className="absolute top-1 right-1 flex gap-1 opacity-0 group-hover:opacity-100">
+                            {/* Selection checkbox in select mode */}
+                            {isFileSelectMode && (
+                              <div className="absolute top-1 left-1">
+                                <div className={cn(
+                                  "w-5 h-5 rounded border-2 flex items-center justify-center",
+                                  selectedFiles.has(file.id) ? "bg-primary border-primary" : "bg-black/50 border-white"
+                                )}>
+                                  {selectedFiles.has(file.id) && <Check className="w-3 h-3 text-white" />}
+                                </div>
+                              </div>
+                            )}
+                            {/* Star button */}
+                            <button 
+                              className={cn(
+                                "absolute top-1 left-1 p-1.5 rounded bg-black/50 hover-elevate",
+                                isFileSelectMode && "hidden",
+                                file.starred ? "opacity-100 text-yellow-400" : "opacity-0 group-hover:opacity-100 text-white"
+                              )}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                updateFileMutation.mutate({ id: file.id, starred: !file.starred });
+                              }}
+                              data-testid={`button-star-file-${file.id}`}
+                            >
+                              <Star className={cn("w-3.5 h-3.5", file.starred && "fill-current")} />
+                            </button>
+                            <div className={cn(
+                              "absolute top-1 right-1 flex gap-1",
+                              isFileSelectMode ? "hidden" : "opacity-0 group-hover:opacity-100"
+                            )}>
+                              <button 
+                                className="p-1.5 rounded bg-black/50 text-white hover-elevate"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setFileDetailsPanel(file);
+                                }}
+                                data-testid={`button-info-file-${file.id}`}
+                              >
+                                <Info className="w-3.5 h-3.5" />
+                              </button>
+                              <button 
+                                className="p-1.5 rounded bg-black/50 text-white hover-elevate"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setRenamingFile(file);
+                                  setRenameValue(file.name);
+                                }}
+                                data-testid={`button-rename-file-${file.id}`}
+                              >
+                                <Pencil className="w-3.5 h-3.5" />
+                              </button>
                               <button 
                                 className="p-1.5 rounded bg-black/50 text-white hover-elevate"
                                 onClick={(e) => {
@@ -1499,9 +1697,51 @@ export default function ProjectDetails() {
                 <div className="grid gap-2">
                   <h3 className="text-sm font-medium text-muted-foreground mb-2">Files</h3>
                   {allFiles.map((file: FileMetadata) => (
-                    <div key={file.id} className="group bg-card border border-border rounded-lg p-3 hover:border-primary/50 transition-all flex items-center justify-between gap-2" data-testid={`file-item-${file.id}`}>
+                    <div 
+                      key={file.id} 
+                      className={cn(
+                        "group bg-card border rounded-lg p-3 hover:border-primary/50 transition-all flex items-center justify-between gap-2",
+                        selectedFiles.has(file.id) ? "border-primary ring-2 ring-primary/30" : "border-border"
+                      )} 
+                      data-testid={`file-item-${file.id}`}
+                    >
+                      {/* Selection checkbox */}
+                      {isFileSelectMode && (
+                        <button
+                          onClick={() => {
+                            const newSelected = new Set(selectedFiles);
+                            if (newSelected.has(file.id)) {
+                              newSelected.delete(file.id);
+                            } else {
+                              newSelected.add(file.id);
+                            }
+                            setSelectedFiles(newSelected);
+                          }}
+                          className="shrink-0"
+                          data-testid={`checkbox-file-${file.id}`}
+                        >
+                          <div className={cn(
+                            "w-5 h-5 rounded border-2 flex items-center justify-center",
+                            selectedFiles.has(file.id) ? "bg-primary border-primary" : "border-muted-foreground"
+                          )}>
+                            {selectedFiles.has(file.id) && <Check className="w-3 h-3 text-white" />}
+                          </div>
+                        </button>
+                      )}
+                      {/* Star button */}
+                      {!isFileSelectMode && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className={cn("shrink-0 h-8 w-8", file.starred ? "text-yellow-500" : "opacity-0 group-hover:opacity-100")}
+                          onClick={() => updateFileMutation.mutate({ id: file.id, starred: !file.starred })}
+                          data-testid={`button-star-file-${file.id}`}
+                        >
+                          <Star className={cn("w-4 h-4", file.starred && "fill-current")} />
+                        </Button>
+                      )}
                       <button 
-                        onClick={() => handleFileClick(file)}
+                        onClick={() => isFileSelectMode ? null : handleFileClick(file)}
                         className="flex items-center gap-3 flex-1 text-left hover:text-primary transition-colors min-w-0"
                         data-testid={`button-view-file-${file.id}`}
                       >
@@ -1530,29 +1770,52 @@ export default function ProjectDetails() {
                           </div>
                         </div>
                       </button>
-                      <div className="flex gap-1 shrink-0">
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
-                          className="opacity-0 group-hover:opacity-100 h-8 w-8"
-                          onClick={() => {
-                            setEditingFile(file);
-                            setEditFileTags(file.tags || []);
-                          }}
-                          data-testid={`button-edit-file-${file.id}`}
-                        >
-                          <Tags className="w-4 h-4" />
-                        </Button>
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
-                          className="opacity-0 group-hover:opacity-100 h-8 w-8"
-                          onClick={() => setDeleteFileId(file.id)}
-                          data-testid={`button-delete-file-${file.id}`}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </div>
+                      {!isFileSelectMode && (
+                        <div className="flex gap-1 shrink-0">
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="opacity-0 group-hover:opacity-100 h-8 w-8"
+                            onClick={() => setFileDetailsPanel(file)}
+                            data-testid={`button-info-file-${file.id}`}
+                          >
+                            <Info className="w-4 h-4" />
+                          </Button>
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="opacity-0 group-hover:opacity-100 h-8 w-8"
+                            onClick={() => {
+                              setRenamingFile(file);
+                              setRenameValue(file.name);
+                            }}
+                            data-testid={`button-rename-file-${file.id}`}
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </Button>
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="opacity-0 group-hover:opacity-100 h-8 w-8"
+                            onClick={() => {
+                              setEditingFile(file);
+                              setEditFileTags(file.tags || []);
+                            }}
+                            data-testid={`button-edit-file-${file.id}`}
+                          >
+                            <Tags className="w-4 h-4" />
+                          </Button>
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="opacity-0 group-hover:opacity-100 h-8 w-8"
+                            onClick={() => setDeleteFileId(file.id)}
+                            data-testid={`button-delete-file-${file.id}`}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -2077,7 +2340,7 @@ export default function ProjectDetails() {
               onClick={() => {
                 if (editingFile) {
                   updateFileMutation.mutate({ 
-                    fileId: editingFile.id, 
+                    id: editingFile.id, 
                     tags: editFileTags.length > 0 ? editFileTags : null 
                   });
                   setEditingFile(null);
@@ -2285,6 +2548,285 @@ export default function ProjectDetails() {
               data-testid="button-save-edit-task"
             >
               {updateTaskMutation.isPending ? "Saving..." : "Save Changes"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Rename Folder Dialog */}
+      <Dialog open={renamingFolder !== null} onOpenChange={(open) => !open && setRenamingFolder(null)}>
+        <DialogContent className="bg-white dark:bg-zinc-900 sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-black dark:text-white">Rename Folder</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="grid gap-2">
+              <Label htmlFor="rename-folder-name">Folder Name</Label>
+              <Input 
+                id="rename-folder-name"
+                value={renameValue}
+                onChange={(e) => setRenameValue(e.target.value)}
+                placeholder="Enter new folder name"
+                className="bg-white dark:bg-zinc-900 text-black dark:text-white"
+                data-testid="input-rename-folder"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRenamingFolder(null)} data-testid="button-cancel-rename-folder">
+              Cancel
+            </Button>
+            <Button 
+              onClick={() => {
+                if (renamingFolder && renameValue.trim()) {
+                  updateFolderMutation.mutate({ id: renamingFolder.id, name: renameValue.trim() });
+                  setRenamingFolder(null);
+                  setRenameValue("");
+                }
+              }}
+              disabled={updateFolderMutation.isPending || !renameValue.trim()}
+              data-testid="button-save-rename-folder"
+            >
+              Rename
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Rename File Dialog */}
+      <Dialog open={renamingFile !== null} onOpenChange={(open) => !open && setRenamingFile(null)}>
+        <DialogContent className="bg-white dark:bg-zinc-900 sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-black dark:text-white">Rename File</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="grid gap-2">
+              <Label htmlFor="rename-file-name">File Name</Label>
+              <Input 
+                id="rename-file-name"
+                value={renameValue}
+                onChange={(e) => setRenameValue(e.target.value)}
+                placeholder="Enter new file name"
+                className="bg-white dark:bg-zinc-900 text-black dark:text-white"
+                data-testid="input-rename-file"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRenamingFile(null)} data-testid="button-cancel-rename-file">
+              Cancel
+            </Button>
+            <Button 
+              onClick={() => {
+                if (renamingFile && renameValue.trim()) {
+                  updateFileMutation.mutate({ id: renamingFile.id, name: renameValue.trim() });
+                  setRenamingFile(null);
+                  setRenameValue("");
+                }
+              }}
+              disabled={updateFileMutation.isPending || !renameValue.trim()}
+              data-testid="button-save-rename-file"
+            >
+              Rename
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Batch Delete Files Confirmation */}
+      <AlertDialog open={showBatchDeleteFilesConfirm} onOpenChange={setShowBatchDeleteFilesConfirm}>
+        <AlertDialogContent className="bg-white dark:bg-zinc-900 text-black dark:text-white">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Selected Files</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete {selectedFiles.size} file{selectedFiles.size !== 1 ? 's' : ''}? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-cancel-batch-delete-files">Cancel</AlertDialogCancel>
+            <AlertDialogAction 
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => {
+                batchDeleteFilesMutation.mutate(Array.from(selectedFiles));
+                setSelectedFiles(new Set());
+                setIsFileSelectMode(false);
+                setShowBatchDeleteFilesConfirm(false);
+              }}
+              data-testid="button-confirm-batch-delete-files"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Move Files Dialog */}
+      <Dialog open={moveDialogOpen} onOpenChange={setMoveDialogOpen}>
+        <DialogContent className="bg-white dark:bg-zinc-900 sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-black dark:text-white">Move {selectedFiles.size} File{selectedFiles.size !== 1 ? 's' : ''}</DialogTitle>
+            <DialogDescription>
+              Select a destination folder for the selected files.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 max-h-64 overflow-y-auto">
+            <button
+              onClick={() => {
+                batchMoveFilesMutation.mutate({ ids: Array.from(selectedFiles), folderId: null });
+                setSelectedFiles(new Set());
+                setIsFileSelectMode(false);
+                setMoveDialogOpen(false);
+              }}
+              className={cn(
+                "w-full flex items-center gap-2 p-3 rounded-lg text-left hover:bg-muted transition-colors",
+                currentFolderId === null && "bg-muted"
+              )}
+              data-testid="move-to-root"
+            >
+              <Home className="w-5 h-5 text-muted-foreground" />
+              <span>Root (Documents)</span>
+            </button>
+            {folders?.filter(f => !selectedFiles.has(f.id)).map(folder => (
+              <button
+                key={folder.id}
+                onClick={() => {
+                  batchMoveFilesMutation.mutate({ ids: Array.from(selectedFiles), folderId: folder.id });
+                  setSelectedFiles(new Set());
+                  setIsFileSelectMode(false);
+                  setMoveDialogOpen(false);
+                }}
+                className={cn(
+                  "w-full flex items-center gap-2 p-3 rounded-lg text-left hover:bg-muted transition-colors",
+                  folder.id === currentFolderId && "bg-muted"
+                )}
+                data-testid={`move-to-folder-${folder.id}`}
+              >
+                <Folder className="w-5 h-5 text-primary" />
+                <span>{folder.name}</span>
+              </button>
+            ))}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setMoveDialogOpen(false)} data-testid="button-cancel-move">
+              Cancel
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* File Details Panel */}
+      <Dialog open={fileDetailsPanel !== null} onOpenChange={(open) => !open && setFileDetailsPanel(null)}>
+        <DialogContent className="bg-white dark:bg-zinc-900 sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="text-black dark:text-white flex items-center gap-2">
+              <Info className="w-5 h-5" />
+              File Details
+            </DialogTitle>
+          </DialogHeader>
+          {fileDetailsPanel && (
+            <div className="space-y-4">
+              <div className="aspect-video w-full bg-muted rounded-lg flex items-center justify-center overflow-hidden">
+                {isImageFile(fileDetailsPanel.contentType) ? (
+                  <img 
+                    src={getProxyUrl(fileDetailsPanel.objectPath)} 
+                    alt={fileDetailsPanel.name}
+                    className="w-full h-full object-contain"
+                  />
+                ) : isPdfFile(fileDetailsPanel.contentType) ? (
+                  <div className="text-center">
+                    <FileText className="w-16 h-16 text-red-500 mx-auto mb-2" />
+                    <span className="text-sm text-muted-foreground">PDF Document</span>
+                  </div>
+                ) : (
+                  <div className="text-center">
+                    <File className="w-16 h-16 text-muted-foreground mx-auto mb-2" />
+                    <span className="text-sm text-muted-foreground">File</span>
+                  </div>
+                )}
+              </div>
+              
+              <div className="space-y-3">
+                <div className="flex items-start gap-3">
+                  <FileType className="w-4 h-4 text-muted-foreground mt-0.5" />
+                  <div>
+                    <p className="text-xs text-muted-foreground">Name</p>
+                    <p className="font-medium break-all">{fileDetailsPanel.name}</p>
+                  </div>
+                </div>
+                
+                <div className="flex items-start gap-3">
+                  <Calendar className="w-4 h-4 text-muted-foreground mt-0.5" />
+                  <div>
+                    <p className="text-xs text-muted-foreground">Uploaded</p>
+                    <p className="font-medium">
+                      {fileDetailsPanel.createdAt && format(new Date(fileDetailsPanel.createdAt), "MMMM d, yyyy 'at' h:mm a")}
+                    </p>
+                  </div>
+                </div>
+                
+                <div className="flex items-start gap-3">
+                  <HardDrive className="w-4 h-4 text-muted-foreground mt-0.5" />
+                  <div>
+                    <p className="text-xs text-muted-foreground">Size</p>
+                    <p className="font-medium">
+                      {fileDetailsPanel.size ? (
+                        fileDetailsPanel.size >= 1048576 
+                          ? `${(fileDetailsPanel.size / 1048576).toFixed(2)} MB`
+                          : `${(fileDetailsPanel.size / 1024).toFixed(1)} KB`
+                      ) : 'Unknown'}
+                    </p>
+                  </div>
+                </div>
+                
+                <div className="flex items-start gap-3">
+                  <FileType className="w-4 h-4 text-muted-foreground mt-0.5" />
+                  <div>
+                    <p className="text-xs text-muted-foreground">Type</p>
+                    <p className="font-medium">{fileDetailsPanel.contentType || 'Unknown'}</p>
+                  </div>
+                </div>
+                
+                {fileDetailsPanel.tags && fileDetailsPanel.tags.length > 0 && (
+                  <div className="flex items-start gap-3">
+                    <Tags className="w-4 h-4 text-muted-foreground mt-0.5" />
+                    <div>
+                      <p className="text-xs text-muted-foreground mb-1">Tags</p>
+                      <div className="flex flex-wrap gap-1">
+                        {fileDetailsPanel.tags.map(tag => (
+                          <Badge key={tag} variant="secondary" className="text-xs">{tag}</Badge>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+                
+                <div className="flex items-center gap-3">
+                  <Star className={cn("w-4 h-4", fileDetailsPanel.starred ? "text-yellow-500 fill-current" : "text-muted-foreground")} />
+                  <div>
+                    <p className="text-xs text-muted-foreground">Starred</p>
+                    <p className="font-medium">{fileDetailsPanel.starred ? 'Yes' : 'No'}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                if (fileDetailsPanel) {
+                  const link = document.createElement('a');
+                  link.href = getProxyUrl(fileDetailsPanel.objectPath);
+                  link.download = fileDetailsPanel.name;
+                  link.click();
+                }
+              }}
+              data-testid="button-download-file"
+            >
+              <Download className="w-4 h-4 mr-2" /> Download
+            </Button>
+            <Button onClick={() => setFileDetailsPanel(null)} data-testid="button-close-details">
+              Close
             </Button>
           </DialogFooter>
         </DialogContent>

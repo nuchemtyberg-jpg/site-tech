@@ -151,3 +151,27 @@ Enhanced photo viewing experience with EXIF extraction, lazy loading, and profes
   - Keyboard navigation and swipe gestures supported
   - State managed via `lightboxPhotos`, `lightboxIndex`, and `lightboxOpen`
 - **Photo Sorting**: Photos sorted by `takenAt` date (when available) with fallback to `createdAt`
+
+### Enhanced Document Management - Dropbox-like Features (January 2026)
+Added comprehensive file management capabilities with a Dropbox-like experience:
+- **Schema Changes**: Added `starred` boolean field to files table for favorites
+- **API Endpoints**:
+  - `PUT /api/files/:id` - Update file name, tags, starred status, folderId
+  - `PUT /api/folders/:id` - Update folder name, parentId
+  - `POST /api/files/batch-delete` - Batch delete multiple files by IDs
+  - `POST /api/files/batch-move` - Batch move multiple files to a target folder
+- **Frontend Hooks** (`client/src/hooks/use-files.ts`):
+  - `useUpdateFile` - Update file properties including name, tags, starred
+  - `useUpdateFolder` - Rename folders or move to different parent
+  - `useBatchDeleteFiles` - Delete multiple files at once
+  - `useBatchMoveFiles` - Move multiple files to a folder
+- **UI Features**:
+  - **Search Bar**: Client-side filtering of files and folders by name/tags
+  - **Starred Filter**: Toggle to show only starred files across all folders
+  - **Select Mode**: Multi-select with checkboxes for batch operations
+  - **Batch Operations**: Move and Delete buttons when files are selected
+  - **Star Button**: Quick star/unstar on each file (hover action)
+  - **Rename**: Rename files and folders via dialog
+  - **File Details Panel**: View file info including name, size, type, date, tags, and download option
+  - **View Modes**: Grid (date-grouped) and List views with all new features
+- **State Management**: Uses `useMemo` for efficient client-side filtering

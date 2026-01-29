@@ -1603,6 +1603,35 @@ export async function registerRoutes(
     res.status(204).send();
   });
 
+  // Batch file operations
+  app.post('/api/files/batch-delete', isAuthenticated, isAuthorizedUser, async (req, res) => {
+    const { ids } = req.body;
+    if (!ids || !Array.isArray(ids)) {
+      return res.status(400).json({ message: "ids array is required" });
+    }
+    await storage.batchDeleteFiles(ids.map(Number));
+    res.status(204).send();
+  });
+
+  app.post('/api/files/batch-move', isAuthenticated, isAuthorizedUser, async (req, res) => {
+    const { ids, folderId } = req.body;
+    if (!ids || !Array.isArray(ids)) {
+      return res.status(400).json({ message: "ids array is required" });
+    }
+    await storage.batchMoveFiles(ids.map(Number), folderId === null ? null : Number(folderId));
+    res.json({ success: true });
+  });
+
+  // Update folder (rename)
+  app.put('/api/folders/:id', isAuthenticated, isAuthorizedUser, async (req, res) => {
+    try {
+      const folder = await storage.updateFolder(Number(req.params.id), req.body);
+      res.json(folder);
+    } catch (err) {
+      throw err;
+    }
+  });
+
   // Photo Albums
   app.get(api.photoAlbums.list.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
     const albums = await storage.getPhotoAlbums(Number(req.params.projectId));

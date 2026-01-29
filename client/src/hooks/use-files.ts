@@ -59,6 +59,17 @@ export function useCreateFolder(projectId: number) {
   });
 }
 
+export function useUpdateFolder(projectId: number) {
+  return useMutation({
+    mutationFn: async ({ id, ...data }: { id: number; name?: string; parentId?: number | null }) => {
+      return apiRequest("PUT", `/api/folders/${id}`, data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/projects', projectId, 'folders'] });
+    },
+  });
+}
+
 export function useDeleteFolder(projectId: number) {
   return useMutation({
     mutationFn: async (id: number) => {
@@ -72,8 +83,30 @@ export function useDeleteFolder(projectId: number) {
 
 export function useUpdateFile(projectId: number) {
   return useMutation({
-    mutationFn: async ({ id, ...data }: { id: number; tags?: string[] | null; albumId?: number | null; folderId?: number | null }) => {
+    mutationFn: async ({ id, ...data }: { id: number; name?: string; tags?: string[] | null; albumId?: number | null; folderId?: number | null; starred?: boolean }) => {
       return apiRequest("PUT", `/api/files/${id}`, data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/projects', projectId, 'files'] });
+    },
+  });
+}
+
+export function useBatchDeleteFiles(projectId: number) {
+  return useMutation({
+    mutationFn: async (ids: number[]) => {
+      return apiRequest("POST", `/api/files/batch-delete`, { ids });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/projects', projectId, 'files'] });
+    },
+  });
+}
+
+export function useBatchMoveFiles(projectId: number) {
+  return useMutation({
+    mutationFn: async ({ ids, folderId }: { ids: number[]; folderId: number | null }) => {
+      return apiRequest("POST", `/api/files/batch-move`, { ids, folderId });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/projects', projectId, 'files'] });

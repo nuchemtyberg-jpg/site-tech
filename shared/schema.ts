@@ -423,6 +423,7 @@ export const files = pgTable("files", {
   size: integer("size"),
   takenAt: timestamp("taken_at"), // DEPRECATED - kept for migration
   tags: text("tags").array(), // Document tags for categorization
+  starred: boolean("starred").default(false), // Starred/favorite files
   createdAt: timestamp("created_at").defaultNow(),
   deletedAt: timestamp("deleted_at"), // Soft delete support
 });

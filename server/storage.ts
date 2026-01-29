@@ -128,6 +128,7 @@ export interface IStorage {
   // Folders & Files
   getFolders(projectId: number): Promise<Folder[]>;
   createFolder(folder: InsertFolder): Promise<Folder>;
+  updateFolder(id: number, folder: Partial<InsertFolder>): Promise<Folder>;
   deleteFolder(id: number): Promise<void>;
 
   getFiles(projectId: number): Promise<FileMetadata[]>;
@@ -135,6 +136,8 @@ export interface IStorage {
   createFile(file: InsertFileMetadata): Promise<FileMetadata>;
   updateFile(id: number, file: Partial<InsertFileMetadata>): Promise<FileMetadata>;
   deleteFile(id: number): Promise<void>;
+  batchDeleteFiles(ids: number[]): Promise<void>;
+  batchMoveFiles(ids: number[], folderId: number | null): Promise<void>;
 
   // Photo Albums
   getPhotoAlbums(projectId: number): Promise<PhotoAlbum[]>;
@@ -589,8 +592,22 @@ export class DatabaseStorage implements IStorage {
     const [folder] = await db.insert(folders).values(insertFolder).returning();
     return folder;
   }
+  async updateFolder(id: number, updates: Partial<InsertFolder>): Promise<Folder> {
+    const [folder] = await db.update(folders).set(updates).where(eq(folders.id, id)).returning();
+    return folder;
+  }
   async deleteFolder(id: number): Promise<void> {
     await db.update(folders).set({ deletedAt: new Date() }).where(eq(folders.id, id));
+  }
+  async batchDeleteFiles(ids: number[]): Promise<void> {
+    for (const id of ids) {
+      await db.update(files).set({ deletedAt: new Date() }).where(eq(files.id, id));
+    }
+  }
+  async batchMoveFiles(ids: number[], folderId: number | null): Promise<void> {
+    for (const id of ids) {
+      await db.update(files).set({ folderId }).where(eq(files.id, id));
+    }
   }
 
   // Files (with soft delete)
