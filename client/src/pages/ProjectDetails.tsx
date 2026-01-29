@@ -346,6 +346,7 @@ export default function ProjectDetails() {
   // Document search and selection state
   const [docSearchQuery, setDocSearchQuery] = useState("");
   const [selectedFiles, setSelectedFiles] = useState<Set<number>>(new Set());
+  const [selectedFolders, setSelectedFolders] = useState<Set<number>>(new Set());
   const [isFileSelectMode, setIsFileSelectMode] = useState(false);
   const [showStarredOnly, setShowStarredOnly] = useState(false);
   const [renamingFile, setRenamingFile] = useState<FileMetadata | null>(null);
@@ -642,7 +643,8 @@ export default function ProjectDetails() {
       );
     }
     
-    return result;
+    // Apply stable sorting by id to prevent files jumping when properties change
+    return [...result].sort((a, b) => a.id - b.id);
   }, [currentFiles, starredFiles, showStarredOnly, docSearchQuery]);
   
   // Filter folders by search
@@ -1647,7 +1649,10 @@ export default function ProjectDetails() {
                 size="sm"
                 onClick={() => {
                   setIsFileSelectMode(!isFileSelectMode);
-                  if (isFileSelectMode) setSelectedFiles(new Set());
+                  if (isFileSelectMode) {
+                    setSelectedFiles(new Set());
+                    setSelectedFolders(new Set());
+                  }
                 }}
                 data-testid="button-toggle-select-mode"
               >
@@ -1658,10 +1663,13 @@ export default function ProjectDetails() {
             
             {/* Right side actions */}
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-              {/* Batch actions when files are selected */}
-              {isFileSelectMode && selectedFiles.size > 0 && (
+              {/* Batch actions when files or folders are selected */}
+              {isFileSelectMode && (selectedFiles.size > 0 || selectedFolders.size > 0) && (
                 <div className="flex items-center gap-2">
-                  <Badge variant="secondary">{selectedFiles.size} selected</Badge>
+                  <Badge variant="secondary">
+                    {selectedFiles.size + selectedFolders.size} selected
+                    {selectedFolders.size > 0 && ` (${selectedFolders.size} folder${selectedFolders.size > 1 ? 's' : ''})`}
+                  </Badge>
                   <Button
                     variant="outline"
                     size="sm"
@@ -1765,42 +1773,74 @@ export default function ProjectDetails() {
                 <div className="grid gap-2">
                   <h3 className="text-sm font-medium text-muted-foreground mb-2">Folders</h3>
                   {filteredFolders.map(folder => (
-                    <div key={folder.id} className="group bg-card border border-border rounded-lg p-3 hover:border-primary/50 transition-all flex items-center justify-between" data-testid={`folder-item-${folder.id}`}>
+                    <div 
+                      key={folder.id} 
+                      className={cn(
+                        "group bg-card border rounded-lg p-3 hover:border-primary/50 transition-all flex items-center justify-between",
+                        selectedFolders.has(folder.id) ? "border-primary ring-2 ring-primary/30" : "border-border"
+                      )} 
+                      data-testid={`folder-item-${folder.id}`}
+                    >
+                      {/* Selection checkbox */}
+                      {isFileSelectMode && (
+                        <button
+                          onClick={() => {
+                            const newSelected = new Set(selectedFolders);
+                            if (newSelected.has(folder.id)) {
+                              newSelected.delete(folder.id);
+                            } else {
+                              newSelected.add(folder.id);
+                            }
+                            setSelectedFolders(newSelected);
+                          }}
+                          className="shrink-0 mr-3"
+                          data-testid={`checkbox-folder-${folder.id}`}
+                        >
+                          <div className={cn(
+                            "w-5 h-5 rounded border-2 flex items-center justify-center",
+                            selectedFolders.has(folder.id) ? "bg-primary border-primary" : "border-muted-foreground"
+                          )}>
+                            {selectedFolders.has(folder.id) && <Check className="w-3 h-3 text-white" />}
+                          </div>
+                        </button>
+                      )}
                       <button 
                         className="flex items-center gap-3 flex-1 text-left hover:text-primary transition-colors"
-                        onClick={() => setCurrentFolderId(folder.id)}
+                        onClick={() => !isFileSelectMode && setCurrentFolderId(folder.id)}
                         data-testid={`button-open-folder-${folder.id}`}
                       >
                         <Folder className="w-5 h-5 text-primary" />
                         <span className="font-medium">{folder.name}</span>
                       </button>
-                      <div className="flex gap-1">
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
-                          className="opacity-0 group-hover:opacity-100 h-8 w-8"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setRenamingFolder({ id: folder.id, name: folder.name });
-                            setRenameValue(folder.name);
-                          }}
-                          data-testid={`button-rename-folder-${folder.id}`}
-                        >
-                          <Pencil className="w-4 h-4" />
-                        </Button>
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
-                          className="opacity-0 group-hover:opacity-100 h-8 w-8"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setDeleteFolderId(folder.id);
-                          }}
-                          data-testid={`button-delete-folder-${folder.id}`}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </div>
+                      {!isFileSelectMode && (
+                        <div className="flex gap-1">
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="opacity-0 group-hover:opacity-100 h-8 w-8"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setRenamingFolder({ id: folder.id, name: folder.name });
+                              setRenameValue(folder.name);
+                            }}
+                            data-testid={`button-rename-folder-${folder.id}`}
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </Button>
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="opacity-0 group-hover:opacity-100 h-8 w-8"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setDeleteFolderId(folder.id);
+                            }}
+                            data-testid={`button-delete-folder-${folder.id}`}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -2886,13 +2926,15 @@ export default function ProjectDetails() {
         </DialogContent>
       </Dialog>
 
-      {/* Batch Delete Files Confirmation */}
+      {/* Batch Delete Files/Folders Confirmation */}
       <AlertDialog open={showBatchDeleteFilesConfirm} onOpenChange={setShowBatchDeleteFilesConfirm}>
         <AlertDialogContent className="bg-white dark:bg-zinc-900 text-black dark:text-white">
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete Selected Files</AlertDialogTitle>
+            <AlertDialogTitle>Delete Selected Items</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete {selectedFiles.size} file{selectedFiles.size !== 1 ? 's' : ''}? This action cannot be undone.
+              Are you sure you want to delete {selectedFiles.size + selectedFolders.size} item{selectedFiles.size + selectedFolders.size !== 1 ? 's' : ''}
+              {selectedFolders.size > 0 && ` (including ${selectedFolders.size} folder${selectedFolders.size !== 1 ? 's' : ''})`}? 
+              This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -2900,8 +2942,16 @@ export default function ProjectDetails() {
             <AlertDialogAction 
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               onClick={() => {
-                batchDeleteFilesMutation.mutate(Array.from(selectedFiles));
+                // Delete files
+                if (selectedFiles.size > 0) {
+                  batchDeleteFilesMutation.mutate(Array.from(selectedFiles));
+                }
+                // Delete folders one by one
+                selectedFolders.forEach(folderId => {
+                  deleteFolderMutation.mutate(folderId);
+                });
                 setSelectedFiles(new Set());
+                setSelectedFolders(new Set());
                 setIsFileSelectMode(false);
                 setShowBatchDeleteFilesConfirm(false);
               }}
