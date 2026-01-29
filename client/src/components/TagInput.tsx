@@ -61,7 +61,7 @@ export function TagInput({ value, onChange, placeholder = "Add tag...", classNam
         onKeyDown={handleKeyDown}
         onBlur={addTag}
         placeholder={value.length === 0 ? placeholder : ""}
-        className="flex-1 min-w-20 border-0 p-0 h-6 text-sm focus-visible:ring-0 focus-visible:ring-offset-0"
+        className="flex-1 min-w-20 border-0 p-0 h-6 text-sm focus-visible:ring-0 focus-visible:ring-offset-0 bg-[#ffffff]"
         data-testid="input-tag"
       />
     </div>
