@@ -53,13 +53,18 @@ export function useAllPhotosFlat(projectId: number, albumId?: number | null) {
   };
 }
 
+function invalidatePhotoQueries(projectId: number) {
+  queryClient.invalidateQueries({ queryKey: ['/api/projects', projectId, 'photos'] });
+  queryClient.invalidateQueries({ queryKey: ['/api/projects', projectId, 'photos', 'paginated'] });
+}
+
 export function useCreatePhoto(projectId: number) {
   return useMutation({
     mutationFn: async (photo: { name: string; objectPath: string; contentType?: string; size?: number; albumId?: number | null; takenAt?: string | null }) => {
       return apiRequest("POST", `/api/projects/${projectId}/photos`, photo);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/projects', projectId, 'photos'] });
+      invalidatePhotoQueries(projectId);
     },
   });
 }
@@ -70,7 +75,7 @@ export function useUpdatePhoto(projectId: number) {
       return apiRequest("PATCH", `/api/photos/${id}`, updates);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/projects', projectId, 'photos'] });
+      invalidatePhotoQueries(projectId);
     },
   });
 }
@@ -81,7 +86,7 @@ export function useDeletePhoto(projectId: number) {
       return apiRequest("DELETE", `/api/photos/${id}`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/projects', projectId, 'photos'] });
+      invalidatePhotoQueries(projectId);
     },
   });
 }

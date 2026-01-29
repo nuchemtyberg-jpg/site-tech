@@ -2,7 +2,8 @@ import { useParams, Link, useLocation, useSearch } from "wouter";
 import { useProject, useDeleteProject, useUpdateProject } from "@/hooks/use-projects";
 import { useProjectTasks, useCreateTask, useDeleteTask, useUpdateTask, useTaskStatusHistory } from "@/hooks/use-tasks";
 import { useProjectFiles, useProjectFolders, useCreateFile, useDeleteFile, useCreateFolder, useDeleteFolder, useUpdateFile, useUpdateFolder, useBatchDeleteFiles, useBatchMoveFiles } from "@/hooks/use-files";
-import { useProjectPhotos, useCreatePhoto, useDeletePhoto } from "@/hooks/use-photos";
+import { useProjectPhotos, useCreatePhoto, useDeletePhoto, useAllPhotosFlat } from "@/hooks/use-photos";
+import { VirtualizedPhotoGrid } from "@/components/VirtualizedPhotoGrid";
 import { TagInput } from "@/components/TagInput";
 import Lightbox from "yet-another-react-lightbox";
 import "yet-another-react-lightbox/styles.css";
@@ -189,6 +190,7 @@ export default function ProjectDetails() {
   
   // Photos (separate from files/documents)
   const { data: photos = [], isLoading: isPhotosLoading } = useProjectPhotos(projectId);
+  const paginatedPhotos = useAllPhotosFlat(projectId, currentAlbumId);
   const createPhotoMutation = useCreatePhoto(projectId);
   const deletePhotoMutation = useDeletePhoto(projectId);
 
@@ -2734,169 +2736,33 @@ export default function ProjectDetails() {
             </div>
           )}
 
-          {/* Photo Grid with Date Headers */}
-          {(() => {
-            // Use photos from separate photos table (not files)
-            const allPhotos = photos || [];
-            const photoFiles = currentAlbumId 
-              ? allPhotos.filter(p => p.albumId === currentAlbumId)
-              : allPhotos;
-            
-            if (photoFiles.length === 0) {
-              return (
-                <div className="flex items-center justify-center h-40 border-2 border-dashed border-muted-foreground/25 rounded-lg bg-muted/50">
-                  <div className="text-center text-muted-foreground">
-                    <Camera className="w-8 h-8 mx-auto mb-2" />
-                    <p className="text-sm">No photos yet</p>
-                    <p className="text-xs">Upload photos to get started</p>
-                  </div>
-                </div>
-              );
-            }
-
-            // Sort by date descending and group by date
-            // Use takenAt (photo timestamp) if available, otherwise fall back to createdAt (upload date)
-            const getPhotoDate = (photo: Photo) => new Date(photo.takenAt || photo.createdAt || 0);
-            
-            const sortedPhotos = [...photoFiles].sort((a, b) => 
-              getPhotoDate(b).getTime() - getPhotoDate(a).getTime()
-            );
-
-            // Group by month - store actual Date for proper formatting
-            const monthDataMap: Map<string, { monthDate: Date; days: { date: string; photos: Photo[] }[] }> = new Map();
-            
-            sortedPhotos.forEach(photo => {
-              const date = getPhotoDate(photo);
-              const monthKey = format(date, "MMMM yyyy");
-              const dateKey = format(date, "EEEE, MMMM d, yyyy");
-              
-              if (!monthDataMap.has(monthKey)) {
-                monthDataMap.set(monthKey, { monthDate: date, days: [] });
-              }
-              
-              const monthData = monthDataMap.get(monthKey)!;
-              let dateGroup = monthData.days.find(g => g.date === dateKey);
-              if (!dateGroup) {
-                dateGroup = { date: dateKey, photos: [] };
-                monthData.days.push(dateGroup);
-              }
-              dateGroup.photos.push(photo);
-            });
-
-            const gridCols = photoTileSize === 'small' 
-              ? 'grid-cols-4 md:grid-cols-6 lg:grid-cols-8' 
-              : photoTileSize === 'medium'
-              ? 'grid-cols-2 md:grid-cols-4 lg:grid-cols-5'
-              : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3';
-
-            const monthEntries = Array.from(monthDataMap.entries());
-
-            return (
-              <div className="flex gap-4">
-                {/* Main Photo Grid */}
-                <div className="flex-1 space-y-6">
-                  {monthEntries.map(([monthKey, monthData]) => (
-                    <div key={monthKey} id={`month-${monthKey.replace(/\s/g, '-')}`}>
-                      <h3 className="text-lg font-semibold mb-3 sticky top-0 bg-background py-2 z-10">{monthKey}</h3>
-                      {monthData.days.map(dayGroup => (
-                        <div key={dayGroup.date} className="mb-4">
-                          <h4 className="text-sm text-muted-foreground mb-2">{dayGroup.date}</h4>
-                          <div className={cn("grid gap-2", gridCols)}>
-                            {dayGroup.photos.map((photo) => (
-                              <div 
-                                key={photo.id} 
-                                className={cn(
-                                  "relative group cursor-pointer rounded-lg overflow-hidden border bg-muted/50 aspect-square",
-                                  isPhotoSelectMode && selectedPhotos.has(photo.id) && "ring-2 ring-primary"
-                                )}
-                                onClick={() => {
-                                  if (isPhotoSelectMode) {
-                                    setSelectedPhotos(prev => {
-                                      const newSet = new Set(prev);
-                                      if (newSet.has(photo.id)) {
-                                        newSet.delete(photo.id);
-                                      } else {
-                                        newSet.add(photo.id);
-                                      }
-                                      return newSet;
-                                    });
-                                  } else {
-                                    const photoIndex = sortedPhotos.findIndex(p => p.id === photo.id);
-                                    setLightboxPhotos(sortedPhotos);
-                                    setLightboxIndex(photoIndex >= 0 ? photoIndex : 0);
-                                    setLightboxOpen(true);
-                                  }
-                                }}
-                                data-testid={`photo-card-${photo.id}`}
-                              >
-                                <img 
-                                  src={getProxyUrl(photo.objectPath)} 
-                                  alt={photo.name}
-                                  className="w-full h-full object-cover"
-                                  loading="lazy"
-                                />
-                                {isPhotoSelectMode && (
-                                  <div className={cn(
-                                    "absolute top-2 left-2 w-5 h-5 rounded border-2 flex items-center justify-center",
-                                    selectedPhotos.has(photo.id) 
-                                      ? "bg-primary border-primary" 
-                                      : "bg-white/80 border-gray-400"
-                                  )}>
-                                    {selectedPhotos.has(photo.id) && <Check className="w-3 h-3 text-white" />}
-                                  </div>
-                                )}
-                                {!isPhotoSelectMode && (
-                                  <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                                    <Button
-                                      size="icon"
-                                      variant="ghost"
-                                      className="text-white hover:bg-white/20"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        setDeleteFileId(photo.id);
-                                      }}
-                                      data-testid={`button-delete-photo-${photo.id}`}
-                                    >
-                                      <Trash2 className="w-4 h-4" />
-                                    </Button>
-                                  </div>
-                                )}
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ))}
-                </div>
-
-                {/* Date Slider */}
-                {monthEntries.length > 1 && (
-                  <div className="w-16 flex flex-col items-center gap-1 sticky top-0 h-fit">
-                    <span className="text-xs text-muted-foreground mb-2">Jump to</span>
-                    {monthEntries.map(([monthKey, monthData]) => {
-                      const shortMonth = format(monthData.monthDate, "MMM ''yy");
-                      return (
-                        <Button
-                          key={monthKey}
-                          variant="ghost"
-                          size="sm"
-                          className="text-xs h-6 px-2 w-full"
-                          onClick={() => {
-                            const el = document.getElementById(`month-${monthKey.replace(/\s/g, '-')}`);
-                            el?.scrollIntoView({ behavior: 'smooth' });
-                          }}
-                          data-testid={`button-jump-${monthKey.replace(/\s/g, '-')}`}
-                        >
-                          {shortMonth}
-                        </Button>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            );
-          })()}
+          {/* Photo Grid with Virtualized Scroll */}
+          <VirtualizedPhotoGrid
+            photos={paginatedPhotos.photos}
+            isLoading={paginatedPhotos.isLoading || paginatedPhotos.isFetchingNextPage}
+            hasMore={paginatedPhotos.hasNextPage ?? false}
+            onLoadMore={paginatedPhotos.loadMore}
+            tileSize={photoTileSize}
+            isSelectMode={isPhotoSelectMode}
+            selectedPhotos={selectedPhotos}
+            onSelectPhoto={(id) => {
+              setSelectedPhotos(prev => {
+                const newSet = new Set(prev);
+                if (newSet.has(id)) {
+                  newSet.delete(id);
+                } else {
+                  newSet.add(id);
+                }
+                return newSet;
+              });
+            }}
+            onPhotoClick={(photo, index) => {
+              setLightboxPhotos(paginatedPhotos.photos);
+              setLightboxIndex(index);
+              setLightboxOpen(true);
+            }}
+            onDeletePhoto={(id) => setDeleteFileId(id)}
+          />
         </TabsContent>
 
         <TabsContent value="daily-reports" className="space-y-4">

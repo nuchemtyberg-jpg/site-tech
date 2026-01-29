@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useEffect, useRef, memo } from "react";
+import { useCallback, useMemo, useEffect, useRef, memo, useState } from "react";
 import { Virtuoso, VirtuosoHandle } from "react-virtuoso";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -116,7 +116,16 @@ export const VirtualizedPhotoGrid = memo(function VirtualizedPhotoGrid({
   const hasLoggedFirstLoad = useRef(false);
   const scrollTrackerRef = useRef<(() => void) | null>(null);
 
-  const columnsCount = useMemo(() => getGridColumns(tileSize), [tileSize]);
+  const [columnsCount, setColumnsCount] = useState(() => getGridColumns(tileSize));
+
+  useEffect(() => {
+    const handleResize = () => {
+      setColumnsCount(getGridColumns(tileSize));
+    };
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [tileSize]);
 
   const { items, flatIndexMap } = useMemo(
     () => buildVirtualItems(photos, columnsCount),
