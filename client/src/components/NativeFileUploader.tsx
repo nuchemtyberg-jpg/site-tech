@@ -40,27 +40,59 @@ async function extractExifDate(file: File): Promise<Date | undefined> {
     const arrayBuffer = await file.arrayBuffer();
     const tags = ExifReader.load(arrayBuffer);
     
+    // Try DateTimeOriginal first (when photo was actually taken)
     const dateTimeOriginal = tags['DateTimeOriginal'];
-    if (dateTimeOriginal?.description) {
-      const dateStr = dateTimeOriginal.description;
-      const [datePart, timePart] = dateStr.split(' ');
-      if (datePart && timePart) {
-        const [year, month, day] = datePart.split(':');
-        const isoDate = `${year}-${month}-${day}T${timePart}`;
-        const date = new Date(isoDate);
-        if (!isNaN(date.getTime())) return date;
+    if (dateTimeOriginal) {
+      // ExifReader provides value as Date object in newer versions
+      if (dateTimeOriginal.value instanceof Date && !isNaN(dateTimeOriginal.value.getTime())) {
+        return dateTimeOriginal.value;
+      }
+      // Fallback to parsing description string (format: "2023:05:20 17:02:00")
+      if (dateTimeOriginal.description) {
+        const dateStr = dateTimeOriginal.description;
+        const [datePart, timePart] = dateStr.split(' ');
+        if (datePart && timePart) {
+          const [year, month, day] = datePart.split(':');
+          const isoDate = `${year}-${month}-${day}T${timePart}`;
+          const date = new Date(isoDate);
+          if (!isNaN(date.getTime())) return date;
+        }
       }
     }
     
+    // Try CreateDate as fallback
     const createDate = tags['CreateDate'];
-    if (createDate?.description) {
-      const dateStr = createDate.description;
-      const [datePart, timePart] = dateStr.split(' ');
-      if (datePart && timePart) {
-        const [year, month, day] = datePart.split(':');
-        const isoDate = `${year}-${month}-${day}T${timePart}`;
-        const date = new Date(isoDate);
-        if (!isNaN(date.getTime())) return date;
+    if (createDate) {
+      if (createDate.value instanceof Date && !isNaN(createDate.value.getTime())) {
+        return createDate.value;
+      }
+      if (createDate.description) {
+        const dateStr = createDate.description;
+        const [datePart, timePart] = dateStr.split(' ');
+        if (datePart && timePart) {
+          const [year, month, day] = datePart.split(':');
+          const isoDate = `${year}-${month}-${day}T${timePart}`;
+          const date = new Date(isoDate);
+          if (!isNaN(date.getTime())) return date;
+        }
+      }
+    }
+    
+    // Try DateTime as last resort
+    const dateTime = tags['DateTime'];
+    if (dateTime) {
+      if (dateTime.value instanceof Date && !isNaN(dateTime.value.getTime())) {
+        return dateTime.value;
+      }
+      if (dateTime.description) {
+        const dateStr = dateTime.description;
+        const [datePart, timePart] = dateStr.split(' ');
+        if (datePart && timePart) {
+          const [year, month, day] = datePart.split(':');
+          const isoDate = `${year}-${month}-${day}T${timePart}`;
+          const date = new Date(isoDate);
+          if (!isNaN(date.getTime())) return date;
+        }
       }
     }
   } catch (error) {
