@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useInfiniteQuery } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import type { Photo, PaginatedPhotosResponse } from "@shared/schema";
+import { logPaginationFetch } from "@/lib/debugPerf";
 
 export function useProjectPhotos(projectId: number) {
   return useQuery<Photo[]>({
@@ -20,6 +21,9 @@ export function useProjectPhotosPaginated(projectId: number, options?: { albumId
   return useInfiniteQuery<PaginatedPhotosResponse>({
     queryKey: ['/api/projects', projectId, 'photos', 'paginated', options?.albumId],
     queryFn: async ({ pageParam }) => {
+      const pageNumber = pageParam ? parseInt(pageParam as string) || 0 : 0;
+      logPaginationFetch('start', pageNumber, 0);
+      
       const params = new URLSearchParams();
       params.set('limit', String(limit));
       if (pageParam) params.set('cursor', pageParam as string);
@@ -27,7 +31,10 @@ export function useProjectPhotosPaginated(projectId: number, options?: { albumId
       
       const res = await fetch(`/api/projects/${projectId}/photos?${params}`);
       if (!res.ok) throw new Error("Failed to fetch photos");
-      return res.json();
+      const data = await res.json();
+      
+      logPaginationFetch('finish', pageNumber, data.photos?.length || 0);
+      return data;
     },
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => lastPage.nextCursor || undefined,

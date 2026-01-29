@@ -8,6 +8,7 @@ import { trackScrollPerformance, logTimeToFirstThumbnails } from "@/lib/performa
 import { getProxyUrl } from "@/lib/utils";
 import { Camera, Loader2 } from "lucide-react";
 import type { Photo } from "@shared/schema";
+import { logRouteMount, logRouteUnmount, logRenderedItems, logEventListener, logComponentRender } from "@/lib/debugPerf";
 
 interface PhotoGroup {
   type: 'month-header' | 'day-header' | 'photo-row';
@@ -111,6 +112,8 @@ export const VirtualizedPhotoGrid = memo(function VirtualizedPhotoGrid({
   onPhotoClick,
   onDeletePhoto,
 }: VirtualizedPhotoGridProps) {
+  logComponentRender('VirtualizedPhotoGrid');
+  
   const virtuosoRef = useRef<VirtuosoHandle>(null);
   const loadStartTimeRef = useRef<number>(performance.now());
   const hasLoggedFirstLoad = useRef(false);
@@ -127,8 +130,22 @@ export const VirtualizedPhotoGrid = memo(function VirtualizedPhotoGrid({
     };
     handleResize();
     window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
+    logEventListener('add', 'resize', 'VirtualizedPhotoGrid');
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      logEventListener('remove', 'resize', 'VirtualizedPhotoGrid');
+    };
   }, [tileSize]);
+
+  // Debug logging for component mount/unmount
+  useEffect(() => {
+    logRouteMount('VirtualizedPhotoGrid');
+    return () => {
+      logRouteUnmount('VirtualizedPhotoGrid');
+      logEventListener('remove', 'scroll', 'VirtualizedPhotoGrid');
+      logEventListener('remove', 'resize', 'VirtualizedPhotoGrid');
+    };
+  }, []);
 
   // Cleanup scroll listeners on unmount
   useEffect(() => {
@@ -138,6 +155,7 @@ export const VirtualizedPhotoGrid = memo(function VirtualizedPhotoGrid({
       }
       if (scrollerElementRef.current && scrollHandlerRef.current) {
         scrollerElementRef.current.removeEventListener('scroll', scrollHandlerRef.current);
+        logEventListener('remove', 'scroll', 'VirtualizedPhotoGrid');
       }
       if (scrollTrackerRef.current) {
         scrollTrackerRef.current();
@@ -170,7 +188,10 @@ export const VirtualizedPhotoGrid = memo(function VirtualizedPhotoGrid({
   }, [photos]);
 
   const handleRangeChanged = useCallback(
-    ({ endIndex }: { startIndex: number; endIndex: number }) => {
+    ({ startIndex, endIndex }: { startIndex: number; endIndex: number }) => {
+      const renderedCount = endIndex - startIndex + 1;
+      logRenderedItems(renderedCount);
+      
       if (hasMore && endIndex >= items.length - 5) {
         onLoadMore();
       }
@@ -213,6 +234,16 @@ export const VirtualizedPhotoGrid = memo(function VirtualizedPhotoGrid({
     return 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3';
   }, [tileSize]);
 
+  const onSelectPhotoRef = useRef(onSelectPhoto);
+  const onPhotoClickRef = useRef(onPhotoClick);
+  const onDeletePhotoRef = useRef(onDeletePhoto);
+
+  useEffect(() => {
+    onSelectPhotoRef.current = onSelectPhoto;
+    onPhotoClickRef.current = onPhotoClick;
+    onDeletePhotoRef.current = onDeletePhoto;
+  });
+
   const itemContent = useCallback(
     (index: number) => {
       const item = items[index];
@@ -242,19 +273,19 @@ export const VirtualizedPhotoGrid = memo(function VirtualizedPhotoGrid({
               photo={photo}
               isSelectMode={isSelectMode}
               isSelected={selectedPhotos.has(photo.id)}
-              onSelect={() => onSelectPhoto(photo.id)}
+              onSelect={() => onSelectPhotoRef.current(photo.id)}
               onClick={() => {
                 const flatIdx = flatIndexMap.get(photo.id) ?? 0;
-                onPhotoClick(photo, flatIdx);
+                onPhotoClickRef.current(photo, flatIdx);
               }}
-              onDelete={() => onDeletePhoto(photo.id)}
+              onDelete={() => onDeletePhotoRef.current(photo.id)}
               tileSize={tileSize}
             />
           ))}
         </div>
       );
     },
-    [items, gridCols, isSelectMode, selectedPhotos, onSelectPhoto, onPhotoClick, onDeletePhoto, flatIndexMap, tileSize]
+    [items, gridCols, isSelectMode, selectedPhotos, flatIndexMap, tileSize]
   );
 
   if (photos.length === 0 && !isLoading) {
@@ -282,6 +313,7 @@ export const VirtualizedPhotoGrid = memo(function VirtualizedPhotoGrid({
             // Remove old listener if exists
             if (scrollerElementRef.current && scrollHandlerRef.current) {
               scrollerElementRef.current.removeEventListener('scroll', scrollHandlerRef.current);
+              logEventListener('remove', 'scroll', 'VirtualizedPhotoGrid-scroller');
             }
             
             // Create new scroll handler
@@ -294,6 +326,7 @@ export const VirtualizedPhotoGrid = memo(function VirtualizedPhotoGrid({
             
             // Add listener to new element
             ref.addEventListener('scroll', scrollHandlerRef.current);
+            logEventListener('add', 'scroll', 'VirtualizedPhotoGrid-scroller');
             scrollerElementRef.current = ref;
           }
         }}

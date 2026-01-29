@@ -43,6 +43,10 @@ Key entities defined in `shared/schema.ts` include: Projects, Tasks, TaskStatusH
 - **Document Management**: Grid and list views, with automatic folder generation for new projects. Supports tagging, search, starring, multi-select batch operations (move files and folders, delete), drag-and-drop uploads with folder structure preservation, button-upload folder selection with structure preservation, and direct file downloads.
 - **Photo Management**: Organizes photos into albums ("General" and "Daily Report Photos" by default), offers variable tile sizes, multi-select for bulk actions, and date-based grouping. Photos are sorted by EXIF `takenAt` date, with a fallback to `createdAt`. Includes client-side EXIF extraction, lazy loading, and a professional lightbox gallery.
 - **Photo Library Performance Optimizations**: Virtualized scrolling using react-virtuoso for handling large photo collections, cursor-based pagination API, background image processing for thumbnail generation (150px grid, 600px medium) in WebP format, BlurHash LQIP placeholders for smooth loading, client-side IndexedDB caching with automatic cleanup (100MB max, 7-day TTL), prefetching of upcoming images, and performance metrics logging (scroll FPS, image load times, time-to-first-thumbnails).
+- **Photo Library Debug & Performance Tools**:
+  - Debug logging system (`client/src/lib/debugPerf.ts`) with DEBUG_PERF flag for route mount/unmount, viewer open/close, scroll locks, event listeners, pagination fetch, and rendered items
+  - Health HUD overlay (`client/src/components/HealthHUD.tsx`) for dev mode showing render count, items loaded, overlay status, body overflow, and FPS
+  - Scroll lock hook (`client/src/hooks/use-scroll-lock.ts`) with ref-counting for multiple overlays, proper cleanup on unmount and route change
 - **Daily Report Weather Integration**: Open-Meteo geocoding and weather APIs for local weather conditions.
 - **Signature Capture**: Freehand or typed signatures for completing daily reports.
 
@@ -72,3 +76,32 @@ Key entities defined in `shared/schema.ts` include: Projects, Tasks, TaskStatusH
 - **Open-Meteo Weather API**: Weather information.
 - **exifreader**: EXIF data extraction.
 - **yet-another-react-lightbox**: Photo lightbox.
+
+## Photo Library Issue Root Causes & Fixes
+
+### Root Causes Identified
+
+1. **Navigation Blocking (Stuck UI)**
+   - **Cause**: The Lightbox component was always mounted (controlled by `open` prop), causing it to continuously listen for events even when closed. Combined with the library's internal scroll lock, this could prevent navigation.
+   - **Fix**: Changed Lightbox to conditional rendering (`{lightboxOpen && <Lightbox ... />}`) so it only mounts when open and fully unmounts when closed.
+
+2. **Scroll Lock Leaks**
+   - **Cause**: No explicit management of body.overflow when opening/closing overlays. If the lightbox or other overlays set overflow:hidden, it wasn't restored on route change or component unmount.
+   - **Fix**: Created `useScrollLock` hook with ref-counting for multiple overlays, stores/restores original body.overflow, and cleans up on unmount AND route change.
+
+3. **Event Listener Accumulation**
+   - **Cause**: Scroll event listeners in VirtualizedPhotoGrid were added via scrollerRef callback but not properly cleaned up when the element changed or component unmounted.
+   - **Fix**: Track scrollerElementRef and scrollHandlerRef, remove old listener before adding new one, cleanup all listeners on unmount.
+
+4. **RequestAnimationFrame Loops**
+   - **Cause**: Performance tracking used requestAnimationFrame loops that weren't cancelled on cleanup, causing multiple parallel animation frames.
+   - **Fix**: Added `cancelAnimationFrame` call and `stopped` flag to ensure clean termination.
+
+### Verification Checklist
+
+- [ ] **Navigation works from library page**: After viewing photos and scrolling, clicking sidebar links should navigate immediately
+- [ ] **Open/close viewer doesn't break app**: Opening lightbox, viewing photos, closing it should leave app responsive
+- [ ] **Scrolling is smooth**: Photo grid should scroll without jank, FPS visible in Health HUD
+- [ ] **CPU doesn't spike continuously**: After stopping interaction, CPU should return to idle
+- [ ] **Health HUD shows healthy state**: body.overflow should be "auto" when no overlays open, overlays count should be 0
+- [ ] **Debug logging appears in console**: With DEBUG_PERF enabled, route mount/unmount and viewer open/close should log

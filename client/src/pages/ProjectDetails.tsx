@@ -104,6 +104,8 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { AddressAutocomplete } from "@/components/AddressAutocomplete";
 import { DailyReportsTab } from "@/components/DailyReportsTab";
+import { useScrollLock } from "@/hooks/use-scroll-lock";
+import { logRouteMount, logRouteUnmount, logViewerOpen, logViewerClose } from "@/lib/debugPerf";
 
 const US_STATES = [
   "AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "FL", "GA",
@@ -381,6 +383,26 @@ export default function ProjectDetails() {
   // Keep ref in sync with state for use in callbacks
   currentFolderIdRef.current = currentFolderId;
   const { toast } = useToast();
+
+  // Debug logging for route mount/unmount
+  useEffect(() => {
+    logRouteMount('ProjectDetails');
+    return () => {
+      logRouteUnmount('ProjectDetails');
+    };
+  }, []);
+
+  // Scroll lock for lightbox - restores body overflow on close, unmount, and route change
+  useScrollLock({ isLocked: lightboxOpen, source: 'Lightbox' });
+
+  // Debug logging for lightbox open/close
+  useEffect(() => {
+    if (lightboxOpen) {
+      logViewerOpen('Lightbox');
+    } else {
+      logViewerClose('Lightbox');
+    }
+  }, [lightboxOpen]);
 
   const handleFileClick = (file: FileMetadata) => {
     if (isPdfFile(file.contentType)) {
@@ -2780,17 +2802,19 @@ export default function ProjectDetails() {
         />
       )}
 
-      {/* Lightbox Gallery for Photos */}
-      <Lightbox
-        open={lightboxOpen}
-        close={() => setLightboxOpen(false)}
-        index={lightboxIndex}
-        slides={lightboxPhotos.map(photo => ({
-          src: getProxyUrl(photo.objectPath),
-          alt: photo.name,
-          title: photo.name,
-        }))}
-      />
+      {/* Lightbox Gallery for Photos - only render when open to prevent memory leaks */}
+      {lightboxOpen && (
+        <Lightbox
+          open={lightboxOpen}
+          close={() => setLightboxOpen(false)}
+          index={lightboxIndex}
+          slides={lightboxPhotos.map(photo => ({
+            src: getProxyUrl(photo.objectPath),
+            alt: photo.name,
+            title: photo.name,
+          }))}
+        />
+      )}
 
       {/* Other file types - download prompt */}
       {viewingFile && !isPdfFile(viewingFile.contentType) && !isImageFile(viewingFile.contentType) && (

@@ -1,0 +1,121 @@
+The Photo Library route is slow and sometimes the app gets stuck (UI becomes unresponsive and/or I can’t navigate to other pages). Fix this by identifying the root cause with instrumentation, then applying targeted fixes. Do not guess.
+
+A) Reproduce + Diagnose (mandatory)
+
+Add lightweight debug logging (behind a DEBUG_PERF flag) for:
+
+route mount/unmount
+
+viewer open/close
+
+body scroll lock toggles
+
+global event listeners added/removed
+
+pagination fetch start/finish
+
+number of rendered items in grid
+
+Add a “Health HUD” in dev mode (small corner overlay) showing:
+
+render count for the library component
+
+current items loaded count
+
+whether an overlay is mounted (true/false)
+
+body overflow value
+
+Use the browser Performance profiler findings to report:
+
+top 3 functions consuming time
+
+whether main thread is pegged
+
+any long tasks (>50ms) tied to image decode/layout
+
+B) Fix “stuck / can’t navigate” (most likely blockers)
+
+Overlay interception check
+
+Ensure no fullscreen element is capturing clicks when it shouldn’t.
+
+If an overlay exists, it must be conditionally rendered only when open, and unmount on close.
+
+Ensure overlay uses correct pointer-events rules (no invisible click-eating layer).
+
+Scroll-lock cleanup
+
+If any code sets document.body.style.overflow = 'hidden' (or uses a scroll lock util), it must:
+
+store previous value
+
+restore it on viewer close
+
+restore it in useEffect cleanup on unmount AND on route change
+
+Global preventDefault traps
+
+Search and remove any global preventDefault() on wheel, scroll, touchmove, keydown, pointermove unless viewer is actively interacting.
+
+All listeners must be removed on unmount (no duplicates).
+
+Navigation must always work
+
+Confirm links/buttons are clickable after opening/closing viewer.
+
+Confirm no route guard or “unsaved changes” logic is always blocking navigation.
+
+C) Fix slowness (make it actually fast)
+
+Stop rendering too much
+
+Ensure grid is virtualized properly and only renders what’s visible.
+
+Avoid re-rendering the whole grid on scroll. Memoize item renderer.
+
+Use stable keys and avoid inline functions in item render where possible.
+
+Throttle image decoding
+
+Limit concurrent image loads/decodes (especially on desktop).
+
+Ensure thumbnails are small and served with correct size (no stretching tiny thumbs to huge tiles).
+
+Use srcset/sizes so desktop loads appropriately sized thumbs.
+
+Backend pagination
+
+Cursor-based pagination.
+
+Fetch in small pages (ex: 50–150 thumbs), prefetch next page when near bottom.
+
+Caching
+
+Thumbs should be cacheable (ETag/Cache-Control).
+
+Avoid refetching the same page repeatedly.
+
+Prevent render loops
+
+No state updates during render.
+
+No effects that update state without stable dependencies.
+
+Audit for any useEffect that runs on every render and sets state.
+
+D) Deliverables (required)
+
+Explain the exact root cause of the “stuck” behavior (overlay, scroll-lock, event listener leak, render loop, etc.).
+
+Provide the specific code changes and where they were applied.
+
+Provide a quick checklist to verify:
+
+navigation works from the library page
+
+open/close viewer does not break the app
+
+scrolling is smooth
+
+CPU doesn’t spike continuously
