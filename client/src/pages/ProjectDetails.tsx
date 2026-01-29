@@ -440,24 +440,87 @@ export default function ProjectDetails() {
     setIsDragOver(false);
   };
 
+  // Helper to recursively read files from a directory entry
+  const readDirectoryEntries = async (dirEntry: FileSystemDirectoryEntry): Promise<File[]> => {
+    const files: File[] = [];
+    const reader = dirEntry.createReader();
+    
+    const readEntries = (): Promise<FileSystemEntry[]> => {
+      return new Promise((resolve, reject) => {
+        reader.readEntries(resolve, reject);
+      });
+    };
+
+    // Read all entries (readEntries may need to be called multiple times)
+    let entries: FileSystemEntry[] = [];
+    let batch = await readEntries();
+    while (batch.length > 0) {
+      entries = entries.concat(batch);
+      batch = await readEntries();
+    }
+
+    for (const entry of entries) {
+      if (entry.isFile) {
+        const fileEntry = entry as FileSystemFileEntry;
+        const file = await new Promise<File>((resolve, reject) => {
+          fileEntry.file(resolve, reject);
+        });
+        files.push(file);
+      } else if (entry.isDirectory) {
+        const subFiles = await readDirectoryEntries(entry as FileSystemDirectoryEntry);
+        files.push(...subFiles);
+      }
+    }
+
+    return files;
+  };
+
   const handleDrop = async (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
     setIsDragOver(false);
 
-    const droppedFiles = Array.from(e.dataTransfer.files);
-    if (droppedFiles.length === 0) return;
+    // Collect all files including from folders
+    const allFiles: File[] = [];
+    const items = e.dataTransfer.items;
+
+    if (items && items.length > 0) {
+      // Use DataTransferItemList to handle folders
+      const entries: FileSystemEntry[] = [];
+      for (let i = 0; i < items.length; i++) {
+        const entry = items[i].webkitGetAsEntry?.();
+        if (entry) entries.push(entry);
+      }
+
+      for (const entry of entries) {
+        if (entry.isFile) {
+          const fileEntry = entry as FileSystemFileEntry;
+          const file = await new Promise<File>((resolve, reject) => {
+            fileEntry.file(resolve, reject);
+          });
+          allFiles.push(file);
+        } else if (entry.isDirectory) {
+          const folderFiles = await readDirectoryEntries(entry as FileSystemDirectoryEntry);
+          allFiles.push(...folderFiles);
+        }
+      }
+    } else {
+      // Fallback to files array (no folder support)
+      allFiles.push(...Array.from(e.dataTransfer.files));
+    }
+
+    if (allFiles.length === 0) return;
 
     setIsUploadingDragDrop(true);
-    setDragDropProgress({ current: 0, total: droppedFiles.length });
+    setDragDropProgress({ current: 0, total: allFiles.length });
 
     const maxFileSize = 52428800; // 50MB
-    const validFiles = droppedFiles.filter(file => file.size <= maxFileSize);
+    const validFiles = allFiles.filter(file => file.size <= maxFileSize);
 
-    if (validFiles.length < droppedFiles.length) {
+    if (validFiles.length < allFiles.length) {
       toast({ 
         title: "Some files skipped", 
-        description: `${droppedFiles.length - validFiles.length} file(s) exceeded the 50MB limit.`,
+        description: `${allFiles.length - validFiles.length} file(s) exceeded the 50MB limit.`,
         variant: "destructive"
       });
     }
