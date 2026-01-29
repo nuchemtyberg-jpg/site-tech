@@ -113,6 +113,16 @@ export function NativeFileUploader({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
 
+  // Handler to click folder input and ensure webkitdirectory is set
+  const handleFolderInputClick = useCallback(() => {
+    if (folderInputRef.current) {
+      // Ensure webkitdirectory is set - React doesn't handle it well through JSX
+      folderInputRef.current.setAttribute('webkitdirectory', '');
+      folderInputRef.current.setAttribute('directory', '');
+      folderInputRef.current.click();
+    }
+  }, []);
+
   const formatFileSize = (bytes: number) => {
     if (bytes === 0) return '0 Bytes';
     const k = 1024;
@@ -306,13 +316,12 @@ export function NativeFileUploader({
               {allowFolders && (
                 <div 
                   className="flex-1 border-2 border-dashed rounded-lg p-6 text-center cursor-pointer hover-elevate transition-colors"
-                  onClick={() => folderInputRef.current?.click()}
+                  onClick={handleFolderInputClick}
                   data-testid="upload-folder-zone"
                 >
                   <input
                     ref={folderInputRef}
                     type="file"
-                    {...{ webkitdirectory: "", directory: "" } as any}
                     onChange={handleFileSelect}
                     className="hidden"
                     data-testid="input-folder-native"
