@@ -442,8 +442,15 @@ export default function ProjectDetails() {
   };
 
   // Helper to recursively read files from a directory entry
-  const readDirectoryEntries = async (dirEntry: FileSystemDirectoryEntry): Promise<File[]> => {
-    const files: File[] = [];
+  // Type for files with their relative folder path
+  type FileWithPath = { file: File; relativePath: string };
+
+  const readDirectoryEntriesWithPaths = async (
+    dirEntry: FileSystemDirectoryEntry, 
+    parentPath: string = ""
+  ): Promise<{ files: FileWithPath[]; folders: string[] }> => {
+    const files: FileWithPath[] = [];
+    const folders: string[] = [];
     const reader = dirEntry.createReader();
     
     const readEntries = (): Promise<FileSystemEntry[]> => {
@@ -466,14 +473,17 @@ export default function ProjectDetails() {
         const file = await new Promise<File>((resolve, reject) => {
           fileEntry.file(resolve, reject);
         });
-        files.push(file);
+        files.push({ file, relativePath: parentPath });
       } else if (entry.isDirectory) {
-        const subFiles = await readDirectoryEntries(entry as FileSystemDirectoryEntry);
-        files.push(...subFiles);
+        const folderPath = parentPath ? `${parentPath}/${entry.name}` : entry.name;
+        folders.push(folderPath);
+        const subResult = await readDirectoryEntriesWithPaths(entry as FileSystemDirectoryEntry, folderPath);
+        files.push(...subResult.files);
+        folders.push(...subResult.folders);
       }
     }
 
-    return files;
+    return { files, folders };
   };
 
   const handleDrop = async (e: React.DragEvent) => {
@@ -481,8 +491,9 @@ export default function ProjectDetails() {
     e.stopPropagation();
     setIsDragOver(false);
 
-    // Collect all files including from folders
-    const allFiles: File[] = [];
+    // Collect all files with their relative paths (for folder structure preservation)
+    const allFilesWithPaths: FileWithPath[] = [];
+    const allFolderPaths: string[] = [];
     const items = e.dataTransfer.items;
 
     if (items && items.length > 0) {
@@ -499,44 +510,173 @@ export default function ProjectDetails() {
           const file = await new Promise<File>((resolve, reject) => {
             fileEntry.file(resolve, reject);
           });
-          allFiles.push(file);
+          allFilesWithPaths.push({ file, relativePath: "" });
         } else if (entry.isDirectory) {
-          const folderFiles = await readDirectoryEntries(entry as FileSystemDirectoryEntry);
-          allFiles.push(...folderFiles);
+          // Include the root folder being dropped
+          allFolderPaths.push(entry.name);
+          const result = await readDirectoryEntriesWithPaths(entry as FileSystemDirectoryEntry, entry.name);
+          allFilesWithPaths.push(...result.files);
+          allFolderPaths.push(...result.folders);
         }
       }
     } else {
       // Fallback to files array (no folder support)
-      allFiles.push(...Array.from(e.dataTransfer.files));
+      allFilesWithPaths.push(...Array.from(e.dataTransfer.files).map(f => ({ file: f, relativePath: "" })));
     }
 
-    if (allFiles.length === 0) return;
+    if (allFilesWithPaths.length === 0 && allFolderPaths.length === 0) return;
 
     setIsUploadingDragDrop(true);
-    setDragDropProgress({ current: 0, total: allFiles.length });
+    const totalOperations = allFolderPaths.length + allFilesWithPaths.length;
+    setDragDropProgress({ current: 0, total: totalOperations });
 
     const maxFileSize = 52428800; // 50MB
-    const validFiles = allFiles.filter(file => file.size <= maxFileSize);
+    const validFilesWithPaths = allFilesWithPaths.filter(f => f.file.size <= maxFileSize);
+    const skippedCount = allFilesWithPaths.length - validFilesWithPaths.length;
 
-    if (validFiles.length < allFiles.length) {
+    if (skippedCount > 0) {
       toast({ 
         title: "Some files skipped", 
-        description: `${allFiles.length - validFiles.length} file(s) exceeded the 50MB limit.`,
+        description: `${skippedCount} file(s) exceeded the 50MB limit.`,
         variant: "destructive"
       });
     }
 
-    if (validFiles.length === 0) {
+    if (validFilesWithPaths.length === 0 && allFolderPaths.length === 0) {
       setIsUploadingDragDrop(false);
       return;
     }
 
+    let operationIndex = 0;
     let successCount = 0;
     const failedFiles: string[] = [];
+    const skippedDueToFolderFailure: string[] = [];
 
-    for (let i = 0; i < validFiles.length; i++) {
-      const file = validFiles[i];
-      setDragDropProgress({ current: i + 1, total: validFiles.length });
+    // Create a map of folder paths to folder IDs
+    const folderPathToId: Map<string, number> = new Map();
+    const failedFolderPaths: Set<string> = new Set();
+    
+    // Sort folders by depth to create parent folders first
+    const sortedFolderPaths = [...new Set(allFolderPaths)].sort((a, b) => 
+      a.split('/').length - b.split('/').length
+    );
+
+    // Create folders in order (parent before child) using mutation hook
+    for (const folderPath of sortedFolderPaths) {
+      operationIndex++;
+      setDragDropProgress({ current: operationIndex, total: totalOperations });
+      
+      const pathParts = folderPath.split('/');
+      const folderName = pathParts[pathParts.length - 1];
+      const parentPath = pathParts.slice(0, -1).join('/');
+      
+      // If parent folder failed, this child folder also fails
+      if (parentPath && failedFolderPaths.has(parentPath)) {
+        failedFolderPaths.add(folderPath);
+        continue;
+      }
+      
+      // Determine parent folder ID
+      let parentFolderId = currentFolderIdRef.current;
+      if (parentPath && folderPathToId.has(parentPath)) {
+        parentFolderId = folderPathToId.get(parentPath)!;
+      }
+
+      let resolved = false;
+      try {
+        // Create folder using mutation hook
+        const newFolder = await createFolderMutation.mutateAsync({
+          name: folderName,
+          parentId: parentFolderId,
+        });
+        folderPathToId.set(folderPath, newFolder.id);
+        resolved = true;
+      } catch (error) {
+        // Folder might already exist - fetch fresh folder list to find it
+        try {
+          const freshFoldersRes = await fetch(`/api/projects/${projectId}/folders`);
+          if (freshFoldersRes.ok) {
+            const freshFolders = await freshFoldersRes.json();
+            const existingFolder = freshFolders.find((f: { name: string; parentId: number | null }) => 
+              f.name === folderName && f.parentId === parentFolderId
+            );
+            if (existingFolder) {
+              folderPathToId.set(folderPath, existingFolder.id);
+              resolved = true;
+            }
+          }
+        } catch {
+          // Fallback failed
+        }
+      }
+      
+      if (!resolved) {
+        failedFolderPaths.add(folderPath);
+      }
+    }
+
+    // Refresh folders after creation so the UI updates
+    if (sortedFolderPaths.length > 0) {
+      await queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "folders"] });
+    }
+
+    // Validate all required folder paths are resolved before proceeding with uploads
+    const requiredPaths = new Set<string>();
+    for (const { relativePath } of validFilesWithPaths) {
+      if (relativePath) {
+        requiredPaths.add(relativePath);
+      }
+    }
+    
+    const unresolvedPaths: string[] = [];
+    for (const path of requiredPaths) {
+      if (!folderPathToId.has(path) && !failedFolderPaths.has(path)) {
+        // Path is neither resolved nor marked as failed - this is an error state
+        unresolvedPaths.push(path);
+        failedFolderPaths.add(path); // Mark as failed to prevent files going to root
+      }
+    }
+    
+    if (unresolvedPaths.length > 0) {
+      toast({ 
+        title: "Folder structure incomplete", 
+        description: `Some folders couldn't be resolved: ${unresolvedPaths.slice(0, 2).join(', ')}${unresolvedPaths.length > 2 ? '...' : ''}`,
+        variant: "destructive"
+      });
+    }
+
+    // Upload files to their correct folders - skip files in failed folders
+    for (const { file, relativePath } of validFilesWithPaths) {
+      operationIndex++;
+      setDragDropProgress({ current: operationIndex, total: totalOperations });
+
+      // Check if this file's folder failed to be created or is unresolved
+      if (relativePath) {
+        if (failedFolderPaths.has(relativePath) || !folderPathToId.has(relativePath)) {
+          skippedDueToFolderFailure.push(`${relativePath}/${file.name}`);
+          continue;
+        }
+        // Also check parent paths
+        const pathParts = relativePath.split('/');
+        let failedPath = false;
+        for (let i = 1; i <= pathParts.length; i++) {
+          const checkPath = pathParts.slice(0, i).join('/');
+          if (failedFolderPaths.has(checkPath)) {
+            failedPath = true;
+            break;
+          }
+        }
+        if (failedPath) {
+          skippedDueToFolderFailure.push(`${relativePath}/${file.name}`);
+          continue;
+        }
+      }
+
+      // Determine target folder ID
+      let targetFolderId = currentFolderIdRef.current;
+      if (relativePath && folderPathToId.has(relativePath)) {
+        targetFolderId = folderPathToId.get(relativePath)!;
+      }
 
       try {
         // Get upload URL
@@ -566,23 +706,34 @@ export default function ProjectDetails() {
         await createFileMutation.mutateAsync({
           name: file.name,
           objectPath,
-          folderId: currentFolderIdRef.current,
+          folderId: targetFolderId,
           contentType: file.type || 'application/octet-stream',
           size: file.size,
         });
         successCount++;
       } catch (error) {
-        failedFiles.push(file.name);
+        failedFiles.push(relativePath ? `${relativePath}/${file.name}` : file.name);
       }
     }
 
     setIsUploadingDragDrop(false);
 
     // Show appropriate toast based on results
+    const totalIssues = failedFiles.length + skippedDueToFolderFailure.length;
+    
+    // Show skipped files warning if any folders couldn't be created
+    if (skippedDueToFolderFailure.length > 0) {
+      toast({ 
+        title: "Some files were skipped", 
+        description: `${skippedDueToFolderFailure.length} file(s) skipped because their folders couldn't be created: ${skippedDueToFolderFailure.slice(0, 2).join(', ')}${skippedDueToFolderFailure.length > 2 ? '...' : ''}`,
+        variant: "destructive"
+      });
+    }
+    
     if (successCount > 0 && failedFiles.length === 0) {
       toast({ 
         title: "Upload complete", 
-        description: `${successCount} file(s) uploaded successfully.`
+        description: `${successCount} file(s) uploaded successfully.${failedFolderPaths.size > 0 ? ` Some folders couldn't be created.` : ''}`
       });
     } else if (successCount > 0 && failedFiles.length > 0) {
       toast({ 
@@ -594,6 +745,12 @@ export default function ProjectDetails() {
       toast({ 
         title: "Upload failed", 
         description: `All ${failedFiles.length} file(s) failed to upload.`,
+        variant: "destructive"
+      });
+    } else if (successCount === 0 && totalIssues > 0) {
+      toast({ 
+        title: "Upload failed", 
+        description: `No files were uploaded. Check folder permissions or names.`,
         variant: "destructive"
       });
     }
@@ -2941,18 +3098,57 @@ export default function ProjectDetails() {
             <AlertDialogCancel data-testid="button-cancel-batch-delete-files">Cancel</AlertDialogCancel>
             <AlertDialogAction 
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              onClick={() => {
-                // Delete files
+              onClick={async () => {
+                const failedFolderIds: Set<number> = new Set();
+                let fileDeleteFailed = false;
+                
+                // Delete files first
                 if (selectedFiles.size > 0) {
-                  batchDeleteFilesMutation.mutate(Array.from(selectedFiles));
+                  try {
+                    await batchDeleteFilesMutation.mutateAsync(Array.from(selectedFiles));
+                  } catch (error) {
+                    fileDeleteFailed = true;
+                    toast({ title: "Error", description: "Failed to delete some files", variant: "destructive" });
+                  }
                 }
-                // Delete folders one by one
-                selectedFolders.forEach(folderId => {
-                  deleteFolderMutation.mutate(folderId);
-                });
-                setSelectedFiles(new Set());
-                setSelectedFolders(new Set());
-                setIsFileSelectMode(false);
+                
+                // Delete folders one by one with proper error handling
+                const failedFolderNames: string[] = [];
+                for (const folderId of selectedFolders) {
+                  try {
+                    await deleteFolderMutation.mutateAsync(folderId);
+                  } catch (error) {
+                    failedFolderIds.add(folderId);
+                    const folder = folders?.find(f => f.id === folderId);
+                    failedFolderNames.push(folder?.name || String(folderId));
+                  }
+                }
+                
+                // Show results
+                if (failedFolderNames.length > 0) {
+                  toast({ 
+                    title: "Some folders could not be deleted", 
+                    description: `Failed: ${failedFolderNames.slice(0, 3).join(', ')}${failedFolderNames.length > 3 ? '...' : ''}. Folders with contents cannot be deleted.`,
+                    variant: "destructive"
+                  });
+                }
+                
+                // Only clear successfully deleted items - keep failed ones selected
+                if (!fileDeleteFailed) {
+                  setSelectedFiles(new Set());
+                }
+                
+                if (failedFolderIds.size > 0) {
+                  // Keep only the failed folders selected
+                  setSelectedFolders(failedFolderIds);
+                } else {
+                  setSelectedFolders(new Set());
+                }
+                
+                // Only exit select mode if everything succeeded
+                if (!fileDeleteFailed && failedFolderIds.size === 0) {
+                  setIsFileSelectMode(false);
+                }
                 setShowBatchDeleteFilesConfirm(false);
               }}
               data-testid="button-confirm-batch-delete-files"
