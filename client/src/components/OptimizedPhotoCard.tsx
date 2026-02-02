@@ -1,8 +1,5 @@
-import { useState, useEffect, useCallback, memo } from "react";
-import { decode } from "blurhash";
-import { cn, getProxyUrl } from "@/lib/utils";
-import { getCachedImage, cacheImage } from "@/lib/imageCache";
-import { logImageLoadTime } from "@/lib/performanceMetrics";
+import { useState, useCallback, memo } from "react";
+import { cn } from "@/lib/utils";
 import { Check, Trash2, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { Photo } from "@shared/schema";
@@ -17,46 +14,14 @@ interface OptimizedPhotoCardProps {
   tileSize: 'small' | 'medium' | 'large';
 }
 
-function BlurHashCanvas({ 
-  blurHash, 
-  width = 32, 
-  height = 32,
-  className 
-}: { 
-  blurHash: string; 
-  width?: number; 
-  height?: number;
-  className?: string;
-}) {
-  const [dataUrl, setDataUrl] = useState<string | null>(null);
+function getCloudinaryThumbnail(publicId: string | null, cloudName: string = 'dxzxzywpf'): string | null {
+  if (!publicId) return null;
+  return `https://res.cloudinary.com/${cloudName}/image/upload/w_150,h_150,c_fill,q_auto,f_auto/${publicId}`;
+}
 
-  useEffect(() => {
-    try {
-      const pixels = decode(blurHash, width, height);
-      const canvas = document.createElement('canvas');
-      canvas.width = width;
-      canvas.height = height;
-      const ctx = canvas.getContext('2d');
-      if (ctx) {
-        const imageData = ctx.createImageData(width, height);
-        imageData.data.set(pixels);
-        ctx.putImageData(imageData, 0, 0);
-        setDataUrl(canvas.toDataURL());
-      }
-    } catch (e) {
-      console.warn('BlurHash decode error:', e);
-    }
-  }, [blurHash, width, height]);
-
-  if (!dataUrl) return null;
-
-  return (
-    <img
-      src={dataUrl}
-      alt=""
-      className={cn("absolute inset-0 w-full h-full object-cover", className)}
-    />
-  );
+function getCloudinaryMedium(publicId: string | null, cloudName: string = 'dxzxzywpf'): string | null {
+  if (!publicId) return null;
+  return `https://res.cloudinary.com/${cloudName}/image/upload/w_600,c_limit,q_auto,f_auto/${publicId}`;
 }
 
 export const OptimizedPhotoCard = memo(function OptimizedPhotoCard({
@@ -66,79 +31,12 @@ export const OptimizedPhotoCard = memo(function OptimizedPhotoCard({
   onSelect,
   onClick,
   onDelete,
-  tileSize,
 }: OptimizedPhotoCardProps) {
-  const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
 
-  const isLegacyPendingPhoto = (() => {
-    if (photo.processingStatus !== 'pending') return false;
-    if (photo.thumbnailPath || photo.mediumPath) return false;
-    if (!photo.createdAt) return false;
-    const processorRolloutDate = new Date('2026-02-02T00:00:00Z');
-    const photoDate = new Date(photo.createdAt);
-    return photoDate < processorRolloutDate;
-  })();
-
-  const displayUrl = photo.thumbnailPath 
-    ? getProxyUrl(photo.thumbnailPath)
-    : photo.mediumPath 
-      ? getProxyUrl(photo.mediumPath)
-      : isLegacyPendingPhoto && photo.objectPath
-        ? getProxyUrl(photo.objectPath)
-        : null;
-
-  const hasDisplayImage = !!displayUrl;
-  const isProcessing = photo.processingStatus === 'pending' || photo.processingStatus === 'processing';
-
-  useEffect(() => {
-    if (!displayUrl) {
-      setIsLoading(false);
-      return;
-    }
-
-    let mounted = true;
-    const controller = new AbortController();
-    const loadStartTime = performance.now();
-
-    async function loadImage() {
-      const cached = await getCachedImage(displayUrl!);
-      if (cached && mounted) {
-        setImageUrl(cached);
-        setIsLoading(false);
-        logImageLoadTime(photo.id, loadStartTime);
-        return;
-      }
-
-      try {
-        const response = await fetch(displayUrl!, { signal: controller.signal });
-        if (!response.ok) throw new Error('Failed to load image');
-        
-        const blob = await response.blob();
-        if (!mounted) return;
-        
-        const objectUrl = await cacheImage(displayUrl!, blob);
-        if (mounted) {
-          setImageUrl(objectUrl);
-          setIsLoading(false);
-          logImageLoadTime(photo.id, loadStartTime);
-        }
-      } catch (error) {
-        if (mounted && !(error instanceof DOMException && error.name === 'AbortError')) {
-          setHasError(true);
-          setIsLoading(false);
-        }
-      }
-    }
-
-    loadImage();
-
-    return () => {
-      mounted = false;
-      controller.abort();
-    };
-  }, [displayUrl, photo.id]);
+  const thumbnailUrl = getCloudinaryThumbnail(photo.cloudinaryPublicId);
+  const hasDisplayImage = !!thumbnailUrl;
 
   const handleClick = useCallback(() => {
     if (isSelectMode) {
@@ -153,6 +51,15 @@ export const OptimizedPhotoCard = memo(function OptimizedPhotoCard({
     onDelete();
   }, [onDelete]);
 
+  const handleImageLoad = useCallback(() => {
+    setIsLoading(false);
+  }, []);
+
+  const handleImageError = useCallback(() => {
+    setIsLoading(false);
+    setHasError(true);
+  }, []);
+
   return (
     <div
       className={cn(
@@ -162,11 +69,7 @@ export const OptimizedPhotoCard = memo(function OptimizedPhotoCard({
       onClick={handleClick}
       data-testid={`photo-card-${photo.id}`}
     >
-      {photo.blurHash && isLoading && hasDisplayImage && (
-        <BlurHashCanvas blurHash={photo.blurHash} className="blur-sm" />
-      )}
-
-      {!photo.blurHash && isLoading && hasDisplayImage && (
+      {isLoading && hasDisplayImage && (
         <div className="absolute inset-0 bg-muted animate-pulse flex items-center justify-center">
           <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
         </div>
@@ -174,14 +77,7 @@ export const OptimizedPhotoCard = memo(function OptimizedPhotoCard({
 
       {!hasDisplayImage && (
         <div className="absolute inset-0 bg-muted flex items-center justify-center flex-col gap-2">
-          {isProcessing ? (
-            <>
-              <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
-              <span className="text-xs text-muted-foreground">Processing...</span>
-            </>
-          ) : (
-            <span className="text-xs text-muted-foreground">Image unavailable</span>
-          )}
+          <span className="text-xs text-muted-foreground">Image unavailable</span>
         </div>
       )}
 
@@ -191,9 +87,9 @@ export const OptimizedPhotoCard = memo(function OptimizedPhotoCard({
         </div>
       )}
 
-      {imageUrl && hasDisplayImage && (
+      {thumbnailUrl && (
         <img
-          src={imageUrl}
+          src={thumbnailUrl}
           alt={photo.name}
           className={cn(
             "w-full h-full object-cover transition-opacity duration-300",
@@ -201,6 +97,8 @@ export const OptimizedPhotoCard = memo(function OptimizedPhotoCard({
           )}
           loading="lazy"
           decoding="async"
+          onLoad={handleImageLoad}
+          onError={handleImageError}
         />
       )}
 
@@ -230,14 +128,15 @@ export const OptimizedPhotoCard = memo(function OptimizedPhotoCard({
           </Button>
         </div>
       )}
-
-      {photo.processingStatus === 'processing' && (
-        <div className="absolute bottom-1 right-1 bg-black/60 rounded px-1.5 py-0.5">
-          <Loader2 className="w-3 h-3 animate-spin text-white" />
-        </div>
-      )}
     </div>
   );
 });
+
+export function getCloudinaryFullUrl(publicId: string | null, cloudName: string = 'dxzxzywpf'): string | null {
+  if (!publicId) return null;
+  return `https://res.cloudinary.com/${cloudName}/image/upload/q_auto,f_auto/${publicId}`;
+}
+
+export { getCloudinaryThumbnail, getCloudinaryMedium };
 
 export default OptimizedPhotoCard;

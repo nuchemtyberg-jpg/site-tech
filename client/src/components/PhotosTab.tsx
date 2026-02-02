@@ -39,7 +39,8 @@ import {
   Loader2,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { cn, getProxyUrl } from "@/lib/utils";
+import { cn } from "@/lib/utils";
+import { getCloudinaryFullUrl } from "@/components/OptimizedPhotoCard";
 import { useScrollLock } from "@/hooks/use-scroll-lock";
 import { logViewerOpen, logViewerClose } from "@/lib/debugPerf";
 import type { Photo, PaginatedPhotosResponse } from "@shared/schema";
@@ -182,7 +183,7 @@ export function PhotosTab({ projectId }: PhotosTabProps) {
     }
   }, [lightboxOpen]);
 
-  const handlePhotoUploadComplete = async (uploadedFiles: Array<{ name: string; objectPath: string; size: number; type: string; takenAt?: Date }>) => {
+  const handlePhotoUploadComplete = async (uploadedFiles: Array<{ name: string; cloudinaryPublicId: string; cloudinaryUrl: string; size: number; type: string; width?: number; height?: number; takenAt?: Date }>) => {
     let successCount = 0;
     let targetAlbumId = currentAlbumId;
     
@@ -212,9 +213,12 @@ export function PhotosTab({ projectId }: PhotosTabProps) {
       try {
         await createPhotoMutation.mutateAsync({
           name: file.name,
-          objectPath: file.objectPath,
+          cloudinaryPublicId: file.cloudinaryPublicId,
+          cloudinaryUrl: file.cloudinaryUrl,
           contentType: file.type,
           size: file.size,
+          width: file.width,
+          height: file.height,
           albumId: targetAlbumId,
           takenAt: file.takenAt?.toISOString(),
         });
@@ -391,11 +395,15 @@ export function PhotosTab({ projectId }: PhotosTabProps) {
             onClick={() => {
               selectedPhotos.forEach(id => {
                 const photo = paginatedPhotos.photos?.find(p => p.id === id);
-                if (photo) {
-                  const link = document.createElement('a');
-                  link.href = getProxyUrl(photo.objectPath);
-                  link.download = photo.name;
-                  link.click();
+                if (photo && photo.cloudinaryPublicId) {
+                  const fullUrl = getCloudinaryFullUrl(photo.cloudinaryPublicId);
+                  if (fullUrl) {
+                    const link = document.createElement('a');
+                    link.href = fullUrl;
+                    link.download = photo.name;
+                    link.target = '_blank';
+                    link.click();
+                  }
                 }
               });
             }}
@@ -459,7 +467,7 @@ export function PhotosTab({ projectId }: PhotosTabProps) {
         close={() => setLightboxOpen(false)}
         index={lightboxIndex}
         slides={lightboxPhotos.map(photo => ({
-          src: getProxyUrl(photo.objectPath),
+          src: getCloudinaryFullUrl(photo.cloudinaryPublicId) || '',
           alt: photo.name,
         }))}
         on={{

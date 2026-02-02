@@ -9,33 +9,7 @@ import type { User } from "@shared/schema";
 import { insertAuthorizedUserSchema } from "@shared/schema";
 import { isAdmin, isAuthorizedUser } from "./middleware/auth";
 import { sendInviteEmail } from "./services/email";
-import { processImage } from "./services/imageProcessor";
-
-async function processPhotoInBackground(photoId: number, objectPath: string) {
-  try {
-    await storage.updatePhoto(photoId, { processingStatus: 'processing' } as any);
-    
-    const result = await processImage(objectPath);
-    
-    if (result) {
-      await storage.updatePhoto(photoId, {
-        thumbnailPath: result.thumbnailPath,
-        mediumPath: result.mediumPath,
-        blurHash: result.blurHash,
-        width: result.width,
-        height: result.height,
-        processingStatus: 'completed',
-      } as any);
-    } else {
-      await storage.updatePhoto(photoId, { processingStatus: 'failed' } as any);
-    }
-  } catch (error) {
-    console.error("Background photo processing error:", error);
-    try {
-      await storage.updatePhoto(photoId, { processingStatus: 'failed' } as any);
-    } catch {}
-  }
-}
+import { generateUploadSignature, deleteFromCloudinary } from "./services/cloudinary";
 
 // Weather fetch helper using Open-Meteo API
 async function fetchWeatherData(address: string, city: string, state: string): Promise<{
@@ -1758,6 +1732,17 @@ export async function registerRoutes(
     }
   });
 
+  app.post('/api/cloudinary/signature', isAuthenticated, isAuthorizedUser, async (req, res) => {
+    try {
+      const { folder } = req.body;
+      const signature = generateUploadSignature({ folder: folder || 'sitetech/photos' });
+      res.json(signature);
+    } catch (err) {
+      console.error("Error generating Cloudinary signature:", err);
+      res.status(500).json({ error: "Failed to generate upload signature" });
+    }
+  });
+
   app.post('/api/projects/:projectId/photos', isAuthenticated, isAuthorizedUser, async (req, res) => {
     try {
       const projectId = Number(req.params.projectId);
@@ -1769,10 +1754,7 @@ export async function registerRoutes(
         albumId: req.body.albumId || generalAlbum.id,
         takenAt,
         displayDate: takenAt || new Date(),
-        processingStatus: 'pending',
       });
-      
-      processPhotoInBackground(photo.id, photo.objectPath);
       
       res.status(201).json(photo);
     } catch (err) {
@@ -1792,21 +1774,16 @@ export async function registerRoutes(
   });
 
   app.delete('/api/photos/:id', isAuthenticated, isAuthorizedUser, async (req, res) => {
-    await storage.deletePhoto(Number(req.params.id));
-    res.status(204).send();
-  });
-
-  app.post('/api/photos/:id/process', isAuthenticated, isAuthorizedUser, async (req, res) => {
     try {
       const photo = await storage.getPhoto(Number(req.params.id));
-      if (!photo) {
-        return res.status(404).json({ message: "Photo not found" });
+      if (photo?.cloudinaryPublicId) {
+        await deleteFromCloudinary(photo.cloudinaryPublicId).catch(console.error);
       }
-      processPhotoInBackground(photo.id, photo.objectPath);
-      res.json({ message: "Processing started" });
+      await storage.deletePhoto(Number(req.params.id));
+      res.status(204).send();
     } catch (err) {
-      console.error("Error processing photo:", err);
-      throw err;
+      console.error("Error deleting photo:", err);
+      res.status(204).send();
     }
   });
 

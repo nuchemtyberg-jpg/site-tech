@@ -17,7 +17,8 @@ interface UploadedFile {
   size: number;
   type: string;
   file: File;
-  objectPath?: string;
+  cloudinaryPublicId?: string;
+  cloudinaryUrl?: string;
   takenAt?: Date;
   relativePath?: string;
   status: 'pending' | 'uploading' | 'success' | 'error';
@@ -30,7 +31,7 @@ interface NativeFileUploaderProps {
   maxFileSize?: number;
   accept?: string;
   allowFolders?: boolean;
-  onUploadComplete?: (files: Array<{ name: string; objectPath: string; size: number; type: string; takenAt?: Date; relativePath?: string }>) => void;
+  onUploadComplete?: (files: Array<{ name: string; cloudinaryPublicId: string; cloudinaryUrl: string; size: number; type: string; width?: number; height?: number; takenAt?: Date; relativePath?: string }>) => void;
   buttonClassName?: string;
   children: ReactNode;
 }
@@ -179,14 +180,15 @@ export function NativeFileUploader({
     if (files.length === 0) return;
 
     setIsUploading(true);
-    const uploadedFiles: Array<{ name: string; objectPath: string; size: number; type: string; takenAt?: Date; relativePath?: string }> = [];
+    const uploadedFiles: Array<{ name: string; cloudinaryPublicId: string; cloudinaryUrl: string; size: number; type: string; width?: number; height?: number; takenAt?: Date; relativePath?: string }> = [];
 
     for (const uploadFile of files) {
       if (uploadFile.status === 'success') {
-        if (uploadFile.objectPath) {
+        if (uploadFile.cloudinaryPublicId && uploadFile.cloudinaryUrl) {
           uploadedFiles.push({
             name: uploadFile.name,
-            objectPath: uploadFile.objectPath,
+            cloudinaryPublicId: uploadFile.cloudinaryPublicId,
+            cloudinaryUrl: uploadFile.cloudinaryUrl,
             size: uploadFile.size,
             type: uploadFile.type,
             takenAt: uploadFile.takenAt,
@@ -201,47 +203,56 @@ export function NativeFileUploader({
       ));
 
       try {
-        const res = await fetch("/api/uploads/request-url", {
+        const signatureRes = await fetch("/api/cloudinary/signature", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            name: uploadFile.name,
-            size: uploadFile.size,
-            contentType: uploadFile.type,
-          }),
+          body: JSON.stringify({ folder: 'sitetech/photos' }),
         });
 
-        if (!res.ok) {
-          throw new Error("Failed to get upload URL");
+        if (!signatureRes.ok) {
+          throw new Error("Failed to get upload signature");
         }
 
-        const { uploadURL, objectPath } = await res.json();
+        const { signature, timestamp, apiKey, cloudName } = await signatureRes.json();
 
         setFiles(prev => prev.map(f => 
           f.id === uploadFile.id ? { ...f, progress: 30 } : f
         ));
 
-        const uploadRes = await fetch(uploadURL, {
-          method: "PUT",
-          body: uploadFile.file,
-          headers: {
-            "Content-Type": uploadFile.type,
-          },
+        const formData = new FormData();
+        formData.append('file', uploadFile.file);
+        formData.append('api_key', apiKey);
+        formData.append('timestamp', timestamp.toString());
+        formData.append('signature', signature);
+        formData.append('folder', 'sitetech/photos');
+
+        const uploadRes = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
+          method: "POST",
+          body: formData,
         });
 
         if (!uploadRes.ok) {
-          throw new Error("Failed to upload file");
+          throw new Error("Failed to upload to Cloudinary");
         }
 
+        const cloudinaryResult = await uploadRes.json();
+        const cloudinaryPublicId = cloudinaryResult.public_id;
+        const cloudinaryUrl = cloudinaryResult.secure_url;
+        const width = cloudinaryResult.width;
+        const height = cloudinaryResult.height;
+
         setFiles(prev => prev.map(f => 
-          f.id === uploadFile.id ? { ...f, status: 'success' as const, progress: 100, objectPath } : f
+          f.id === uploadFile.id ? { ...f, status: 'success' as const, progress: 100, cloudinaryPublicId, cloudinaryUrl } : f
         ));
 
         uploadedFiles.push({
           name: uploadFile.name,
-          objectPath,
+          cloudinaryPublicId,
+          cloudinaryUrl,
           size: uploadFile.size,
           type: uploadFile.type,
+          width,
+          height,
           takenAt: uploadFile.takenAt,
           relativePath: uploadFile.relativePath,
         });

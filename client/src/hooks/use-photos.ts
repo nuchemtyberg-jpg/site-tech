@@ -67,7 +67,7 @@ function invalidatePhotoQueries(projectId: number) {
 
 export function useCreatePhoto(projectId: number) {
   return useMutation({
-    mutationFn: async (photo: { name: string; objectPath: string; contentType?: string; size?: number; albumId?: number | null; takenAt?: string | null }) => {
+    mutationFn: async (photo: { name: string; cloudinaryPublicId: string; cloudinaryUrl: string; contentType?: string; size?: number; width?: number; height?: number; albumId?: number | null; takenAt?: string | null }) => {
       return apiRequest("POST", `/api/projects/${projectId}/photos`, photo);
     },
     onSuccess: () => {
@@ -98,10 +98,3 @@ export function useDeletePhoto(projectId: number) {
   });
 }
 
-export function useProcessPhoto() {
-  return useMutation({
-    mutationFn: async (photoId: number) => {
-      return apiRequest("POST", `/api/photos/${photoId}/process`);
-    },
-  });
-}
