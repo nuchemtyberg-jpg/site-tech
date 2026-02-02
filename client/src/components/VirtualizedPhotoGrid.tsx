@@ -180,10 +180,12 @@ export const VirtualizedPhotoGrid = memo(function VirtualizedPhotoGrid({
     if (photos.length > 0) {
       const nextPhotos = photos.slice(0, 20);
       const urls = nextPhotos
-        .map((p) => p.thumbnailPath || p.objectPath)
-        .filter(Boolean)
+        .map((p) => p.thumbnailPath)
+        .filter((path): path is string => !!path)
         .map((path) => getProxyUrl(path));
-      prefetchImages(urls);
+      if (urls.length > 0) {
+        prefetchImages(urls);
+      }
     }
   }, [photos]);
 
@@ -203,10 +205,12 @@ export const VirtualizedPhotoGrid = memo(function VirtualizedPhotoGrid({
 
       if (upcomingPhotos.length > 0) {
         const urls = upcomingPhotos
-          .map((p) => p.thumbnailPath || p.objectPath)
-          .filter(Boolean)
+          .map((p) => p.thumbnailPath)
+          .filter((path): path is string => !!path)
           .map((path) => getProxyUrl(path));
-        prefetchImages(urls);
+        if (urls.length > 0) {
+          prefetchImages(urls);
+        }
       }
     },
     [items, hasMore, onLoadMore]

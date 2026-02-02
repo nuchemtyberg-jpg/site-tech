@@ -42,7 +42,18 @@ Key entities defined in `shared/schema.ts` include: Projects, Tasks, TaskStatusH
 - **PDF Viewer**: iframe and canvas overlay for viewing and annotating PDFs. Annotations are stored locally and exportable.
 - **Document Management**: Grid and list views, with automatic folder generation for new projects. Supports tagging, search, starring, multi-select batch operations (move files and folders, delete), drag-and-drop uploads with folder structure preservation, button-upload folder selection with structure preservation, and direct file downloads.
 - **Photo Management**: Organizes photos into albums ("General" and "Daily Report Photos" by default), offers variable tile sizes, multi-select for bulk actions, and date-based grouping. Photos are sorted by EXIF `takenAt` date, with a fallback to `createdAt`. Includes client-side EXIF extraction, lazy loading, and a professional lightbox gallery.
-- **Photo Library Performance Optimizations**: Virtualized scrolling using react-virtuoso for handling large photo collections, cursor-based pagination API, background image processing for thumbnail generation (150px grid, 600px medium) in WebP format, BlurHash LQIP placeholders for smooth loading, client-side IndexedDB caching with automatic cleanup (100MB max, 7-day TTL), prefetching of upcoming images, and performance metrics logging (scroll FPS, image load times, time-to-first-thumbnails).
+- **Photo Library Performance Optimizations**: 
+  - Virtualized scrolling using react-virtuoso for handling large photo collections
+  - Cursor-based pagination API with AbortController support for request cancellation
+  - Background image processing for thumbnail generation (150px grid, 600px medium) in WebP format
+  - BlurHash LQIP placeholders for smooth loading
+  - Client-side IndexedDB caching with automatic cleanup (100MB max, 7-day TTL)
+  - Prefetching of upcoming images
+  - Performance metrics logging (scroll FPS, image load times, time-to-first-thumbnails)
+  - **Tab-gated loading**: Photos tab uses React.lazy() and Suspense for lazy loading - photo data is only fetched when the Photos tab is active, not when the project page loads
+  - **Thumbnail-only grid display**: OptimizedPhotoCard never falls back to full-resolution images in grid view; shows placeholder while thumbnails are being processed
+  - **Memoized date grouping**: Date grouping computations are memoized using useMemo in VirtualizedPhotoGrid
+  - **AbortController cleanup**: Photo fetch requests are aborted when tab switches or component unmounts
 - **Photo Library Debug & Performance Tools**:
   - Debug logging system (`client/src/lib/debugPerf.ts`) with DEBUG_PERF flag for route mount/unmount, viewer open/close, scroll locks, event listeners, pagination fetch, and rendered items
   - Health HUD overlay (`client/src/components/HealthHUD.tsx`) for dev mode showing render count, items loaded, overlay status, body overflow, and FPS

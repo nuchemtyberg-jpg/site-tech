@@ -2,11 +2,10 @@ import { useParams, Link, useLocation, useSearch } from "wouter";
 import { useProject, useDeleteProject, useUpdateProject } from "@/hooks/use-projects";
 import { useProjectTasks, useCreateTask, useDeleteTask, useUpdateTask, useTaskStatusHistory } from "@/hooks/use-tasks";
 import { useProjectFiles, useProjectFolders, useCreateFile, useDeleteFile, useCreateFolder, useDeleteFolder, useUpdateFile, useUpdateFolder, useBatchDeleteFiles, useBatchMoveFiles } from "@/hooks/use-files";
-import { useProjectPhotos, useCreatePhoto, useDeletePhoto, useAllPhotosFlat } from "@/hooks/use-photos";
-import { VirtualizedPhotoGrid } from "@/components/VirtualizedPhotoGrid";
 import { TagInput } from "@/components/TagInput";
-import Lightbox from "yet-another-react-lightbox";
-import "yet-another-react-lightbox/styles.css";
+import { lazy, Suspense } from "react";
+
+const PhotosTab = lazy(() => import("@/components/PhotosTab"));
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { 
@@ -104,8 +103,7 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { AddressAutocomplete } from "@/components/AddressAutocomplete";
 import { DailyReportsTab } from "@/components/DailyReportsTab";
-import { useScrollLock } from "@/hooks/use-scroll-lock";
-import { logRouteMount, logRouteUnmount, logViewerOpen, logViewerClose } from "@/lib/debugPerf";
+import { logRouteMount, logRouteUnmount } from "@/lib/debugPerf";
 
 const US_STATES = [
   "AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "FL", "GA",
@@ -190,43 +188,6 @@ export default function ProjectDetails() {
   const batchDeleteFilesMutation = useBatchDeleteFiles(projectId);
   const batchMoveFilesMutation = useBatchMoveFiles(projectId);
   
-  // Photos (separate from files/documents)
-  const [currentAlbumId, setCurrentAlbumId] = useState<number | null>(null);
-  const { data: photos = [], isLoading: isPhotosLoading } = useProjectPhotos(projectId);
-  const paginatedPhotos = useAllPhotosFlat(projectId, currentAlbumId);
-  const createPhotoMutation = useCreatePhoto(projectId);
-  const deletePhotoMutation = useDeletePhoto(projectId);
-
-  // Photo Albums
-  const { data: albums = [] } = useQuery<{ id: number; projectId: number; name: string; createdAt: string }[]>({
-    queryKey: ['/api/projects', projectId, 'albums'],
-    queryFn: async () => {
-      const res = await fetch(`/api/projects/${projectId}/albums`);
-      return res.json();
-    },
-    enabled: !!projectId,
-  });
-
-  const createAlbumMutation = useMutation({
-    mutationFn: async (name: string) => {
-      return apiRequest('POST', `/api/projects/${projectId}/albums`, { name });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/projects', projectId, 'albums'] });
-    },
-  });
-
-  const deleteAlbumMutation = useMutation({
-    mutationFn: async (albumId: number) => {
-      return apiRequest('DELETE', `/api/albums/${albumId}`);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/projects', projectId, 'albums'] });
-      if (currentAlbumId === deleteAlbumId) {
-        setCurrentAlbumId(null);
-      }
-    },
-  });
 
   const [editingFile, setEditingFile] = useState<FileMetadata | null>(null);
   const [editFileTags, setEditFileTags] = useState<string[]>([]);
@@ -368,17 +329,6 @@ export default function ProjectDetails() {
   const [isUploadingDragDrop, setIsUploadingDragDrop] = useState(false);
   const [dragDropProgress, setDragDropProgress] = useState({ current: 0, total: 0 });
   
-  // Photo tool state
-  const [photoTileSize, setPhotoTileSize] = useState<'small' | 'medium' | 'large'>('medium');
-  const [selectedPhotos, setSelectedPhotos] = useState<Set<number>>(new Set());
-  const [isPhotoSelectMode, setIsPhotoSelectMode] = useState(false);
-  const [isCreateAlbumOpen, setIsCreateAlbumOpen] = useState(false);
-  const [newAlbumName, setNewAlbumName] = useState("");
-  const [deleteAlbumId, setDeleteAlbumId] = useState<number | null>(null);
-  const [lightboxOpen, setLightboxOpen] = useState(false);
-  const [lightboxIndex, setLightboxIndex] = useState(0);
-  const [lightboxPhotos, setLightboxPhotos] = useState<Photo[]>([]);
-  const [showBatchDeleteConfirm, setShowBatchDeleteConfirm] = useState(false);
   
   // Keep ref in sync with state for use in callbacks
   currentFolderIdRef.current = currentFolderId;
@@ -391,18 +341,6 @@ export default function ProjectDetails() {
       logRouteUnmount('ProjectDetails');
     };
   }, []);
-
-  // Scroll lock for lightbox - restores body overflow on close, unmount, and route change
-  useScrollLock({ isLocked: lightboxOpen, source: 'Lightbox' });
-
-  // Debug logging for lightbox open/close
-  useEffect(() => {
-    if (lightboxOpen) {
-      logViewerOpen('Lightbox');
-    } else {
-      logViewerClose('Lightbox');
-    }
-  }, [lightboxOpen]);
 
   const handleFileClick = (file: FileMetadata) => {
     if (isPdfFile(file.contentType)) {
@@ -1334,59 +1272,6 @@ export default function ProjectDetails() {
     
     if (successCount > 0) {
       toast({ title: "Upload Complete", description: `${successCount} file(s) uploaded successfully.` });
-    }
-  };
-
-  const handlePhotoUploadComplete = async (uploadedFiles: Array<{ name: string; objectPath: string; size: number; type: string; takenAt?: Date }>) => {
-    let successCount = 0;
-    
-    // Determine the album ID to use - if none selected, use first existing album or create one
-    let targetAlbumId = currentAlbumId;
-    
-    if (targetAlbumId === null && uploadedFiles.length > 0) {
-      // Try to use an existing album (prefer "General" if exists, otherwise first album)
-      const generalAlbum = albums?.find((a: any) => a.name === "General");
-      const firstAlbum = albums?.[0];
-      
-      if (generalAlbum) {
-        targetAlbumId = generalAlbum.id;
-      } else if (firstAlbum) {
-        targetAlbumId = firstAlbum.id;
-      } else {
-        // Create a "General" album
-        try {
-          const response = await apiRequest('POST', `/api/projects/${projectId}/albums`, { name: "General" });
-          const newAlbum = await response.json();
-          targetAlbumId = newAlbum.id;
-          queryClient.invalidateQueries({ queryKey: ['/api/projects', projectId, 'albums'] });
-        } catch (err) {
-          console.error("Failed to create default album:", err);
-          toast({ title: "Error", description: "Failed to create album for photos", variant: "destructive" });
-          return;
-        }
-      }
-    }
-    
-    for (const file of uploadedFiles) {
-      try {
-        // Use createPhotoMutation - photos are now stored in separate photos table
-        await createPhotoMutation.mutateAsync({
-          name: file.name,
-          objectPath: file.objectPath,
-          contentType: file.type,
-          size: file.size,
-          albumId: targetAlbumId,
-          takenAt: file.takenAt?.toISOString(),
-        });
-        successCount++;
-      } catch (err) {
-        console.error("Failed to save photo metadata:", err);
-        toast({ title: "Error", description: `Failed to save ${file.name}`, variant: "destructive" });
-      }
-    }
-    
-    if (successCount > 0) {
-      toast({ title: "Upload Complete", description: `${successCount} photo(s) uploaded successfully.` });
     }
   };
 
@@ -2590,202 +2475,13 @@ export default function ProjectDetails() {
           {/* End Drag and Drop Zone Wrapper */}
         </TabsContent>
 
-        <TabsContent value="photos" className="space-y-4">
-          {/* Photo Controls Toolbar */}
-          <div className="flex flex-wrap items-center gap-2 mb-4">
-            {/* Album Selector */}
-            <div className="flex items-center gap-2">
-              <Select value={currentAlbumId?.toString() || "all"} onValueChange={(v) => setCurrentAlbumId(v === "all" ? null : Number(v))}>
-                <SelectTrigger className="w-40 bg-white dark:bg-zinc-900 text-black" data-testid="select-album">
-                  <FolderOpen className="w-4 h-4 mr-2 text-black" />
-                  <SelectValue placeholder="All Photos" />
-                </SelectTrigger>
-                <SelectContent className="bg-white dark:bg-zinc-900 text-black">
-                  <SelectItem value="all">All Photos</SelectItem>
-                  {albums.map((album) => (
-                    <SelectItem key={album.id} value={album.id.toString()}>{album.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Dialog open={isCreateAlbumOpen} onOpenChange={setIsCreateAlbumOpen}>
-                <DialogTrigger asChild>
-                  <Button variant="outline" size="icon" data-testid="button-create-album">
-                    <Plus className="w-4 h-4" />
-                  </Button>
-                </DialogTrigger>
-                <DialogContent className="bg-white dark:bg-zinc-900">
-                  <DialogHeader>
-                    <DialogTitle className="text-black">Create Album</DialogTitle>
-                  </DialogHeader>
-                  <div className="grid gap-4 py-4">
-                    <div className="grid gap-2">
-                      <Label htmlFor="album-name" className="text-black"><span className="text-red-500">*</span> Album Name</Label>
-                      <Input 
-                        id="album-name" 
-                        value={newAlbumName} 
-                        onChange={(e) => setNewAlbumName(e.target.value)}
-                        className="bg-white dark:bg-zinc-900 text-black"
-                        placeholder="Enter album name"
-                        data-testid="input-album-name"
-                      />
-                    </div>
-                  </div>
-                  <DialogFooter>
-                    <Button variant="outline" onClick={() => setIsCreateAlbumOpen(false)}>Cancel</Button>
-                    <Button 
-                      onClick={() => {
-                        if (newAlbumName.trim()) {
-                          createAlbumMutation.mutate(newAlbumName.trim());
-                          setNewAlbumName("");
-                          setIsCreateAlbumOpen(false);
-                        }
-                      }}
-                      disabled={!newAlbumName.trim()}
-                      data-testid="button-save-album"
-                    >
-                      Create
-                    </Button>
-                  </DialogFooter>
-                </DialogContent>
-              </Dialog>
-              {currentAlbumId && (
-                <Button variant="ghost" size="icon" onClick={() => setDeleteAlbumId(currentAlbumId)} data-testid="button-delete-album">
-                  <Trash2 className="w-4 h-4" />
-                </Button>
-              )}
-            </div>
-
-            <div className="flex-1" />
-
-            {/* Tile Size Toggle */}
-            <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
-              <Button 
-                variant={photoTileSize === 'small' ? 'default' : 'ghost'} 
-                size="sm"
-                onClick={() => setPhotoTileSize('small')}
-                data-testid="button-tile-small"
-              >
-                <Grid3X3 className="w-4 h-4" />
-              </Button>
-              <Button 
-                variant={photoTileSize === 'medium' ? 'default' : 'ghost'} 
-                size="sm"
-                onClick={() => setPhotoTileSize('medium')}
-                data-testid="button-tile-medium"
-              >
-                <Grid2X2 className="w-4 h-4" />
-              </Button>
-              <Button 
-                variant={photoTileSize === 'large' ? 'default' : 'ghost'} 
-                size="sm"
-                onClick={() => setPhotoTileSize('large')}
-                data-testid="button-tile-large"
-              >
-                <Square className="w-4 h-4" />
-              </Button>
-            </div>
-
-            {/* Select Mode Toggle */}
-            <Button 
-              variant={isPhotoSelectMode ? 'default' : 'outline'} 
-              size="sm"
-              onClick={() => {
-                setIsPhotoSelectMode(!isPhotoSelectMode);
-                setSelectedPhotos(new Set());
-              }}
-              data-testid="button-select-mode"
-            >
-              <CheckSquare className="w-4 h-4 mr-2" />
-              Select
-            </Button>
-
-            {/* Upload Button */}
-            <NativeFileUploader
-              maxNumberOfFiles={50}
-              maxFileSize={52428800}
-              accept="image/*"
-              buttonClassName="w-full sm:w-auto"
-              onUploadComplete={handlePhotoUploadComplete}
-            >
-              <Camera className="w-4 h-4 mr-2" /> Upload
-            </NativeFileUploader>
-          </div>
-
-          {/* Selection Actions Bar */}
-          {isPhotoSelectMode && selectedPhotos.size > 0 && (
-            <div className="flex items-center gap-2 p-3 bg-muted rounded-lg">
-              <span className="text-sm font-medium">{selectedPhotos.size} selected</span>
-              <div className="flex-1" />
-              <Button 
-                variant="outline" 
-                size="sm"
-                onClick={() => {
-                  selectedPhotos.forEach(id => {
-                    const photo = photos?.find(p => p.id === id);
-                    if (photo) {
-                      const link = document.createElement('a');
-                      link.href = getProxyUrl(photo.objectPath);
-                      link.download = photo.name;
-                      link.click();
-                    }
-                  });
-                }}
-                data-testid="button-download-selected"
-              >
-                <Download className="w-4 h-4 mr-2" /> Download
-              </Button>
-              <Button 
-                variant="outline" 
-                size="sm"
-                onClick={() => {
-                  const selectedIds = Array.from(selectedPhotos).join(',');
-                  const shareUrl = `${window.location.origin}/project/${projectId}/photos?ids=${selectedIds}`;
-                  navigator.clipboard.writeText(shareUrl);
-                  toast({ title: "Share link copied to clipboard" });
-                }}
-                data-testid="button-share-selected"
-              >
-                <Share2 className="w-4 h-4 mr-2" /> Share
-              </Button>
-              <Button 
-                variant="destructive" 
-                size="sm"
-                onClick={() => setShowBatchDeleteConfirm(true)}
-                data-testid="button-delete-selected"
-              >
-                <Trash2 className="w-4 h-4 mr-2" /> Delete
-              </Button>
-            </div>
-          )}
-
-          {/* Photo Grid with Virtualized Scroll */}
-          <VirtualizedPhotoGrid
-            photos={paginatedPhotos.photos}
-            isLoading={paginatedPhotos.isLoading || paginatedPhotos.isFetchingNextPage}
-            hasMore={paginatedPhotos.hasNextPage ?? false}
-            onLoadMore={paginatedPhotos.loadMore}
-            tileSize={photoTileSize}
-            isSelectMode={isPhotoSelectMode}
-            selectedPhotos={selectedPhotos}
-            onSelectPhoto={(id) => {
-              setSelectedPhotos(prev => {
-                const newSet = new Set(prev);
-                if (newSet.has(id)) {
-                  newSet.delete(id);
-                } else {
-                  newSet.add(id);
-                }
-                return newSet;
-              });
-            }}
-            onPhotoClick={(photo, index) => {
-              setLightboxPhotos(paginatedPhotos.photos);
-              setLightboxIndex(index);
-              setLightboxOpen(true);
-            }}
-            onDeletePhoto={(id) => setDeleteFileId(id)}
-          />
-        </TabsContent>
+        {activeTab === "photos" && (
+          <TabsContent value="photos" className="space-y-4" forceMount>
+            <Suspense fallback={<div className="flex items-center justify-center h-40"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" /></div>}>
+              <PhotosTab projectId={projectId} />
+            </Suspense>
+          </TabsContent>
+        )}
 
         <TabsContent value="daily-reports" className="space-y-4">
           {project && <DailyReportsTab project={project} />}
@@ -2799,20 +2495,6 @@ export default function ProjectDetails() {
           fileName={viewingFile.name}
           onClose={() => setViewingFile(null)}
           onShare={() => handleShareFile(viewingFile)}
-        />
-      )}
-
-      {/* Lightbox Gallery for Photos - only render when open to prevent memory leaks */}
-      {lightboxOpen && (
-        <Lightbox
-          open={lightboxOpen}
-          close={() => setLightboxOpen(false)}
-          index={lightboxIndex}
-          slides={lightboxPhotos.map(photo => ({
-            src: getProxyUrl(photo.objectPath),
-            alt: photo.name,
-            title: photo.name,
-          }))}
         />
       )}
 
@@ -2986,62 +2668,6 @@ export default function ProjectDetails() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      {/* Delete Album Confirmation */}
-      <AlertDialog open={deleteAlbumId !== null} onOpenChange={(open) => !open && setDeleteAlbumId(null)}>
-        <AlertDialogContent className="bg-white dark:bg-zinc-900 text-black dark:text-white">
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete Album</AlertDialogTitle>
-            <AlertDialogDescription>
-              Are you sure you want to delete this album? Photos in this album will not be deleted, but they will no longer be organized in this album.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel data-testid="button-cancel-delete-album">Cancel</AlertDialogCancel>
-            <AlertDialogAction 
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              onClick={() => {
-                if (deleteAlbumId) {
-                  deleteAlbumMutation.mutate(deleteAlbumId);
-                  if (currentAlbumId === deleteAlbumId) {
-                    setCurrentAlbumId(null);
-                  }
-                }
-                setDeleteAlbumId(null);
-              }}
-              data-testid="button-confirm-delete-album"
-            >
-              Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      {/* Batch Delete Photos Confirmation */}
-      <AlertDialog open={showBatchDeleteConfirm} onOpenChange={setShowBatchDeleteConfirm}>
-        <AlertDialogContent className="bg-white dark:bg-zinc-900 text-black dark:text-white">
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete Selected Photos</AlertDialogTitle>
-            <AlertDialogDescription>
-              Are you sure you want to delete {selectedPhotos.size} photo{selectedPhotos.size !== 1 ? 's' : ''}? This action cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel data-testid="button-cancel-batch-delete">Cancel</AlertDialogCancel>
-            <AlertDialogAction 
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              onClick={() => {
-                selectedPhotos.forEach(id => deletePhotoMutation.mutate(id));
-                setSelectedPhotos(new Set());
-                setShowBatchDeleteConfirm(false);
-              }}
-              data-testid="button-confirm-batch-delete"
-            >
-              Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
 
       {/* Edit Task Dialog */}
       <Dialog open={editingTask !== null} onOpenChange={(open) => !open && setEditingTask(null)}>
