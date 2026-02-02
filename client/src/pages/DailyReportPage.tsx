@@ -489,7 +489,7 @@ export default function DailyReportPage() {
 
   // Photo mutations
   const createPhotoMutation = useMutation({
-    mutationFn: async (data: { taskEntryId?: number; deliveryEntryId?: number; url: string; objectPath?: string; fileName?: string; takenAt?: string }) => {
+    mutationFn: async (data: { taskEntryId?: number; deliveryEntryId?: number; url: string; cloudinaryPublicId?: string; cloudinaryUrl?: string; fileName?: string; takenAt?: string }) => {
       return apiRequest("POST", `/api/daily-report-photos`, data);
     },
     onSuccess: () => refetchReport(),
@@ -1090,8 +1090,9 @@ export default function DailyReportPage() {
                                 uploadedFiles.forEach((file) => {
                                   createPhotoMutation.mutate({ 
                                     taskEntryId: taskEntry.id, 
-                                    url: file.objectPath,
-                                    objectPath: file.objectPath,
+                                    url: file.cloudinaryUrl,
+                                    cloudinaryPublicId: file.cloudinaryPublicId,
+                                    cloudinaryUrl: file.cloudinaryUrl,
                                     fileName: file.name,
                                     takenAt: file.takenAt?.toISOString(),
                                   });
@@ -1257,8 +1258,9 @@ export default function DailyReportPage() {
                               uploadedFiles.forEach((file) => {
                                 createPhotoMutation.mutate({ 
                                   deliveryEntryId: delivery.id, 
-                                  url: file.objectPath,
-                                  objectPath: file.objectPath,
+                                  url: file.cloudinaryUrl,
+                                  cloudinaryPublicId: file.cloudinaryPublicId,
+                                  cloudinaryUrl: file.cloudinaryUrl,
                                   fileName: file.name,
                                   takenAt: file.takenAt?.toISOString(),
                                 });

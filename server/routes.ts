@@ -1392,7 +1392,7 @@ export async function registerRoutes(
   // Daily Report Photos
   app.post("/api/daily-report-photos", isAuthenticated, isAuthorizedUser, async (req, res) => {
     try {
-      const { reportId, taskEntryId, deliveryEntryId, url, caption, createdBy, createdByName, objectPath, fileName, takenAt } = req.body;
+      const { reportId, taskEntryId, deliveryEntryId, url, caption, createdBy, createdByName, cloudinaryPublicId, cloudinaryUrl, fileName, takenAt } = req.body;
       
       // Validate that at least one reference is provided
       if (!reportId && !taskEntryId && !deliveryEntryId) {
@@ -1430,45 +1430,20 @@ export async function registerRoutes(
       });
       
       // Also add the photo to the "Daily Report Photos" album in Project Photos
-      if (report && objectPath) {
+      // Support both Cloudinary (new) and objectPath (legacy)
+      if (report && (cloudinaryPublicId || cloudinaryUrl)) {
         try {
           const album = await storage.getOrCreateDailyReportAlbum(report.projectId);
-          // Convert objectPath to proxy format for consistent access
-          let proxyPath = objectPath;
-          
-          // Already a proxy URL
-          if (objectPath.startsWith('/objects/')) {
-            proxyPath = objectPath;
-          }
-          // Full GCS URL with .private
-          else if (objectPath.includes('storage.googleapis.com') && objectPath.includes('/.private/uploads/')) {
-            const match = objectPath.match(/\/.private\/uploads\/([a-f0-9-]+)/);
-            if (match) {
-              proxyPath = `/objects/uploads/${match[1]}`;
-            }
-          }
-          // Full GCS URL without .private
-          else if (objectPath.includes('storage.googleapis.com') && objectPath.includes('/uploads/')) {
-            const match = objectPath.match(/\/uploads\/([a-f0-9-]+)/);
-            if (match) {
-              proxyPath = `/objects/uploads/${match[1]}`;
-            }
-          }
-          // Relative path with .private
-          else if (objectPath.startsWith('/.private/uploads/')) {
-            proxyPath = objectPath.replace('/.private/uploads/', '/objects/uploads/');
-          }
-          // Relative path without .private
-          else if (objectPath.startsWith('/uploads/')) {
-            proxyPath = `/objects${objectPath}`;
-          }
           
           await storage.createPhoto({
             projectId: report.projectId,
             albumId: album.id,
             name: fileName || `daily-report-photo-${photo.id}`,
-            objectPath: proxyPath,
+            cloudinaryPublicId,
+            cloudinaryUrl,
             contentType: 'image/jpeg',
+            takenAt: takenAt ? new Date(takenAt) : null,
+            displayDate: takenAt ? new Date(takenAt) : new Date(),
           });
         } catch (albumErr) {
           console.error("Failed to add photo to album:", albumErr);
