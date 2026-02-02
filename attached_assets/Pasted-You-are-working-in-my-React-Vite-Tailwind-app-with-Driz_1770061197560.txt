@@ -1,0 +1,207 @@
+You are working in my React + Vite + Tailwind app with Drizzle ORM. The Photos tab at /projects/:id?tab=photos is slow/freezes desktop because it eagerly loads and renders too many full-res images and does client-side heavy work.
+
+GOAL
+
+Make the Photos tab fast and non-blocking by:
+
+loading photos only when the Photos tab is active,
+
+returning paginated results already sorted on the server/DB,
+
+rendering thumbnails only in the grid (not full-res),
+
+limiting DOM/render work via pagination or virtualization,
+
+avoiding any expensive sorting/date parsing inside React render.
+
+IMPORTANT RULES
+
+Do NOT load photos data unless the active tab is photos.
+
+Do NOT fetch all photos in one request.
+
+Do NOT sort photos in the client for initial load.
+
+The photos grid must never load full-size images.
+
+Use existing libraries where sensible (do not reinvent wheel).
+
+Step-by-step changes (do in this exact order)
+Step 1: Tab-gated loading (stop eager fetch)
+
+Find the project page that reads the tab query param and renders tabs.
+Fix it so the Photos component is lazy-loaded and only mounts when tab is “photos”.
+
+Implementation requirements:
+
+Determine active tab from URL query tab.
+
+Wrap Photos tab in React.lazy and render it only if active.
+
+Ensure no photo fetch occurs before Photos component mounts.
+
+Example pattern:
+
+const PhotosTab = React.lazy(() => import("./PhotosTab"))
+
+Render <PhotosTab /> only when activeTab === "photos".
+
+Acceptance criteria:
+
+Navigating to /projects/:id (non-photos tab) makes zero photo API calls in Network tab.
+
+Switching to photos triggers first photo fetch.
+
+Step 2: Server-side pagination + server-side sorting
+
+Update the API endpoint that returns project photos to support pagination:
+
+Request: GET /api/projects/:projectId/photos?cursor=<optional>&limit=50&sort=capture_desc
+
+Response: { items: Photo[], nextCursor: string | null }
+
+Implementation requirements:
+
+Default limit=50 (hard cap max 100).
+
+Sort order: capture date descending (latest first). If capture date missing, fall back to upload/created date.
+
+Sorting happens in DB query (Drizzle), not client.
+
+Use cursor pagination if you already have stable IDs/timestamps; otherwise use offset pagination temporarily.
+
+Ensure query is indexed (at least on projectId + captureDate/createdAt).
+
+Acceptance criteria:
+
+First response returns max 50 photos and a nextCursor if more exist.
+
+No client-side .sort() needed to display correctly.
+
+Step 3: Thumbnails (grid must never load full-res)
+
+Add thumbnail support so the grid loads lightweight images.
+
+Implementation requirements:
+
+On upload: generate and store at least:
+
+thumbnailUrl (ex: 300px wide)
+
+fullUrl (original)
+
+If you already store in S3/Supabase/etc:
+
+Use server-side generation (preferred) OR storage transformations if available.
+
+Update DB schema/model to store thumbnailUrl.
+
+Update API to return thumbnailUrl and only use it for the grid.
+
+Full image should load only when user opens a photo viewer/modal.
+
+UI requirements:
+
+Grid uses <img src={thumbnailUrl} loading="lazy" decoding="async" />
+
+Modal viewer uses fullUrl and loads on demand.
+
+Acceptance criteria:
+
+In Network tab, the grid loads only thumbnail-sized files.
+
+Full-size images only download when opening an image.
+
+Step 4: Render limiting (choose one: pagination OR virtualization)
+
+Implement one of these (prefer pagination first, it’s simpler):
+
+Option A: Pagination / infinite scroll (recommended)
+
+Load first page (50).
+
+Add “Load more” button OR infinite scroll using IntersectionObserver.
+
+Append new items to list.
+
+Acceptance criteria:
+
+DOM never contains more than ~150 <img> elements at once (cap by paging).
+
+Option B: Virtualization
+
+Use react-window for a virtualized grid.
+
+Requirements:
+
+Virtualize rows/columns so only visible thumbnails render.
+
+Must work smoothly on desktop.
+
+Acceptance criteria:
+
+Rendering stays responsive even with 1,000 photos.
+
+Step 5: Remove expensive work from render
+
+Audit Photos UI code and ensure:
+
+No date parsing or sorting inside render loops
+
+No new Date() called repeatedly in JSX map for every re-render
+
+Implementation requirements:
+
+Any derived formatting should happen:
+
+once in the API response, or
+
+once in memoized transforms (useMemo) scoped to the items array.
+
+Acceptance criteria:
+
+Switching tabs does not spike CPU or freeze.
+
+React profiler shows minimal re-render cost.
+
+Step 6: Add caching + request hygiene
+
+Implementation requirements:
+
+Use react-query (TanStack Query) or similar for caching and pagination (preferred).
+
+Cache per projectId and cursor.
+
+Deduplicate requests on fast tab switching.
+
+Abort in-flight requests when leaving photos tab (AbortController).
+
+Acceptance criteria:
+
+Switching away and back to Photos reuses cached page 1 instantly (unless invalidated).
+
+No duplicate calls for the same cursor.
+
+Deliverables
+
+Updated Photos tab: tab-gated lazy load + paginated results + thumbnails + load more/infinite scroll.
+
+Updated API route + Drizzle query with proper ordering rules and limits.
+
+Updated upload pipeline to create thumbnails and store thumbnailUrl.
+
+Clear notes in plan.md describing new behavior and endpoints.
+
+Final acceptance checklist
+
+Loading /projects/:id on any tab except Photos triggers 0 photo requests.
+
+Photos tab first load shows thumbnails quickly (<1s for 50 items on desktop).
+
+No desktop freezing when project has hundreds of photos.
+
+Sorting is correct (latest capture date first; fallback to created/upload date).
+
+“Load more” works and keeps UI responsive.
+
+Full-res images only load when opened.
