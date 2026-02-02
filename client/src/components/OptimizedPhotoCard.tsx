@@ -72,16 +72,25 @@ export const OptimizedPhotoCard = memo(function OptimizedPhotoCard({
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
 
+  const isLegacyPendingPhoto = (() => {
+    if (photo.processingStatus !== 'pending') return false;
+    if (photo.thumbnailPath || photo.mediumPath) return false;
+    if (!photo.createdAt) return false;
+    const processorRolloutDate = new Date('2026-02-02T00:00:00Z');
+    const photoDate = new Date(photo.createdAt);
+    return photoDate < processorRolloutDate;
+  })();
+
   const displayUrl = photo.thumbnailPath 
     ? getProxyUrl(photo.thumbnailPath)
     : photo.mediumPath 
       ? getProxyUrl(photo.mediumPath)
-      : photo.processingStatus === 'pending' && photo.objectPath
+      : isLegacyPendingPhoto && photo.objectPath
         ? getProxyUrl(photo.objectPath)
         : null;
 
   const hasDisplayImage = !!displayUrl;
-  const isActivelyProcessing = photo.processingStatus === 'processing';
+  const isProcessing = photo.processingStatus === 'pending' || photo.processingStatus === 'processing';
 
   useEffect(() => {
     if (!displayUrl) {
@@ -165,7 +174,7 @@ export const OptimizedPhotoCard = memo(function OptimizedPhotoCard({
 
       {!hasDisplayImage && (
         <div className="absolute inset-0 bg-muted flex items-center justify-center flex-col gap-2">
-          {isActivelyProcessing ? (
+          {isProcessing ? (
             <>
               <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
               <span className="text-xs text-muted-foreground">Processing...</span>
