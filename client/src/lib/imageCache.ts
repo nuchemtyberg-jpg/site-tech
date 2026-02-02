@@ -19,7 +19,7 @@ const CACHE_MAX_AGE = 7 * 24 * 60 * 60 * 1000;
 
 let dbInstance: IDBPDatabase<ImageCacheDB> | null = null;
 const memoryCache = new Map<string, string>();
-const MAX_MEMORY_CACHE_SIZE = 50;
+const MAX_MEMORY_CACHE_SIZE = 200;
 
 async function getDB(): Promise<IDBPDatabase<ImageCacheDB> | null> {
   if (dbInstance) return dbInstance;
@@ -93,8 +93,6 @@ function addToMemoryCache(url: string, objectUrl: string) {
   if (memoryCache.size >= MAX_MEMORY_CACHE_SIZE) {
     const firstKey = memoryCache.keys().next().value;
     if (firstKey) {
-      const oldUrl = memoryCache.get(firstKey);
-      if (oldUrl) URL.revokeObjectURL(oldUrl);
       memoryCache.delete(firstKey);
     }
   }
@@ -167,6 +165,5 @@ export async function prefetchImages(urls: string[]): Promise<void> {
 }
 
 export function clearMemoryCache() {
-  memoryCache.forEach((objectUrl) => URL.revokeObjectURL(objectUrl));
   memoryCache.clear();
 }
