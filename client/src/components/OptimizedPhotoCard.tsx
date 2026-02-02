@@ -72,12 +72,19 @@ export const OptimizedPhotoCard = memo(function OptimizedPhotoCard({
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
 
-  const hasThumbnail = !!photo.thumbnailPath;
-  const thumbnailUrl = hasThumbnail ? getProxyUrl(photo.thumbnailPath!) : null;
-  const isPending = photo.processingStatus === 'pending' || photo.processingStatus === 'processing';
+  const displayUrl = photo.thumbnailPath 
+    ? getProxyUrl(photo.thumbnailPath)
+    : photo.mediumPath 
+      ? getProxyUrl(photo.mediumPath)
+      : photo.processingStatus === 'pending' && photo.objectPath
+        ? getProxyUrl(photo.objectPath)
+        : null;
+
+  const hasDisplayImage = !!displayUrl;
+  const isActivelyProcessing = photo.processingStatus === 'processing';
 
   useEffect(() => {
-    if (!thumbnailUrl) {
+    if (!displayUrl) {
       setIsLoading(false);
       return;
     }
@@ -87,7 +94,7 @@ export const OptimizedPhotoCard = memo(function OptimizedPhotoCard({
     const loadStartTime = performance.now();
 
     async function loadImage() {
-      const cached = await getCachedImage(thumbnailUrl!);
+      const cached = await getCachedImage(displayUrl!);
       if (cached && mounted) {
         setImageUrl(cached);
         setIsLoading(false);
@@ -96,13 +103,13 @@ export const OptimizedPhotoCard = memo(function OptimizedPhotoCard({
       }
 
       try {
-        const response = await fetch(thumbnailUrl!, { signal: controller.signal });
+        const response = await fetch(displayUrl!, { signal: controller.signal });
         if (!response.ok) throw new Error('Failed to load image');
         
         const blob = await response.blob();
         if (!mounted) return;
         
-        const objectUrl = await cacheImage(thumbnailUrl!, blob);
+        const objectUrl = await cacheImage(displayUrl!, blob);
         if (mounted) {
           setImageUrl(objectUrl);
           setIsLoading(false);
@@ -122,7 +129,7 @@ export const OptimizedPhotoCard = memo(function OptimizedPhotoCard({
       mounted = false;
       controller.abort();
     };
-  }, [thumbnailUrl, photo.id]);
+  }, [displayUrl, photo.id]);
 
   const handleClick = useCallback(() => {
     if (isSelectMode) {
@@ -146,25 +153,25 @@ export const OptimizedPhotoCard = memo(function OptimizedPhotoCard({
       onClick={handleClick}
       data-testid={`photo-card-${photo.id}`}
     >
-      {photo.blurHash && isLoading && hasThumbnail && (
+      {photo.blurHash && isLoading && hasDisplayImage && (
         <BlurHashCanvas blurHash={photo.blurHash} className="blur-sm" />
       )}
 
-      {!photo.blurHash && isLoading && hasThumbnail && (
+      {!photo.blurHash && isLoading && hasDisplayImage && (
         <div className="absolute inset-0 bg-muted animate-pulse flex items-center justify-center">
           <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
         </div>
       )}
 
-      {!hasThumbnail && (
+      {!hasDisplayImage && (
         <div className="absolute inset-0 bg-muted flex items-center justify-center flex-col gap-2">
-          {isPending ? (
+          {isActivelyProcessing ? (
             <>
               <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
               <span className="text-xs text-muted-foreground">Processing...</span>
             </>
           ) : (
-            <span className="text-xs text-muted-foreground">Generating thumbnail...</span>
+            <span className="text-xs text-muted-foreground">Image unavailable</span>
           )}
         </div>
       )}
@@ -175,7 +182,7 @@ export const OptimizedPhotoCard = memo(function OptimizedPhotoCard({
         </div>
       )}
 
-      {imageUrl && hasThumbnail && (
+      {imageUrl && hasDisplayImage && (
         <img
           src={imageUrl}
           alt={photo.name}
