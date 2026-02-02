@@ -211,6 +211,7 @@ SiteTech is a comprehensive web-based sitework management platform designed for 
 | Passport.js | Authentication (OIDC) |
 | connect-pg-simple | Session storage |
 | Mailgun API | Email delivery |
+| Cloudinary | Photo storage & transformations |
 
 ### Key Data Models
 
@@ -364,6 +365,9 @@ Protected Routes:
 | MAILGUN_DOMAIN | Mailgun sending domain |
 | MAILGUN_FROM_EMAIL | Sender email address |
 | SESSION_SECRET | Express session encryption |
+| CLOUDINARY_CLOUD_NAME | Cloudinary account cloud name |
+| CLOUDINARY_API_KEY | Cloudinary API key |
+| CLOUDINARY_API_SECRET | Cloudinary API secret |
 
 ---
 
@@ -412,7 +416,8 @@ Protected Routes:
 │   ├── middleware/
 │   │   └── auth.ts          # Authentication & authorization
 │   ├── services/
-│   │   └── email.ts         # Mailgun email service
+│   │   ├── email.ts         # Mailgun email service
+│   │   └── cloudinary.ts    # Cloudinary upload/transform service
 │   ├── replit_integrations/
 │   │   └── auth/            # Replit Auth integration
 │   ├── routes.ts
@@ -443,6 +448,38 @@ Protected Routes:
 ---
 
 ## Changelog
+
+### February 2, 2026
+- **Cloudinary Migration**: Migrated photo storage from Replit Object Storage to Cloudinary
+  - All new photo uploads go directly to Cloudinary via signed uploads
+  - Eliminated background processing - Cloudinary handles transformations on-demand
+  - Photo thumbnails and medium sizes generated via Cloudinary URL transformations
+  - EXIF date extraction preserved (client-side before upload)
+  - Updated both Photo Library and Daily Report photo uploads
+  - Photos display correctly in both contexts using Cloudinary URLs
+  - Added delete support with Cloudinary cleanup
+- **New Cloudinary Service** (`server/services/cloudinary.ts`):
+  - `uploadToCloudinary(file, options)` - Upload files with folder organization
+  - `deleteFromCloudinary(publicId)` - Delete files by public ID
+  - `getCloudinaryUrl(publicId, options)` - Generate transformation URLs
+  - URL transformation presets: thumbnail (150x150), medium (600px), full (auto quality/format)
+- **Updated Components**:
+  - `NativeFileUploader` - Now uploads directly to Cloudinary with signature-based auth
+  - `OptimizedPhotoCard` - Displays photos using Cloudinary URLs with smart fallback
+  - `PhotosTab` - Uses Cloudinary URLs for photo display
+  - `DailyReportPage` - Updated to pass Cloudinary metadata for photo uploads
+- **Database Schema**: `photos` table updated with:
+  - `cloudinaryPublicId` - Cloudinary public ID for the image
+  - `cloudinaryUrl` - Cloudinary secure URL
+  - `objectPath` - Kept for backward compatibility with legacy photos
+- **API Changes**:
+  - `POST /api/cloudinary/signature` - Generate signed upload parameters
+  - `POST /api/projects/:id/photos` - Accepts cloudinaryPublicId and cloudinaryUrl
+  - `POST /api/daily-report-photos` - Accepts cloudinaryPublicId and cloudinaryUrl
+- **Removed**:
+  - Background image processor (`imageProcessor.ts`)
+  - Prefetch logic for thumbnails
+  - Object storage upload for photos
 
 ### January 29, 2026
 - **Hierarchical Folder Picker for Move Feature**: Replaced flat folder list in move dialog with intuitive drill-down navigation
