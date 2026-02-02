@@ -51,7 +51,7 @@ Key entities defined in `shared/schema.ts` include: Projects, Tasks, TaskStatusH
   - Prefetching of upcoming images
   - Performance metrics logging (scroll FPS, image load times, time-to-first-thumbnails)
   - **Tab-gated loading**: Photos tab uses React.lazy() and Suspense for lazy loading - photo data is only fetched when the Photos tab is active, not when the project page loads
-  - **Thumbnail-only grid display**: OptimizedPhotoCard never falls back to full-resolution images in grid view; shows placeholder while thumbnails are being processed
+  - **Smart thumbnail fallback**: OptimizedPhotoCard uses a fallback hierarchy: thumbnailPath (150px) → mediumPath (600px) → objectPath (only for legacy photos uploaded before 2026-02-02). New photos never load full-resolution in grid view.
   - **Memoized date grouping**: Date grouping computations are memoized using useMemo in VirtualizedPhotoGrid
   - **AbortController cleanup**: Photo fetch requests are aborted when tab switches or component unmounts
 - **Photo Library Debug & Performance Tools**:
