@@ -232,7 +232,9 @@ export function NativeFileUploader({
         });
 
         if (!uploadRes.ok) {
-          throw new Error("Failed to upload to Cloudinary");
+          const errorData = await uploadRes.json().catch(() => ({}));
+          console.error("Cloudinary upload error:", errorData);
+          throw new Error(errorData.error?.message || "Failed to upload to Cloudinary");
         }
 
         const cloudinaryResult = await uploadRes.json();
