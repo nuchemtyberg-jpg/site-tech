@@ -3,9 +3,7 @@ import { Virtuoso, VirtuosoHandle } from "react-virtuoso";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { OptimizedPhotoCard } from "./OptimizedPhotoCard";
-import { prefetchImages } from "@/lib/imageCache";
 import { trackScrollPerformance, logTimeToFirstThumbnails } from "@/lib/performanceMetrics";
-import { getProxyUrl } from "@/lib/utils";
 import { Camera, Loader2 } from "lucide-react";
 import type { Photo } from "@shared/schema";
 import { logRouteMount, logRouteUnmount, logRenderedItems, logEventListener, logComponentRender } from "@/lib/debugPerf";
@@ -176,18 +174,6 @@ export const VirtualizedPhotoGrid = memo(function VirtualizedPhotoGrid({
     }
   }, [photos.length]);
 
-  useEffect(() => {
-    if (photos.length > 0) {
-      const nextPhotos = photos.slice(0, 20);
-      const urls = nextPhotos
-        .map((p) => p.thumbnailPath || p.mediumPath)
-        .filter((path): path is string => !!path)
-        .map((path) => getProxyUrl(path));
-      if (urls.length > 0) {
-        prefetchImages(urls);
-      }
-    }
-  }, [photos]);
 
   const handleRangeChanged = useCallback(
     ({ startIndex, endIndex }: { startIndex: number; endIndex: number }) => {
@@ -196,21 +182,6 @@ export const VirtualizedPhotoGrid = memo(function VirtualizedPhotoGrid({
       
       if (hasMore && endIndex >= items.length - 5) {
         onLoadMore();
-      }
-
-      const upcomingItems = items.slice(endIndex, endIndex + 10);
-      const upcomingPhotos = upcomingItems
-        .filter((item) => item.type === 'photo-row')
-        .flatMap((item) => item.photos || []);
-
-      if (upcomingPhotos.length > 0) {
-        const urls = upcomingPhotos
-          .map((p) => p.thumbnailPath || p.mediumPath)
-          .filter((path): path is string => !!path)
-          .map((path) => getProxyUrl(path));
-        if (urls.length > 0) {
-          prefetchImages(urls);
-        }
       }
     },
     [items, hasMore, onLoadMore]
