@@ -4,10 +4,75 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ===== LIGHT THEME (Default - ChatGPT-like clean UI) ===== */
 :root {
   --font-sans: 'Inter', sans-serif;
   --font-display: 'Oswald', sans-serif;
 
+  /* Light, clean background */
+  --background: 0 0% 98%;
+  --foreground: 222 47% 11%;
+
+  /* Safety Orange Primary */
+  --primary: 24 95% 53%;
+  --primary-foreground: 0 0% 100%;
+
+  /* Soft muted grays */
+  --muted: 220 14% 96%;
+  --muted-foreground: 220 9% 46%;
+
+  /* Clean white cards */
+  --card: 0 0% 100%;
+  --card-foreground: 222 47% 11%;
+  --card-border: 220 13% 91%;
+
+  /* Popover same as card */
+  --popover: 0 0% 100%;
+  --popover-foreground: 222 47% 11%;
+  --popover-border: 220 13% 91%;
+
+  /* Subtle borders */
+  --border: 220 13% 91%;
+  --input: 220 13% 91%;
+
+  /* Secondary */
+  --secondary: 220 14% 96%;
+  --secondary-foreground: 222 47% 11%;
+
+  /* Accent */
+  --accent: 220 14% 96%;
+  --accent-foreground: 222 47% 11%;
+
+  /* Status Colors */
+  --success: 142 71% 45%;
+  --warning: 45 93% 47%;
+  --destructive: 0 84% 60%;
+  --destructive-foreground: 0 0% 100%;
+
+  /* UI Elements */
+  --ring: 24 95% 53%;
+  --radius: 0.5rem;
+
+  /* Sidebar */
+  --sidebar: 0 0% 100%;
+  --sidebar-foreground: 222 47% 11%;
+  --sidebar-border: 220 13% 91%;
+  --sidebar-accent: 220 14% 96%;
+  --sidebar-accent-foreground: 222 47% 11%;
+  --sidebar-primary: 24 95% 53%;
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-ring: 24 95% 53%;
+
+  /* Chart colors */
+  --chart-1: 24 95% 53%;
+  --chart-2: 173 58% 39%;
+  --chart-3: 197 37% 24%;
+  --chart-4: 43 74% 66%;
+  --chart-5: 27 87% 67%;
+}
+
+/* ===== DARK THEME ===== */
+.dark {
   /* Slate Blue Base */
   --background: 222 47% 11%;
   --foreground: 210 40% 98%;
@@ -25,6 +90,19 @@
   --card-foreground: 210 40% 98%;
   --card-border: 217 33% 20%;
 
+  /* Popover */
+  --popover: 217 33% 15%;
+  --popover-foreground: 210 40% 98%;
+  --popover-border: 217 33% 20%;
+
+  /* Secondary */
+  --secondary: 217 33% 17%;
+  --secondary-foreground: 210 40% 98%;
+
+  /* Accent */
+  --accent: 217 33% 17%;
+  --accent-foreground: 210 40% 98%;
+
   /* Borders */
   --border: 217 33% 20%;
   --input: 217 33% 20%;
@@ -37,43 +115,202 @@
 
   /* UI Elements */
   --ring: 24 95% 53%;
-  --radius: 0.5rem;
+
+  /* Sidebar */
+  --sidebar: 217 33% 15%;
+  --sidebar-foreground: 210 40% 98%;
+  --sidebar-border: 217 33% 20%;
+  --sidebar-accent: 217 33% 20%;
+  --sidebar-accent-foreground: 210 40% 98%;
+  --sidebar-primary: 24 95% 53%;
+  --sidebar-primary-foreground: 222 47% 11%;
+  --sidebar-ring: 24 95% 53%;
 }
 
+/* ===== BASE STYLES ===== */
 @layer base {
   * {
     @apply border-border;
   }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+    -webkit-tap-highlight-color: transparent;
+  }
+
   body {
     @apply bg-background text-foreground antialiased;
     font-family: var(--font-sans);
+    overflow-x: hidden;
+    min-height: 100vh;
+    min-height: 100dvh;
   }
+
   h1, h2, h3, h4, h5, h6 {
     font-family: var(--font-display);
     @apply tracking-wide uppercase;
   }
+
+  /* Prevent horizontal overflow on all containers */
+  #root {
+    overflow-x: hidden;
+    width: 100%;
+    max-width: 100vw;
+  }
 }
 
-/* Custom Scrollbar */
+/* ===== MOBILE-FIRST BASE STYLES ===== */
+@layer components {
+  /* Ensure all main containers don't overflow */
+  .mobile-container {
+    width: 100%;
+    max-width: 100vw;
+    overflow-x: hidden;
+  }
+
+  /* Thumb-friendly tap targets (minimum 44px) */
+  .tap-target {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  /* Mobile card-based layout for data */
+  .mobile-card {
+    @apply rounded-lg border border-border bg-card p-4;
+  }
+
+  /* Mobile-friendly input wrapper */
+  .mobile-input {
+    @apply min-h-[44px] text-base;
+  }
+
+  /* Bottom safe area padding for iOS */
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  /* Bottom navigation bar */
+  .bottom-nav {
+    @apply fixed bottom-0 left-0 right-0 z-50 bg-card border-t border-border;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  /* Main content area that accounts for bottom nav */
+  .main-with-bottom-nav {
+    padding-bottom: calc(64px + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+/* ===== RESPONSIVE TYPOGRAPHY ===== */
+@media (max-width: 640px) {
+  html {
+    font-size: 16px;
+  }
+
+  h1 {
+    @apply text-2xl;
+  }
+
+  h2 {
+    @apply text-xl;
+  }
+
+  h3 {
+    @apply text-lg;
+  }
+
+  /* Ensure body text is readable */
+  body {
+    @apply text-base leading-relaxed;
+  }
+
+  /* Forms: larger touch targets */
+  input, select, textarea, button {
+    font-size: 16px !important;
+  }
+
+  /* Prevent zoom on input focus (iOS) */
+  input[type="text"],
+  input[type="email"],
+  input[type="tel"],
+  input[type="password"],
+  input[type="number"],
+  input[type="search"],
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}
+
+/* ===== PREVENT HORIZONTAL SCROLL ===== */
+@media (max-width: 768px) {
+  html, body, #root {
+    overflow-x: hidden !important;
+    max-width: 100vw !important;
+    width: 100% !important;
+  }
+
+  /* Force all images to fit */
+  img, video, iframe, canvas, svg {
+    max-width: 100% !important;
+    height: auto;
+  }
+
+  /* Force all tables to scroll horizontally inside container */
+  table {
+    display: block;
+    overflow-x: auto;
+    max-width: 100%;
+  }
+
+  /* Truncate long text that could overflow */
+  .truncate-mobile {
+    @apply truncate max-w-full;
+  }
+
+  /* Force break long words */
+  p, span, div, td, th, li {
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    word-break: break-word;
+    hyphens: auto;
+  }
+}
+
+/* ===== SCROLLBAR STYLING ===== */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
 }
+
 ::-webkit-scrollbar-track {
-  @apply bg-muted;
+  @apply bg-transparent;
 }
+
 ::-webkit-scrollbar-thumb {
-  @apply bg-muted-foreground/30 rounded hover:bg-muted-foreground/50 transition-colors;
+  @apply bg-muted-foreground/20 rounded-full;
 }
 
-/* Glassmorphism utilities */
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-muted-foreground/40;
+}
+
+/* Hide scrollbar on mobile for cleaner look */
+@media (max-width: 768px) {
+  ::-webkit-scrollbar {
+    width: 0px;
+    height: 0px;
+  }
+}
+
+/* ===== GLASSMORPHISM UTILITIES ===== */
 .glass {
-  @apply bg-card/80 backdrop-blur-md border border-white/5 shadow-xl;
+  @apply bg-card/80 backdrop-blur-md border border-border/50 shadow-xl;
 }
 
-/* Animation utilities */
+/* ===== ANIMATION UTILITIES ===== */
 .animate-enter {
-  animation: enter 0.5s ease-out forwards;
+  animation: enter 0.3s ease-out forwards;
 }
 
 @keyframes enter {
@@ -81,7 +318,7 @@
   to { opacity: 1; transform: translateY(0); }
 }
 
-/* Uppy Modal - Center content on mobile */
+/* ===== UPPY MODAL MOBILE STYLES ===== */
 .uppy-Dashboard-overlay {
   display: flex !important;
   align-items: center !important;
@@ -108,5 +345,109 @@
     align-items: center !important;
     justify-content: center !important;
     min-height: 250px !important;
+  }
+}
+
+/* ===== DIALOG/MODAL MOBILE OPTIMIZATION ===== */
+@media (max-width: 640px) {
+  [role="dialog"] {
+    max-width: 95vw !important;
+    max-height: 90vh !important;
+    margin: 1rem !important;
+  }
+
+  [role="dialog"] > div {
+    max-height: calc(90vh - 2rem);
+    overflow-y: auto;
+  }
+}
+
+/* ===== BOTTOM TAB BAR STYLES ===== */
+.bottom-tab-bar {
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+  height: 64px;
+  background: hsl(var(--card));
+  border-top: 1px solid hsl(var(--border));
+}
+
+.bottom-tab-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  height: 100%;
+  padding: 8px 4px;
+  color: hsl(var(--muted-foreground));
+  transition: color 0.2s ease;
+  text-decoration: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.bottom-tab-item:active {
+  background: hsl(var(--muted));
+}
+
+.bottom-tab-item.active {
+  color: hsl(var(--primary));
+}
+
+.bottom-tab-item .icon {
+  width: 24px;
+  height: 24px;
+  margin-bottom: 4px;
+}
+
+.bottom-tab-item .label {
+  font-size: 10px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* ===== STICKY HEADER FOR MOBILE ===== */
+.sticky-header {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  background: hsl(var(--background));
+  border-bottom: 1px solid hsl(var(--border));
+}
+
+/* ===== SAFE AREA INSETS ===== */
+@supports (padding: max(0px)) {
+  .safe-area-inset-top {
+    padding-top: max(env(safe-area-inset-top), 0px);
+  }
+  
+  .safe-area-inset-bottom {
+    padding-bottom: max(env(safe-area-inset-bottom), 0px);
+  }
+}
+
+/* ===== TOUCH SCROLL IMPROVEMENTS ===== */
+.touch-scroll {
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
+}
+
+/* ===== CARD SHADOWS FOR LIGHT THEME ===== */
+.card-shadow {
+  box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+}
+
+.dark .card-shadow {
+  box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.3), 0 1px 2px -1px rgb(0 0 0 / 0.2);
+}
+
+/* ===== FORM FIELD FOCUS STATES ===== */
+@media (max-width: 768px) {
+  input:focus, 
+  select:focus, 
+  textarea:focus {
+    outline: 2px solid hsl(var(--primary));
+    outline-offset: 2px;
   }
 }

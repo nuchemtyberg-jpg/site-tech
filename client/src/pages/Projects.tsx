@@ -227,11 +227,11 @@ export default function Projects() {
   const hasActiveFilters = filterStatus.length > 0 || filterCustomer !== null;
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div className="space-y-4 md:space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-3xl font-bold">Projects</h1>
-          <p className="text-muted-foreground mt-1">Manage your sitework projects</p>
+          <h1 className="text-2xl md:text-3xl font-bold">Projects</h1>
+          <p className="text-sm md:text-base text-muted-foreground mt-1">Manage your sitework projects</p>
         </div>
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogTrigger asChild>
@@ -581,9 +581,9 @@ export default function Projects() {
         </Dialog>
       </div>
 
-      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-        <div className="flex items-center gap-2 bg-card p-2 rounded-lg border border-border flex-1 max-w-md">
-          <Search className="w-5 h-5 text-muted-foreground ml-2" />
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+        <div className="flex items-center gap-2 bg-card p-2 rounded-lg border border-border flex-1 w-full sm:max-w-md">
+          <Search className="w-5 h-5 text-muted-foreground ml-2 flex-shrink-0" />
           <Input
             placeholder="Search projects..."
             className="border-0 bg-white dark:bg-zinc-900 text-black dark:text-white focus-visible:ring-0 focus-visible:ring-offset-0"
@@ -593,12 +593,12 @@ export default function Projects() {
           />
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="outline" size="sm" data-testid="button-sort">
-                <ArrowUpDown className="w-4 h-4 mr-2" />
-                Sort
+                <ArrowUpDown className="w-4 h-4 mr-1 md:mr-2" />
+                <span className="hidden xs:inline">Sort</span>
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="bg-white dark:bg-zinc-900 text-black dark:text-white">
@@ -703,16 +703,16 @@ export default function Projects() {
       </div>
 
       {isLoading ? (
-        <div className={viewMode === "grid" ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4" : "space-y-2"}>
+        <div className={viewMode === "grid" ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 md:gap-4" : "space-y-2"}>
           {[1, 2, 3, 4].map((i) => (
-            <div key={i} className={viewMode === "grid" ? "h-40 rounded-lg bg-card animate-pulse border border-border" : "h-16 rounded-lg bg-card animate-pulse border border-border"} />
+            <div key={i} className={viewMode === "grid" ? "h-36 md:h-40 rounded-lg bg-card animate-pulse border border-border" : "h-16 rounded-lg bg-card animate-pulse border border-border"} />
           ))}
         </div>
       ) : filteredProjects.length === 0 ? (
-        <div className="text-center py-20 bg-card/50 rounded-xl border border-dashed border-border">
-          <MapPin className="w-16 h-16 mx-auto mb-4 text-muted-foreground/30" />
-          <h3 className="text-xl font-medium">No projects found</h3>
-          <p className="text-muted-foreground mt-2">
+        <div className="text-center py-12 md:py-20 bg-card/50 rounded-xl border border-dashed border-border">
+          <MapPin className="w-12 h-12 md:w-16 md:h-16 mx-auto mb-4 text-muted-foreground/30" />
+          <h3 className="text-lg md:text-xl font-medium">No projects found</h3>
+          <p className="text-sm md:text-base text-muted-foreground mt-2 px-4">
             {hasActiveFilters ? "Try adjusting your filters." : "Create your first project to get started."}
           </p>
           {hasActiveFilters ? (
@@ -728,18 +728,18 @@ export default function Projects() {
           )}
         </div>
       ) : viewMode === "grid" ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 md:gap-4">
           {filteredProjects.map((project) => {
             const customer = customers.find((c) => c.id === project.customerId);
             const statusColor = getStatusColor(project.status);
             return (
               <Link key={project.id} href={`/projects/${project.id}`}>
                 <Card 
-                  className="hover-elevate cursor-pointer h-full overflow-hidden" 
+                  className="hover-elevate cursor-pointer h-full overflow-hidden shadow-sm" 
                   data-testid={`card-project-${project.id}`}
                 >
                   <div className="h-1.5 w-full" style={{ backgroundColor: statusColor }} />
-                  <CardContent className="p-4 flex flex-col h-full">
+                  <CardContent className="p-3 md:p-4 flex flex-col h-full">
                     <div className="flex items-center gap-2 mb-2">
                       <span className={`inline-block px-1.5 py-0.5 rounded text-xs font-medium ${getStatusStyle(project.status)}`}>
                         {getStatusLabel(project.status)}
