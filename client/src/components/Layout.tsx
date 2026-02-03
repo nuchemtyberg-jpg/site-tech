@@ -151,7 +151,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                  backgroundSize: '40px 40px' 
                }} 
           />
-          <div className="relative z-10 w-full max-w-7xl mx-auto pt-16 px-4 pb-4 md:p-8 overflow-x-hidden">
+          <div className="relative z-10 w-full max-w-7xl mx-auto p-4 md:p-8 overflow-x-hidden">
             {children}
           </div>
         </main>
