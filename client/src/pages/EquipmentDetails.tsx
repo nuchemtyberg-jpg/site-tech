@@ -316,7 +316,7 @@ export default function EquipmentDetails() {
                           <FormItem>
                             <FormLabel>Cost ($)</FormLabel>
                             <FormControl>
-                              <Input type="number" placeholder="0" {...field} data-testid="input-maintenance-cost" />
+                              <Input type="number" inputMode="decimal" placeholder="0" {...field} data-testid="input-maintenance-cost" />
                             </FormControl>
                             <FormMessage />
                           </FormItem>

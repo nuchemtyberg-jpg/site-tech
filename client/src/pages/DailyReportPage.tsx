@@ -998,6 +998,7 @@ export default function DailyReportPage() {
                             </Select>
                             <Input
                               type="number"
+                              inputMode="numeric"
                               min={1}
                               value={labor.quantity}
                               disabled={isCompleted}
@@ -1007,6 +1008,7 @@ export default function DailyReportPage() {
                             />
                             <Input
                               type="number"
+                              inputMode="decimal"
                               min={0}
                               value={labor.hours}
                               disabled={isCompleted}
@@ -1053,6 +1055,7 @@ export default function DailyReportPage() {
                             </Select>
                             <Input
                               type="number"
+                              inputMode="numeric"
                               min={1}
                               value={equip.quantity}
                               disabled={isCompleted}
@@ -1062,6 +1065,7 @@ export default function DailyReportPage() {
                             />
                             <Input
                               type="number"
+                              inputMode="decimal"
                               min={0}
                               value={equip.hours}
                               disabled={isCompleted}

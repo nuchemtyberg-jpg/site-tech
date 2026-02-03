@@ -202,7 +202,7 @@ export default function EquipmentPage() {
                       <FormItem>
                         <FormLabel>Year</FormLabel>
                         <FormControl>
-                          <Input type="number" placeholder="2022" {...field} data-testid="input-equipment-year" />
+                          <Input type="number" inputMode="numeric" placeholder="2022" {...field} data-testid="input-equipment-year" />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
