@@ -289,17 +289,17 @@ export default function ProjectDetails() {
   const search = useSearch();
   const [location, navigate] = useLocation();
 
-  // Derive active tab from search params
+  // Derive active tab from search params - default to documents
   const activeTab = useMemo(() => {
     const params = new URLSearchParams(search);
     const tab = params.get("tab");
-    return tab && ["tasks", "documents", "photos", "daily-reports"].includes(tab) ? tab : "tasks";
+    return tab && ["tasks", "documents", "photos", "daily-reports"].includes(tab) ? tab : "documents";
   }, [search]);
 
   // Update URL when tab changes using wouter navigation
   const handleTabChange = (newTab: string) => {
     const params = new URLSearchParams(search);
-    if (newTab === "tasks") {
+    if (newTab === "documents") {
       params.delete("tab");
     } else {
       params.set("tab", newTab);

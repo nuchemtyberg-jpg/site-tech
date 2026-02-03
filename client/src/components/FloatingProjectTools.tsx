@@ -23,10 +23,10 @@ interface FloatingProjectToolsProps {
 }
 
 const toolItems = [
-  { value: "tasks", label: "Tasks", icon: ClipboardList },
   { value: "documents", label: "Documents", icon: FileText },
-  { value: "photos", label: "Photos", icon: Camera },
   { value: "daily-reports", label: "Daily Reports", icon: Calendar },
+  { value: "photos", label: "Photos", icon: Camera },
+  { value: "tasks", label: "Tasks", icon: ClipboardList },
 ];
 
 export function FloatingProjectTools({ activeTab, onTabChange, hidden = false }: FloatingProjectToolsProps) {
