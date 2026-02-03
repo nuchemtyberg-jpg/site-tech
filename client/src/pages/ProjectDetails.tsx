@@ -1991,24 +1991,24 @@ export default function ProjectDetails() {
               {/* Left side buttons */}
               <div className="flex items-center gap-2 sm:gap-3 shrink-0">
                 {/* View Toggle */}
-                <div className="flex items-center gap-0.5 sm:gap-1 bg-muted rounded-lg p-0.5 sm:p-1">
+                <div className="flex items-center gap-0.5 bg-muted rounded-lg p-0.5">
                   <Button
                     variant={viewMode === 'grid' ? 'default' : 'ghost'}
                     size="icon"
-                    className="h-10 w-10"
+                    className="h-9 w-9"
                     onClick={() => setViewMode('grid')}
                     data-testid="button-view-grid"
                   >
-                    <LayoutGrid className="w-5 h-5" />
+                    <LayoutGrid className="w-4 h-4" />
                   </Button>
                   <Button
                     variant={viewMode === 'list' ? 'default' : 'ghost'}
                     size="icon"
-                    className="h-10 w-10"
+                    className="h-9 w-9"
                     onClick={() => setViewMode('list')}
                     data-testid="button-view-list"
                   >
-                    <List className="w-5 h-5" />
+                    <List className="w-4 h-4" />
                   </Button>
                 </div>
 
