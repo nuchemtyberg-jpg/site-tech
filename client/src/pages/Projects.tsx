@@ -811,59 +811,63 @@ export default function Projects() {
                   className="hover-elevate cursor-pointer overflow-hidden" 
                   data-testid={`card-project-${project.id}`}
                 >
-                  <div className="flex items-center">
-                    <div className="w-1.5 h-full self-stretch" style={{ backgroundColor: statusColor }} />
-                    <CardContent className="p-3 flex items-center gap-4 flex-1">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className={`inline-block px-1.5 py-0.5 rounded text-xs font-medium ${getStatusStyle(project.status)}`}>
-                            {getStatusLabel(project.status)}
-                          </span>
-                          {project.projectNumber && (
-                            <span className="text-xs font-mono text-muted-foreground">
-                              {project.projectNumber}
+                  <div className="flex">
+                    <div className="w-1.5 self-stretch shrink-0" style={{ backgroundColor: statusColor }} />
+                    <CardContent className="p-3 flex-1 min-w-0">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex flex-wrap items-center gap-1.5 mb-1">
+                            <span className={`inline-block px-1.5 py-0.5 rounded text-xs font-medium shrink-0 ${getStatusStyle(project.status)}`}>
+                              {getStatusLabel(project.status)}
                             </span>
-                          )}
+                            {project.projectNumber && (
+                              <span className="text-xs font-mono text-muted-foreground shrink-0">
+                                {project.projectNumber}
+                              </span>
+                            )}
+                          </div>
                           <h3 className="text-sm font-bold truncate">{project.name}</h3>
-                        </div>
-                        <div className="flex items-center gap-4 mt-1 text-xs text-muted-foreground">
-                          {customer && (
-                            <span className="flex items-center gap-1">
-                              <Building2 className="w-3 h-3" />
-                              {customer.name}
-                            </span>
-                          )}
-                          {project.location && (
-                            <span 
-                              role="button"
-                              tabIndex={0}
-                              className="flex items-center gap-1 truncate text-primary hover:underline cursor-pointer"
-                              onClick={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(project.location || '')}`, '_blank');
-                              }}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter' || e.key === ' ') {
+                          <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3 mt-1 text-xs text-muted-foreground">
+                            {customer && (
+                              <span className="flex items-center gap-1 truncate">
+                                <Building2 className="w-3 h-3 shrink-0" />
+                                <span className="truncate">{customer.name}</span>
+                              </span>
+                            )}
+                            {project.location && (
+                              <span 
+                                role="button"
+                                tabIndex={0}
+                                className="flex items-center gap-1 text-primary hover:underline cursor-pointer"
+                                onClick={(e) => {
                                   e.preventDefault();
                                   e.stopPropagation();
                                   window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(project.location || '')}`, '_blank');
-                                }
-                              }}
-                              data-testid={`link-project-address-list-${project.id}`}
-                            >
-                              <MapPin className="w-3 h-3" />
-                              {project.location}
+                                }}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter' || e.key === ' ') {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(project.location || '')}`, '_blank');
+                                  }
+                                }}
+                                data-testid={`link-project-address-list-${project.id}`}
+                              >
+                                <MapPin className="w-3 h-3 shrink-0" />
+                                <span className="truncate">{project.location}</span>
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          {project.createdAt && (
+                            <span className="text-xs text-muted-foreground whitespace-nowrap hidden sm:block">
+                              {format(new Date(project.createdAt), "MMM d, yyyy")}
                             </span>
                           )}
+                          <ArrowRight className="w-4 h-4 text-primary" />
                         </div>
                       </div>
-                      {project.createdAt && (
-                        <span className="text-xs text-muted-foreground whitespace-nowrap">
-                          {format(new Date(project.createdAt), "MMM d, yyyy")}
-                        </span>
-                      )}
-                      <ArrowRight className="w-4 h-4 text-primary shrink-0" />
                     </CardContent>
                   </div>
                 </Card>
