@@ -74,7 +74,7 @@ export default function Projects() {
   const [customerSearch, setCustomerSearch] = useState("");
   const [customerPopoverOpen, setCustomerPopoverOpen] = useState(false);
   const [nextProjectNumber, setNextProjectNumber] = useState<string>("");
-  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+  const [viewMode, setViewMode] = useState<"grid" | "list">("list");
   const [sortBy, setSortBy] = useState<SortOption>("date");
   const [filterStatus, setFilterStatus] = useState<string[]>([]);
   const [filterCustomer, setFilterCustomer] = useState<number | null>(null);
@@ -623,6 +623,18 @@ export default function Projects() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56 bg-white dark:bg-zinc-900 text-black dark:text-white">
+              {hasActiveFilters && (
+                <>
+                  <DropdownMenuItem 
+                    onClick={() => { setFilterStatus([]); setFilterCustomer(null); }}
+                    className="text-destructive"
+                  >
+                    <X className="w-4 h-4 mr-2" />
+                    Clear All Filters
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                </>
+              )}
               <div className="px-2 py-1.5 text-sm font-semibold">Status</div>
               {PROJECT_STATUSES.map((status) => (
                 <DropdownMenuCheckboxItem
