@@ -1295,6 +1295,7 @@ export default function ProjectDetails() {
   };
 
   return (
+    <>
     <div className="space-y-6 md:space-y-8 animate-enter overflow-x-hidden">
       {/* Header */}
       <div className="flex flex-col gap-4 md:gap-6">
@@ -3193,12 +3194,14 @@ export default function ProjectDetails() {
         </DialogContent>
       </Dialog>
 
-      {/* Floating Project Tools Button */}
-      <FloatingProjectTools
-        activeTab={activeTab}
-        onTabChange={handleTabChange}
-        hidden={isTaskOpen || isFolderOpen || isEditOpen || moveDialogOpen || showBatchDeleteFilesConfirm || deleteProjectOpen || editingTask !== null || dailyReportsFormOpen}
-      />
     </div>
+
+    {/* Floating Project Tools Button - Outside animated container for proper fixed positioning */}
+    <FloatingProjectTools
+      activeTab={activeTab}
+      onTabChange={handleTabChange}
+      hidden={isTaskOpen || isFolderOpen || isEditOpen || moveDialogOpen || showBatchDeleteFilesConfirm || deleteProjectOpen || editingTask !== null || dailyReportsFormOpen}
+    />
+    </>
   );
 }
