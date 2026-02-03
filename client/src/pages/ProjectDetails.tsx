@@ -2012,10 +2012,10 @@ export default function ProjectDetails() {
                 }}
                 data-testid="button-toggle-starred"
               >
-                <Star className={cn("w-4 h-4 mr-1", showStarredOnly && "fill-current")} />
-                Starred
+                <Star className={cn("w-4 h-4 sm:mr-1", showStarredOnly && "fill-current")} />
+                <span className="hidden sm:inline">Starred</span>
                 {starredFiles.length > 0 && (
-                  <Badge variant="secondary" className="ml-1 text-xs">{starredFiles.length}</Badge>
+                  <Badge variant="secondary" className="hidden sm:inline-flex ml-1 text-xs">{starredFiles.length}</Badge>
                 )}
               </Button>
 
@@ -2032,13 +2032,13 @@ export default function ProjectDetails() {
                 }}
                 data-testid="button-toggle-select-mode"
               >
-                <CheckSquare className="w-4 h-4 mr-1" />
-                {isFileSelectMode ? 'Cancel' : 'Select'}
+                <CheckSquare className="w-4 h-4 sm:mr-1" />
+                <span className="hidden sm:inline">{isFileSelectMode ? 'Cancel' : 'Select'}</span>
               </Button>
             </div>
             
             {/* Right side actions */}
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+            <div className="flex flex-row flex-wrap items-center gap-2">
               {/* Batch actions when files or folders are selected */}
               {isFileSelectMode && (selectedFiles.size > 0 || selectedFolders.size > 0) && (
                 <div className="flex items-center gap-2">
@@ -2052,7 +2052,8 @@ export default function ProjectDetails() {
                     onClick={openMoveDialog}
                     data-testid="button-batch-move"
                   >
-                    <FolderInput className="w-4 h-4 mr-1" /> Move
+                    <FolderInput className="w-4 h-4 sm:mr-1" />
+                    <span className="hidden sm:inline">Move</span>
                   </Button>
                   <Button
                     variant="outline"
@@ -2061,7 +2062,8 @@ export default function ProjectDetails() {
                     className="text-destructive hover:text-destructive"
                     data-testid="button-batch-delete"
                   >
-                    <Trash2 className="w-4 h-4 mr-1" /> Delete
+                    <Trash2 className="w-4 h-4 sm:mr-1" />
+                    <span className="hidden sm:inline">Delete</span>
                   </Button>
                 </div>
               )}
@@ -2070,8 +2072,9 @@ export default function ProjectDetails() {
                 <>
                   <Dialog open={isFolderOpen} onOpenChange={setIsFolderOpen}>
                     <DialogTrigger asChild>
-                      <Button variant="outline" className="w-full sm:w-auto" data-testid="button-new-folder">
-                        <FolderPlus className="w-4 h-4 mr-2" /> New Folder
+                      <Button variant="outline" size="sm" data-testid="button-new-folder">
+                        <FolderPlus className="w-4 h-4 sm:mr-2" />
+                        <span className="hidden sm:inline">New Folder</span>
                       </Button>
                     </DialogTrigger>
                     <DialogContent>
@@ -2103,10 +2106,11 @@ export default function ProjectDetails() {
                     maxNumberOfFiles={50}
                     maxFileSize={52428800}
                     allowFolders={true}
-                    buttonClassName="w-full sm:w-auto"
+                    buttonClassName=""
                     onUploadComplete={handleUploadComplete}
                   >
-                    <Upload className="w-4 h-4 mr-2" /> Upload Files
+                    <Upload className="w-4 h-4 sm:mr-2" />
+                    <span className="hidden sm:inline">Upload Files</span>
                   </NativeFileUploader>
                 </>
               )}
