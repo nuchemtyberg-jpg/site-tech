@@ -1924,14 +1924,14 @@ export default function ProjectDetails() {
           )}
         </TabsContent>
 
-        <TabsContent value="documents" className="space-y-4 overflow-x-hidden">
+        <TabsContent value="documents" className="flex flex-col h-[calc(100vh-180px)] md:h-auto md:block overflow-hidden">
           {/* Drag and Drop Zone Wrapper */}
           <div
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
             className={cn(
-              "relative rounded-lg transition-all",
+              "relative rounded-lg transition-all flex flex-col h-full md:h-auto",
               isDragOver && "ring-2 ring-primary ring-offset-2 bg-primary/5"
             )}
           >
@@ -1948,7 +1948,7 @@ export default function ProjectDetails() {
 
             {/* Upload progress indicator */}
             {isUploadingDragDrop && (
-              <div className="mb-4 p-4 bg-muted rounded-lg">
+              <div className="mb-3 p-4 bg-muted rounded-lg">
                 <div className="flex items-center gap-3">
                   <div className="animate-spin rounded-full h-5 w-5 border-2 border-primary border-t-transparent" />
                   <span className="text-sm">
@@ -1958,28 +1958,30 @@ export default function ProjectDetails() {
               </div>
             )}
 
-          {/* Search Bar */}
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input 
-              placeholder="Search files and folders..."
-              value={docSearchQuery}
-              onChange={(e) => setDocSearchQuery(e.target.value)}
-              className="pl-10 bg-white dark:bg-zinc-900"
-              data-testid="input-doc-search"
-            />
-            {docSearchQuery && (
-              <button 
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                onClick={() => setDocSearchQuery("")}
-                data-testid="button-clear-search"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            )}
-          </div>
+          {/* Sticky Header Section on Mobile */}
+          <div className="sticky top-0 z-20 bg-background pb-3 space-y-3 shrink-0">
+            {/* Search Bar */}
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input 
+                placeholder="Search files and folders..."
+                value={docSearchQuery}
+                onChange={(e) => setDocSearchQuery(e.target.value)}
+                className="pl-10 bg-white dark:bg-zinc-900"
+                data-testid="input-doc-search"
+              />
+              {docSearchQuery && (
+                <button 
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  onClick={() => setDocSearchQuery("")}
+                  data-testid="button-clear-search"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+            </div>
 
-          <div className="flex flex-row items-center gap-1 sm:gap-2 sm:justify-between relative z-10 flex-wrap">
+            <div className="flex flex-row items-center gap-1 sm:gap-2 sm:justify-between relative z-10 flex-wrap">
               {/* View Toggle */}
               <div className="flex items-center gap-0.5 sm:gap-1 bg-muted rounded-lg p-0.5 sm:p-1">
                 <Button
@@ -2119,27 +2121,30 @@ export default function ProjectDetails() {
                   </NativeFileUploader>
                 </>
               )}
+            </div>
+
+            {/* Breadcrumb Navigation */}
+            <div className="flex items-center gap-1 text-sm text-muted-foreground flex-wrap">
+              {getBreadcrumbs().map((crumb, idx, arr) => (
+                <div key={crumb.id ?? 'root'} className="flex items-center gap-1">
+                  <button
+                    onClick={() => setCurrentFolderId(crumb.id)}
+                    className={cn(
+                      "hover:text-primary transition-colors",
+                      idx === arr.length - 1 ? "text-foreground font-medium" : ""
+                    )}
+                    data-testid={`breadcrumb-${crumb.id ?? 'root'}`}
+                  >
+                    {idx === 0 ? <Home className="w-4 h-4" /> : crumb.name}
+                  </button>
+                  {idx < arr.length - 1 && <ChevronRight className="w-4 h-4" />}
+                </div>
+              ))}
+            </div>
           </div>
 
-          {/* Breadcrumb Navigation */}
-          <div className="flex items-center gap-1 text-sm text-muted-foreground flex-wrap">
-            {getBreadcrumbs().map((crumb, idx, arr) => (
-              <div key={crumb.id ?? 'root'} className="flex items-center gap-1">
-                <button
-                  onClick={() => setCurrentFolderId(crumb.id)}
-                  className={cn(
-                    "hover:text-primary transition-colors",
-                    idx === arr.length - 1 ? "text-foreground font-medium" : ""
-                  )}
-                  data-testid={`breadcrumb-${crumb.id ?? 'root'}`}
-                >
-                  {idx === 0 ? <Home className="w-4 h-4" /> : crumb.name}
-                </button>
-                {idx < arr.length - 1 && <ChevronRight className="w-4 h-4" />}
-              </div>
-            ))}
-          </div>
-
+          {/* Scrollable Document Content */}
+          <div className="flex-1 overflow-y-auto md:overflow-visible">
           {(isFilesLoading || isFoldersLoading) ? (
             <div className="py-10 text-center text-muted-foreground">Loading documents...</div>
           ) : (filteredFolders.length === 0 && allFiles.length === 0) ? (
@@ -2498,6 +2503,8 @@ export default function ProjectDetails() {
               )}
             </div>
           )}
+          </div>
+          {/* End Scrollable Document Content */}
           </div>
           {/* End Drag and Drop Zone Wrapper */}
         </TabsContent>
