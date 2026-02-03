@@ -2015,15 +2015,15 @@ export default function ProjectDetails() {
                 {/* Starred Toggle */}
                 <Button
                   variant={showStarredOnly ? 'default' : 'outline'}
-                  size="icon"
-                  className="h-10 w-10 sm:h-9 sm:w-auto sm:px-3"
+                  size="sm"
+                  className="h-9 px-2 sm:px-3"
                   onClick={() => {
                     setShowStarredOnly(!showStarredOnly);
                     if (!showStarredOnly) setCurrentFolderId(null);
                   }}
                   data-testid="button-toggle-starred"
                 >
-                  <Star className={cn("w-5 h-5 sm:w-4 sm:h-4 sm:mr-2", showStarredOnly && "fill-current")} />
+                  <Star className={cn("w-4 h-4 sm:mr-2", showStarredOnly && "fill-current")} />
                   <span className="hidden sm:inline">Starred</span>
                   {starredFiles.length > 0 && (
                     <Badge variant="secondary" className="hidden sm:inline-flex ml-1 text-xs">{starredFiles.length}</Badge>
@@ -2033,8 +2033,8 @@ export default function ProjectDetails() {
                 {/* Select Mode Toggle */}
                 <Button
                   variant={isFileSelectMode ? 'default' : 'outline'}
-                  size="icon"
-                  className="h-10 w-10 sm:h-9 sm:w-auto sm:px-3"
+                  size="sm"
+                  className="h-9 px-2 sm:px-3"
                   onClick={() => {
                     setIsFileSelectMode(!isFileSelectMode);
                     if (isFileSelectMode) {
@@ -2044,7 +2044,7 @@ export default function ProjectDetails() {
                   }}
                   data-testid="button-toggle-select-mode"
                 >
-                  <CheckSquare className="w-5 h-5 sm:w-4 sm:h-4 sm:mr-2" />
+                  <CheckSquare className="w-4 h-4 sm:mr-2" />
                   <span className="hidden sm:inline">{isFileSelectMode ? 'Cancel' : 'Select'}</span>
                 </Button>
               </div>
@@ -2082,11 +2082,11 @@ export default function ProjectDetails() {
               )}
 
               {!isFileSelectMode && (
-                <div className="flex items-center gap-3 shrink-0">
+                <div className="flex flex-row items-center gap-2 sm:gap-3 shrink-0">
                   <Dialog open={isFolderOpen} onOpenChange={setIsFolderOpen}>
                     <DialogTrigger asChild>
-                      <Button variant="outline" size="icon" className="h-10 w-10 sm:h-9 sm:w-auto sm:px-3" data-testid="button-new-folder">
-                        <FolderPlus className="w-5 h-5 sm:w-4 sm:h-4 sm:mr-2" />
+                      <Button variant="outline" size="sm" className="h-9 px-2 sm:px-3" data-testid="button-new-folder">
+                        <FolderPlus className="w-4 h-4 sm:mr-2" />
                         <span className="hidden sm:inline">New Folder</span>
                       </Button>
                     </DialogTrigger>
@@ -2120,11 +2120,11 @@ export default function ProjectDetails() {
                     maxFileSize={52428800}
                     allowFolders={true}
                     buttonVariant="outline"
-                    buttonSize="icon"
-                    buttonClassName="h-10 w-10 sm:h-9 sm:w-auto sm:px-3"
+                    buttonSize="sm"
+                    buttonClassName="h-9 px-2 sm:px-3"
                     onUploadComplete={handleUploadComplete}
                   >
-                    <Upload className="w-5 h-5 sm:w-4 sm:h-4 sm:mr-2" />
+                    <Upload className="w-4 h-4 sm:mr-2" />
                     <span className="hidden sm:inline">Upload</span>
                   </NativeFileUploader>
                 </div>
