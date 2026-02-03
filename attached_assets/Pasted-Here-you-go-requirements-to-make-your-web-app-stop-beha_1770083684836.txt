@@ -1,0 +1,111 @@
+Here you go: requirements to make your web app stop behaving like it was designed on a desktop monitor in 2009.
+
+Mobile Optimization Requirements (No Horizontal Scroll, App-Like UI)
+
+1) Core Mobile Layout Rules
+	•	No horizontal scrolling anywhere on mobile (320px wide and up).
+	•	All pages must use responsive layout and enforce:
+	•	max-width: 100% on all containers
+	•	Media (images/PDF canvases/tables) must scale to fit
+	•	Long text must wrap (no overflow off-screen)
+	•	The app must pass this test: on iPhone-sized screens, every page fits the viewport width with 0 sideways pan.
+
+2) Mobile First Page Structure
+	•	Use a single-column layout on mobile by default.
+	•	Content should be presented in stacked sections/cards rather than multi-column grids.
+	•	Primary content (the thing the user is trying to do) must occupy most of the visible area:
+	•	Forms: large, readable, minimal clutter
+	•	Data views: prioritized fields visible first, details behind “expand”/tabs
+
+3) Navigation & Header Behavior
+	•	Implement a mobile-friendly top bar:
+	•	App title or current page title
+	•	Left: Back button (when applicable)
+	•	Right: actions (search, add, upload, etc.)
+	•	Navigation should collapse into:
+	•	Bottom tab bar (preferred for 3–5 key sections), OR
+	•	Hamburger menu/drawer if the app has many sections
+	•	Header must be sticky on mobile so key actions are always accessible.
+
+4) Buttons & Tap Targets
+	•	All interactive elements must be thumb-friendly:
+	•	Minimum tap target: 44px height (Apple guideline)
+	•	Adequate spacing between buttons to prevent mis-taps
+	•	Primary actions must be visually clear:
+	•	One obvious “main” button per screen (e.g., Save, Add, Upload)
+	•	Secondary actions are less prominent (outline/text)
+	•	Avoid tiny icon-only buttons unless paired with clear affordances and spacing.
+
+5) Forms UX (Mobile-First)
+	•	Inputs must be optimized for mobile keyboards:
+	•	type="email", type="tel", inputmode="numeric", etc.
+	•	Forms must support:
+	•	Big labels, clear placeholders
+	•	Inline validation with human-readable errors
+	•	“Next” behavior between fields (proper tab order)
+	•	Any multi-step form should be broken into sections/steps with a visible progress indicator (if long).
+
+6) Tables & Dense Data (No Sideways Scroll)
+	•	Avoid traditional tables on mobile.
+	•	Replace with:
+	•	Card-based rows (each record is a card)
+	•	Key fields visible, secondary fields expandable
+	•	If a table is unavoidable:
+	•	Use responsive column hiding (show essentials only on mobile)
+	•	Provide a “Details” drill-in view instead of forcing sideways scroll
+
+7) Media & File Viewing (Photos/PDFs)
+	•	Images must:
+	•	Fit width of screen
+	•	Use lazy loading
+	•	Use responsive sizes (srcset or equivalent)
+	•	PDF and document viewers must:
+	•	Open in full-screen view on mobile
+	•	Provide top-bar controls (close, share, download)
+	•	Support pinch-to-zoom and panning without breaking layout width
+
+8) Light Theme Like ChatGPT App
+	•	Mobile UI theme should be light, clean, high-contrast:
+	•	Light background (near-white)
+	•	Subtle card borders/shadows
+	•	Simple typography, generous spacing
+	•	Use consistent components:
+	•	Rounded corners
+	•	Soft dividers
+	•	Clear hierarchy (title → subtitle → content)
+	•	Must support system font sizing and avoid tiny text.
+
+9) Spacing, Typography, and Readability
+	•	Base font size on mobile: 16px minimum for body text.
+	•	Line height and spacing must prevent cramped UI:
+	•	Comfortable padding inside cards/forms
+	•	Section spacing that separates content clearly
+
+10) Responsiveness & Breakpoints
+	•	Must support at least these viewports:
+	•	320px (small phones)
+	•	375–430px (modern phones)
+	•	768px (tablets)
+	•	Layout changes must be deliberate, not accidental CSS collapse.
+
+11) Performance Requirements (Mobile)
+	•	Pages must load fast on cellular:
+	•	Defer non-critical JS
+	•	Avoid rendering huge lists at once (use pagination or virtualization)
+	•	Images must be compressed and served in efficient formats when possible
+	•	Smooth scrolling and transitions:
+	•	No jank when opening lists, switching tabs, or loading media
+
+12) Acceptance Criteria (What “Done” Means)
+	•	On iPhone and Android phone screens:
+	•	No horizontal scroll on any page
+	•	Buttons are easily tappable with one hand
+	•	Forms are usable without zooming
+	•	Key content fills the screen appropriately
+	•	Light theme matches the “clean app” vibe
+	•	Must pass a manual test across:
+	•	Safari iOS
+	•	Chrome Android
+	•	Chrome desktop in responsive mode
+
+If you want, you can paste this directly into your plan.md and tell Replit/Cursor: “Implement these requirements with a mobile-first approach, and reject any solution that relies on horizontal scrolling for tables, images, or layouts.”
