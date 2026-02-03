@@ -1299,51 +1299,52 @@ export default function ProjectDetails() {
 
   return (
     <>
-    <div className="animate-enter overflow-x-hidden">
+    <div className="animate-enter overflow-x-hidden -m-4 md:-m-8 flex flex-col h-[calc(100vh-0px)] md:h-screen">
       {/* Fixed Header */}
-      <div className="sticky top-0 z-40 bg-background pb-3 md:pb-4 -mx-4 px-4 md:-mx-6 md:px-6 pt-1">
-        <div className="flex flex-col gap-2 md:gap-3">
-          <Link href="/projects" className="text-muted-foreground hover:text-foreground flex items-center gap-2 transition-colors w-fit min-h-[44px] md:min-h-8" data-testid="link-back-to-projects">
-            <ArrowLeft className="w-4 h-4" /> Back to Projects
-          </Link>
-          
-          {/* Collapsible Project Details Header */}
-          <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
-          {/* Collapsed View - Always visible */}
-          <div 
-            className="flex items-center justify-between gap-2 px-3 py-2 md:px-4 md:py-3 cursor-pointer hover-elevate"
-            onClick={() => setIsProjectDetailsExpanded(!isProjectDetailsExpanded)}
-            data-testid="button-toggle-project-details"
-          >
-            <div className="flex items-center gap-2 md:gap-3 min-w-0 flex-1">
+      <div className="flex-shrink-0 bg-background px-4 md:px-8 pt-4 md:pt-8 pb-3 md:pb-4 border-b border-border/50 shadow-sm z-40">
+        <div className="max-w-7xl mx-auto">
+          <div className="flex flex-col gap-2 md:gap-3">
+            <Link href="/projects" className="text-muted-foreground hover:text-foreground flex items-center gap-2 transition-colors w-fit min-h-[44px] md:min-h-8" data-testid="link-back-to-projects">
+              <ArrowLeft className="w-4 h-4" /> Back to Projects
+            </Link>
+            
+            {/* Collapsible Project Details Header */}
+            <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
+              {/* Collapsed View - Always visible */}
               <div 
-                className="px-2 py-0.5 rounded text-[10px] md:text-xs font-bold uppercase tracking-wider text-white shrink-0"
-                style={{ backgroundColor: getStatusBgColor(project.status) }}
+                className="flex items-center justify-between gap-2 px-3 py-2 md:px-4 md:py-3 cursor-pointer hover-elevate"
+                onClick={() => setIsProjectDetailsExpanded(!isProjectDetailsExpanded)}
+                data-testid="button-toggle-project-details"
               >
-                {project.status.replace('_', ' ')}
+                <div className="flex items-center gap-2 md:gap-3 min-w-0 flex-1">
+                  <div 
+                    className="px-2 py-0.5 rounded text-[10px] md:text-xs font-bold uppercase tracking-wider text-white shrink-0"
+                    style={{ backgroundColor: getStatusBgColor(project.status) }}
+                  >
+                    {project.status.replace('_', ' ')}
+                  </div>
+                  {project.projectNumber && (
+                    <span className="text-xs md:text-sm font-mono text-muted-foreground shrink-0">#{project.projectNumber}</span>
+                  )}
+                  <h1 className="text-sm md:text-lg font-bold font-display truncate">{project.name}</h1>
+                </div>
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className="shrink-0 min-h-[44px] min-w-[44px] md:min-h-8 md:min-w-8"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setIsProjectDetailsExpanded(!isProjectDetailsExpanded);
+                  }}
+                  data-testid="button-expand-project-details"
+                >
+                  {isProjectDetailsExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                </Button>
               </div>
-              {project.projectNumber && (
-                <span className="text-xs md:text-sm font-mono text-muted-foreground shrink-0">#{project.projectNumber}</span>
-              )}
-              <h1 className="text-sm md:text-lg font-bold font-display truncate">{project.name}</h1>
-            </div>
-            <Button 
-              variant="ghost" 
-              size="icon" 
-              className="shrink-0 min-h-[44px] min-w-[44px] md:min-h-8 md:min-w-8"
-              onClick={(e) => {
-                e.stopPropagation();
-                setIsProjectDetailsExpanded(!isProjectDetailsExpanded);
-              }}
-              data-testid="button-expand-project-details"
-            >
-              {isProjectDetailsExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-            </Button>
-          </div>
-          
-          {/* Expanded View - Full details */}
-          {isProjectDetailsExpanded && (
-            <div className="border-t border-border px-3 py-3 md:px-4 md:py-4 animate-in slide-in-from-top-2 duration-200">
+              
+              {/* Expanded View - Full details */}
+              {isProjectDetailsExpanded && (
+                <div className="border-t border-border px-3 py-3 md:px-4 md:py-4 animate-in slide-in-from-top-2 duration-200">
               {project.description && (
                 <p className="text-muted-foreground mb-4 max-w-2xl text-sm">{project.description}</p>
               )}
@@ -1449,15 +1450,17 @@ export default function ProjectDetails() {
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
+                </div>
               </div>
-            </div>
-          )}
-        </div>
+            )}
+          </div>
+          </div>
         </div>
       </div>
 
-      {/* Main content area with top padding for sticky header */}
-      <div className="space-y-6 md:space-y-8 pt-4">
+      {/* Scrollable content area */}
+      <div className="flex-1 overflow-y-auto overflow-x-hidden px-4 md:px-8 py-4 md:py-6">
+        <div className="max-w-7xl mx-auto space-y-6 md:space-y-8">
 
         {/* Edit Project Dialog */}
         <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
@@ -3228,6 +3231,8 @@ export default function ProjectDetails() {
         </DialogContent>
       </Dialog>
 
+        </div>
+      </div>
     </div>
 
     {/* Floating Project Tools Button - Outside animated container for proper fixed positioning */}
