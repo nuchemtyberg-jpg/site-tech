@@ -6,6 +6,7 @@ import { TagInput } from "@/components/TagInput";
 import { lazy, Suspense } from "react";
 
 const PhotosTab = lazy(() => import("@/components/PhotosTab"));
+import { FloatingProjectTools } from "@/components/FloatingProjectTools";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { 
@@ -1650,22 +1651,8 @@ export default function ProjectDetails() {
         </Dialog>
       </div>
 
-      {/* Tabs */}
+      {/* Tabs - ribbon hidden, navigation via floating button */}
       <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
-        <div className="overflow-x-auto -mx-4 px-4 md:mx-0 md:px-0">
-          <TabsList className="mb-4 w-max md:w-auto">
-            <TabsTrigger value="tasks" data-testid="tab-tasks" className="min-h-[44px] md:min-h-9">Tasks</TabsTrigger>
-            <TabsTrigger value="documents" data-testid="tab-documents" className="min-h-[44px] md:min-h-9">Documents</TabsTrigger>
-            <TabsTrigger value="photos" data-testid="tab-photos" className="min-h-[44px] md:min-h-9">
-              <Camera className="w-4 h-4 mr-1 md:mr-2" />
-              Photos
-            </TabsTrigger>
-            <TabsTrigger value="daily-reports" data-testid="tab-daily-reports" className="min-h-[44px] md:min-h-9">
-              <Calendar className="w-4 h-4 mr-1 md:mr-2" />
-              <span className="hidden sm:inline">Daily </span>Reports
-            </TabsTrigger>
-          </TabsList>
-        </div>
 
         <TabsContent value="tasks" className="space-y-4 overflow-x-hidden">
           <div className="flex items-center justify-end mb-4">
@@ -3204,6 +3191,13 @@ export default function ProjectDetails() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Floating Project Tools Button */}
+      <FloatingProjectTools
+        activeTab={activeTab}
+        onTabChange={handleTabChange}
+        hidden={isTaskOpen || isFolderOpen || isEditOpen || moveDialogOpen || showBatchDeleteFilesConfirm || deleteProjectOpen}
+      />
     </div>
   );
 }
