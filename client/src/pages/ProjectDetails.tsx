@@ -2445,7 +2445,51 @@ export default function ProjectDetails() {
                           >
                             <Star className={cn("w-4 h-4", file.starred && "fill-current")} />
                           </Button>
-                          {/* Other action buttons - hidden on mobile */}
+                          {/* Mobile: Dropdown menu for actions */}
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button 
+                                variant="ghost" 
+                                size="icon" 
+                                className="sm:hidden h-8 w-8"
+                                data-testid={`button-more-file-${file.id}`}
+                              >
+                                <MoreVertical className="w-4 h-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem onClick={() => setFileDetailsPanel(file)}>
+                                <Info className="w-4 h-4 mr-2" />
+                                Details
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => handleDirectDownload(file)}>
+                                <Download className="w-4 h-4 mr-2" />
+                                Download
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => {
+                                setRenamingFile(file);
+                                setRenameValue(file.name);
+                              }}>
+                                <Pencil className="w-4 h-4 mr-2" />
+                                Rename
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => {
+                                setEditingFile(file);
+                                setEditFileTags(file.tags || []);
+                              }}>
+                                <Tags className="w-4 h-4 mr-2" />
+                                Edit Tags
+                              </DropdownMenuItem>
+                              <DropdownMenuItem 
+                                onClick={() => setDeleteFileId(file.id)}
+                                className="text-destructive"
+                              >
+                                <Trash2 className="w-4 h-4 mr-2" />
+                                Delete
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                          {/* Desktop: Individual action buttons */}
                           <Button 
                             variant="ghost" 
                             size="icon" 
