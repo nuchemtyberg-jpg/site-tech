@@ -7,7 +7,6 @@ import { Layout } from "@/components/Layout";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { useAuth } from "@/hooks/use-auth";
 import { Loader2 } from "lucide-react";
-import { HealthHUD } from "@/components/HealthHUD";
 
 // Pages
 import Dashboard from "@/pages/Dashboard";
@@ -104,7 +103,6 @@ function App() {
         <TooltipProvider>
           <Toaster />
           <Router />
-          {import.meta.env.DEV && <HealthHUD />}
         </TooltipProvider>
       </QueryClientProvider>
     </ThemeProvider>
