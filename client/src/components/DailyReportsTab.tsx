@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -57,9 +57,10 @@ function safeFormatDate(dateString: string | null | undefined, formatStr: string
 
 interface DailyReportsTabProps {
   project: Project;
+  onFormVisibilityChange?: (isFormOpen: boolean) => void;
 }
 
-export function DailyReportsTab({ project }: DailyReportsTabProps) {
+export function DailyReportsTab({ project, onFormVisibilityChange }: DailyReportsTabProps) {
   const { toast } = useToast();
   const [, setLocation] = useLocation();
   const [deleteReportId, setDeleteReportId] = useState<number | null>(null);
@@ -71,6 +72,12 @@ export function DailyReportsTab({ project }: DailyReportsTabProps) {
   const { data: reports = [], isLoading: reportsLoading } = useQuery<DailyReport[]>({
     queryKey: ['/api/projects', project.id, 'reports'],
   });
+
+  // Notify parent when form dialogs open/close
+  useEffect(() => {
+    const isAnyFormOpen = showNewReportDialog || showDuplicateModal || deleteReportId !== null;
+    onFormVisibilityChange?.(isAnyFormOpen);
+  }, [showNewReportDialog, showDuplicateModal, deleteReportId, onFormVisibilityChange]);
 
   const createReportMutation = useMutation({
     mutationFn: async (reportDate: string) => {

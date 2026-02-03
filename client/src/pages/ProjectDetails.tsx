@@ -62,7 +62,7 @@ import {
   DropdownMenuTrigger 
 } from "@/components/ui/dropdown-menu";
 import { format } from "date-fns";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
 import {
   Dialog,
   DialogContent,
@@ -213,6 +213,7 @@ export default function ProjectDetails() {
   
   // Edit task state
   const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [dailyReportsFormOpen, setDailyReportsFormOpen] = useState(false);
   const [editTaskDescription, setEditTaskDescription] = useState("");
   const [editTaskScheduledDate, setEditTaskScheduledDate] = useState("");
   const [editTaskStatus, setEditTaskStatus] = useState("pending");
@@ -2473,7 +2474,7 @@ export default function ProjectDetails() {
         )}
 
         <TabsContent value="daily-reports" className="space-y-4 overflow-x-hidden">
-          {project && <DailyReportsTab project={project} />}
+          {project && <DailyReportsTab project={project} onFormVisibilityChange={setDailyReportsFormOpen} />}
         </TabsContent>
       </Tabs>
 
@@ -3196,7 +3197,7 @@ export default function ProjectDetails() {
       <FloatingProjectTools
         activeTab={activeTab}
         onTabChange={handleTabChange}
-        hidden={isTaskOpen || isFolderOpen || isEditOpen || moveDialogOpen || showBatchDeleteFilesConfirm || deleteProjectOpen}
+        hidden={isTaskOpen || isFolderOpen || isEditOpen || moveDialogOpen || showBatchDeleteFilesConfirm || deleteProjectOpen || editingTask !== null || dailyReportsFormOpen}
       />
     </div>
   );

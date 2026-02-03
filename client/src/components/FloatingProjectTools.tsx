@@ -48,11 +48,7 @@ export function FloatingProjectTools({ activeTab, onTabChange, hidden = false }:
         <DropdownMenuTrigger asChild>
           <Button
             size="lg"
-            className={cn(
-              "h-14 w-14 rounded-full shadow-lg",
-              "bg-primary hover:bg-primary/90",
-              "min-h-[56px] min-w-[56px]"
-            )}
+            className="rounded-full shadow-lg"
             data-testid="button-project-tools-fab"
           >
             {isOpen ? (
