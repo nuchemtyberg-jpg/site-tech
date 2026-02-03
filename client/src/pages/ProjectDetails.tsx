@@ -311,7 +311,13 @@ export default function ProjectDetails() {
     navigate(newSearch ? `?${newSearch}` : location.split('?')[0], { replace: false });
   };
   const [viewingFile, setViewingFile] = useState<FileMetadata | Photo | null>(null);
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>(() => {
+    // Default to list view on mobile, grid on desktop
+    if (typeof window !== 'undefined') {
+      return window.innerWidth < 640 ? 'list' : 'grid';
+    }
+    return 'grid';
+  });
   const currentFolderIdRef = useRef<number | null>(null);
   
   // Document search and selection state
@@ -2161,7 +2167,6 @@ export default function ProjectDetails() {
               {/* Folders */}
               {!showStarredOnly && filteredFolders.length > 0 && (
                 <div className="grid gap-2">
-                  <h3 className="text-sm font-medium text-muted-foreground mb-2">Folders</h3>
                   {filteredFolders.map(folder => (
                     <div 
                       key={folder.id} 
@@ -2239,7 +2244,6 @@ export default function ProjectDetails() {
               {/* Files - Grid View (grouped by date) */}
               {viewMode === 'grid' && sortedDateGroups.length > 0 && (
                 <div className="space-y-6">
-                  <h3 className="text-sm font-medium text-muted-foreground">Files</h3>
                   {sortedDateGroups.map(([dateGroup, groupFiles]) => (
                     <div key={dateGroup} className="space-y-3">
                       <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{dateGroup}</h4>
@@ -2367,7 +2371,6 @@ export default function ProjectDetails() {
               {/* Files - List View */}
               {viewMode === 'list' && allFiles.length > 0 && (
                 <div className="grid gap-2">
-                  <h3 className="text-sm font-medium text-muted-foreground mb-2">Files</h3>
                   {allFiles.map((file: FileMetadata) => (
                     <div 
                       key={file.id} 
@@ -2400,41 +2403,29 @@ export default function ProjectDetails() {
                           </div>
                         </button>
                       )}
-                      {/* Star button */}
-                      {!isFileSelectMode && (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className={cn("shrink-0 h-8 w-8", file.starred ? "text-yellow-500" : "opacity-0 group-hover:opacity-100")}
-                          onClick={() => updateFileMutation.mutate({ id: file.id, starred: !file.starred })}
-                          data-testid={`button-star-file-${file.id}`}
-                        >
-                          <Star className={cn("w-4 h-4", file.starred && "fill-current")} />
-                        </Button>
-                      )}
                       <button 
                         onClick={() => isFileSelectMode ? null : handleFileClick(file)}
-                        className="flex items-center gap-3 flex-1 text-left hover:text-primary transition-colors min-w-0"
+                        className="flex items-center gap-3 flex-1 text-left hover:text-primary transition-colors min-w-0 overflow-hidden"
                         data-testid={`button-view-file-${file.id}`}
                       >
                         {getFileIcon(file)}
-                        <div className="flex-1 min-w-0">
+                        <div className="flex-1 min-w-0 overflow-hidden">
                           <span className="font-medium block truncate">{file.name}</span>
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="text-xs text-muted-foreground">
+                          <div className="flex items-center gap-2 overflow-hidden">
+                            <span className="text-xs text-muted-foreground shrink-0">
                               {file.createdAt && format(new Date(file.createdAt), "MMM d, yyyy")}
                               {file.size && ` • ${Math.round(file.size / 1024)} KB`}
                             </span>
                             {file.tags && file.tags.length > 0 && (
-                              <div className="flex gap-1 flex-wrap">
-                                {file.tags.slice(0, 3).map((tag) => (
-                                  <Badge key={tag} variant="secondary" className="text-xs py-0 px-1.5" data-testid={`file-tag-${file.id}-${tag}`}>
+                              <div className="hidden sm:flex gap-1 overflow-hidden">
+                                {file.tags.slice(0, 2).map((tag) => (
+                                  <Badge key={tag} variant="secondary" className="text-xs py-0 px-1.5 truncate max-w-[80px]" data-testid={`file-tag-${file.id}-${tag}`}>
                                     {tag}
                                   </Badge>
                                 ))}
-                                {file.tags.length > 3 && (
-                                  <Badge variant="outline" className="text-xs py-0 px-1.5">
-                                    +{file.tags.length - 3}
+                                {file.tags.length > 2 && (
+                                  <Badge variant="outline" className="text-xs py-0 px-1.5 shrink-0">
+                                    +{file.tags.length - 2}
                                   </Badge>
                                 )}
                               </div>
@@ -2444,6 +2435,16 @@ export default function ProjectDetails() {
                       </button>
                       {!isFileSelectMode && (
                         <div className="flex gap-1 shrink-0">
+                          {/* Star button */}
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className={cn("h-8 w-8", file.starred ? "text-yellow-500" : "text-muted-foreground")}
+                            onClick={() => updateFileMutation.mutate({ id: file.id, starred: !file.starred })}
+                            data-testid={`button-star-file-${file.id}`}
+                          >
+                            <Star className={cn("w-4 h-4", file.starred && "fill-current")} />
+                          </Button>
                           <Button 
                             variant="ghost" 
                             size="icon" 
