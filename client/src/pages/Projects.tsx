@@ -239,7 +239,7 @@ export default function Projects() {
               <Plus className="mr-2 h-4 w-4" /> New Project
             </Button>
           </DialogTrigger>
-          <DialogContent className="w-[calc(100vw-1rem)] sm:w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Create New Project</DialogTitle>
               <DialogDescription>Fill in the project details below. Fields marked with * are required.</DialogDescription>
