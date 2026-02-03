@@ -23,6 +23,8 @@ import {
   Folder,
   ChevronRight,
   ChevronLeft,
+  ChevronDown,
+  ChevronUp,
   Home,
   X,
   Share2,
@@ -214,6 +216,7 @@ export default function ProjectDetails() {
   // Edit task state
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [dailyReportsFormOpen, setDailyReportsFormOpen] = useState(false);
+  const [isProjectDetailsExpanded, setIsProjectDetailsExpanded] = useState(false);
   const [editTaskDescription, setEditTaskDescription] = useState("");
   const [editTaskScheduledDate, setEditTaskScheduledDate] = useState("");
   const [editTaskStatus, setEditTaskStatus] = useState("pending");
@@ -1303,126 +1306,151 @@ export default function ProjectDetails() {
           <ArrowLeft className="w-4 h-4" /> Back to Projects
         </Link>
         
-        <div className="flex flex-col md:flex-row md:items-start justify-between gap-4 bg-card p-4 md:p-6 rounded-xl border border-border shadow-sm">
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 md:gap-3 mb-2 flex-wrap">
+        {/* Collapsible Project Details Header */}
+        <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
+          {/* Collapsed View - Always visible */}
+          <div 
+            className="flex items-center justify-between gap-2 px-3 py-2 md:px-4 md:py-3 cursor-pointer hover-elevate"
+            onClick={() => setIsProjectDetailsExpanded(!isProjectDetailsExpanded)}
+            data-testid="button-toggle-project-details"
+          >
+            <div className="flex items-center gap-2 md:gap-3 min-w-0 flex-1">
               <div 
-                className="px-2 md:px-3 py-1 rounded text-xs font-bold uppercase tracking-wider text-white shrink-0"
+                className="px-2 py-0.5 rounded text-[10px] md:text-xs font-bold uppercase tracking-wider text-white shrink-0"
                 style={{ backgroundColor: getStatusBgColor(project.status) }}
               >
                 {project.status.replace('_', ' ')}
               </div>
               {project.projectNumber && (
-                <span className="text-xs md:text-sm font-mono text-muted-foreground">{project.projectNumber}</span>
+                <span className="text-xs md:text-sm font-mono text-muted-foreground shrink-0">#{project.projectNumber}</span>
               )}
+              <h1 className="text-sm md:text-lg font-bold font-display truncate">{project.name}</h1>
             </div>
-            <h1 className="text-xl md:text-3xl font-bold font-display mb-2 break-words">{project.name}</h1>
-            {project.description && (
-              <p className="text-muted-foreground mb-4 max-w-2xl">{project.description}</p>
-            )}
-            
-            {/* Project Details Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm mb-4">
-              {/* Customer */}
-              {project.customerId && (
-                <div className="flex items-start gap-3">
-                  <User className="w-4 h-4 text-primary mt-0.5 shrink-0" />
-                  <div>
-                    <span className="text-muted-foreground block text-xs uppercase tracking-wide">Customer</span>
-                    <span className="text-foreground font-medium">
-                      {customers.find(c => c.id === project.customerId)?.name || "Unknown"}
-                      {customers.find(c => c.id === project.customerId)?.company && (
-                        <span className="text-muted-foreground font-normal ml-1">
-                          ({customers.find(c => c.id === project.customerId)?.company})
-                        </span>
-                      )}
-                    </span>
-                  </div>
-                </div>
-              )}
-              
-              {/* Address */}
-              {(project.streetAddress || project.city || project.state || project.zip) && (
-                <div className="flex items-start gap-3">
-                  <MapPin className="w-4 h-4 text-primary mt-0.5 shrink-0" />
-                  <div className="min-w-0">
-                    <span className="text-muted-foreground block text-xs uppercase tracking-wide">Address</span>
-                    <a 
-                      href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([project.streetAddress, project.city, project.state, project.zip].filter(Boolean).join(", "))}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-primary hover:underline break-words"
-                      data-testid="link-project-address"
-                    >
-                      {[project.streetAddress, project.city, project.state, project.zip].filter(Boolean).join(", ")}
-                    </a>
-                  </div>
-                </div>
-              )}
-              
-              {/* Created Date */}
-              {project.createdAt && (
-                <div className="flex items-start gap-3">
-                  <Calendar className="w-4 h-4 text-primary mt-0.5 shrink-0" />
-                  <div>
-                    <span className="text-muted-foreground block text-xs uppercase tracking-wide">Created</span>
-                    <span className="text-foreground">{format(new Date(project.createdAt), "MMMM d, yyyy")}</span>
-                  </div>
-                </div>
-              )}
-              
-              {/* Estimated Value */}
-              {project.estimatedValue && (
-                <div className="flex items-start gap-3">
-                  <DollarSign className="w-4 h-4 text-primary mt-0.5 shrink-0" />
-                  <div>
-                    <span className="text-muted-foreground block text-xs uppercase tracking-wide">Estimated Value</span>
-                    <span className="text-foreground font-medium">${project.estimatedValue.toLocaleString()}</span>
-                  </div>
-                </div>
-              )}
-              
-              {/* Date Range */}
-              {(project.startDate || project.endDate) && (
-                <div className="flex items-start gap-3">
-                  <Calendar className="w-4 h-4 text-primary mt-0.5 shrink-0" />
-                  <div>
-                    <span className="text-muted-foreground block text-xs uppercase tracking-wide">Project Dates</span>
-                    <span className="text-foreground">{formatDateRange(project.startDate, project.endDate)}</span>
-                  </div>
-                </div>
-              )}
-            </div>
-            
-            {/* Notes */}
-            {project.notes && (
-              <div className="flex items-start gap-3 text-sm border-t border-border pt-4 mt-2">
-                <StickyNote className="w-4 h-4 text-primary mt-0.5 shrink-0" />
-                <div>
-                  <span className="text-muted-foreground block text-xs uppercase tracking-wide mb-1">Notes</span>
-                  <p className="text-foreground whitespace-pre-wrap">{project.notes}</p>
-                </div>
-              </div>
-            )}
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              className="shrink-0 min-h-[44px] min-w-[44px] md:min-h-8 md:min-w-8"
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsProjectDetailsExpanded(!isProjectDetailsExpanded);
+              }}
+              data-testid="button-expand-project-details"
+            >
+              {isProjectDetailsExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+            </Button>
           </div>
           
-          <div className="flex items-center gap-2 shrink-0">
-            <Button variant="outline" onClick={() => setIsEditOpen(true)} data-testid="button-edit-project" className="min-h-[44px] md:min-h-9">
-              <Pencil className="w-4 h-4 mr-2" /> Edit
-            </Button>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="icon" data-testid="button-project-menu" className="min-h-[44px] min-w-[44px] md:min-h-9 md:min-w-9">
-                  <MoreVertical className="w-4 h-4" />
+          {/* Expanded View - Full details */}
+          {isProjectDetailsExpanded && (
+            <div className="border-t border-border px-3 py-3 md:px-4 md:py-4 animate-in slide-in-from-top-2 duration-200">
+              {project.description && (
+                <p className="text-muted-foreground mb-4 max-w-2xl text-sm">{project.description}</p>
+              )}
+              
+              {/* Project Details Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm mb-4">
+                {/* Customer */}
+                {project.customerId && (
+                  <div className="flex items-start gap-3">
+                    <User className="w-4 h-4 text-primary mt-0.5 shrink-0" />
+                    <div>
+                      <span className="text-muted-foreground block text-xs uppercase tracking-wide">Customer</span>
+                      <span className="text-foreground font-medium">
+                        {customers.find(c => c.id === project.customerId)?.name || "Unknown"}
+                        {customers.find(c => c.id === project.customerId)?.company && (
+                          <span className="text-muted-foreground font-normal ml-1">
+                            ({customers.find(c => c.id === project.customerId)?.company})
+                          </span>
+                        )}
+                      </span>
+                    </div>
+                  </div>
+                )}
+                
+                {/* Address */}
+                {(project.streetAddress || project.city || project.state || project.zip) && (
+                  <div className="flex items-start gap-3">
+                    <MapPin className="w-4 h-4 text-primary mt-0.5 shrink-0" />
+                    <div className="min-w-0">
+                      <span className="text-muted-foreground block text-xs uppercase tracking-wide">Address</span>
+                      <a 
+                        href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([project.streetAddress, project.city, project.state, project.zip].filter(Boolean).join(", "))}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-primary hover:underline break-words"
+                        data-testid="link-project-address"
+                      >
+                        {[project.streetAddress, project.city, project.state, project.zip].filter(Boolean).join(", ")}
+                      </a>
+                    </div>
+                  </div>
+                )}
+                
+                {/* Created Date */}
+                {project.createdAt && (
+                  <div className="flex items-start gap-3">
+                    <Calendar className="w-4 h-4 text-primary mt-0.5 shrink-0" />
+                    <div>
+                      <span className="text-muted-foreground block text-xs uppercase tracking-wide">Created</span>
+                      <span className="text-foreground">{format(new Date(project.createdAt), "MMMM d, yyyy")}</span>
+                    </div>
+                  </div>
+                )}
+                
+                {/* Estimated Value */}
+                {project.estimatedValue && (
+                  <div className="flex items-start gap-3">
+                    <DollarSign className="w-4 h-4 text-primary mt-0.5 shrink-0" />
+                    <div>
+                      <span className="text-muted-foreground block text-xs uppercase tracking-wide">Estimated Value</span>
+                      <span className="text-foreground font-medium">${project.estimatedValue.toLocaleString()}</span>
+                    </div>
+                  </div>
+                )}
+                
+                {/* Date Range */}
+                {(project.startDate || project.endDate) && (
+                  <div className="flex items-start gap-3">
+                    <Calendar className="w-4 h-4 text-primary mt-0.5 shrink-0" />
+                    <div>
+                      <span className="text-muted-foreground block text-xs uppercase tracking-wide">Project Dates</span>
+                      <span className="text-foreground">{formatDateRange(project.startDate, project.endDate)}</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+              
+              {/* Notes */}
+              {project.notes && (
+                <div className="flex items-start gap-3 text-sm border-t border-border pt-4 mt-2">
+                  <StickyNote className="w-4 h-4 text-primary mt-0.5 shrink-0" />
+                  <div>
+                    <span className="text-muted-foreground block text-xs uppercase tracking-wide mb-1">Notes</span>
+                    <p className="text-foreground whitespace-pre-wrap">{project.notes}</p>
+                  </div>
+                </div>
+              )}
+              
+              {/* Action buttons */}
+              <div className="flex items-center gap-2 mt-4 pt-4 border-t border-border">
+                <Button variant="outline" onClick={() => setIsEditOpen(true)} data-testid="button-edit-project" className="min-h-[44px] md:min-h-9">
+                  <Pencil className="w-4 h-4 mr-2" /> Edit
                 </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="bg-white dark:bg-zinc-900 text-black dark:text-white">
-                <DropdownMenuItem className="text-destructive focus:text-destructive cursor-pointer min-h-[44px] md:min-h-8" onClick={() => setDeleteProjectOpen(true)} data-testid="button-delete-project">
-                  <Trash2 className="w-4 h-4 mr-2" /> Delete Project
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="icon" data-testid="button-project-menu" className="min-h-[44px] min-w-[44px] md:min-h-9 md:min-w-9">
+                      <MoreVertical className="w-4 h-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="bg-white dark:bg-zinc-900 text-black dark:text-white">
+                    <DropdownMenuItem className="text-destructive focus:text-destructive cursor-pointer min-h-[44px] md:min-h-8" onClick={() => setDeleteProjectOpen(true)} data-testid="button-delete-project">
+                      <Trash2 className="w-4 h-4 mr-2" /> Delete Project
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Edit Project Dialog */}

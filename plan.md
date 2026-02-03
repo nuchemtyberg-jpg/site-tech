@@ -459,6 +459,14 @@ Protected Routes:
 ## Changelog
 
 ### February 3, 2026
+- **Collapsible Project Details Header**: Project details section at top of project tools pages is now collapsible
+  - Collapsed by default showing only status badge, project number, and name in a compact single row
+  - Expand/collapse button (chevron) on the right side
+  - Entire header bar is clickable to toggle
+  - Expanded view shows all project details: description, customer, address, dates, value, notes
+  - Edit and delete actions only visible when expanded
+  - Smooth slide-in animation when expanding
+  - Minimizes screen real estate usage on mobile while keeping project context accessible
 - **Comprehensive Mobile Optimization**: Implemented mobile-first responsive design throughout the application
   - **Light Theme Default**: Changed default theme to light (ChatGPT-style) with dark theme available via toggle
   - **Global Navigation Menu**: Fixed-position menu button in top-right corner accessible from all screens
