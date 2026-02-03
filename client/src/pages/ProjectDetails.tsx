@@ -1987,7 +1987,7 @@ export default function ProjectDetails() {
               )}
             </div>
 
-            <div className="flex flex-row items-center gap-1 sm:gap-2 sm:justify-between relative z-10 flex-wrap">
+            <div className="flex flex-row items-center gap-2 sm:gap-3 sm:justify-between relative z-10 flex-wrap">
               {/* View Toggle */}
               <div className="flex items-center gap-0.5 sm:gap-1 bg-muted rounded-lg p-0.5 sm:p-1">
                 <Button
@@ -2080,7 +2080,7 @@ export default function ProjectDetails() {
               )}
 
               {!isFileSelectMode && (
-                <>
+                <div className="flex items-center gap-2 shrink-0">
                   <Dialog open={isFolderOpen} onOpenChange={setIsFolderOpen}>
                     <DialogTrigger asChild>
                       <Button variant="outline" size="icon" className="h-10 w-10 sm:h-auto sm:w-auto sm:px-3" data-testid="button-new-folder">
@@ -2125,7 +2125,7 @@ export default function ProjectDetails() {
                     <Upload className="w-5 h-5 sm:w-4 sm:h-4 sm:mr-2" />
                     <span className="hidden sm:inline">Upload Files</span>
                   </NativeFileUploader>
-                </>
+                </div>
               )}
             </div>
 
