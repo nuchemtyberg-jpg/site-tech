@@ -1299,15 +1299,16 @@ export default function ProjectDetails() {
 
   return (
     <>
-    <div className="space-y-6 md:space-y-8 animate-enter overflow-x-hidden">
-      {/* Header */}
-      <div className="flex flex-col gap-4 md:gap-6">
-        <Link href="/projects" className="text-muted-foreground hover:text-foreground flex items-center gap-2 transition-colors w-fit">
-          <ArrowLeft className="w-4 h-4" /> Back to Projects
-        </Link>
-        
-        {/* Collapsible Project Details Header */}
-        <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
+    <div className="animate-enter overflow-x-hidden">
+      {/* Fixed Header */}
+      <div className="sticky top-0 z-40 bg-background pb-3 md:pb-4 -mx-4 px-4 md:-mx-6 md:px-6 pt-1">
+        <div className="flex flex-col gap-2 md:gap-3">
+          <Link href="/projects" className="text-muted-foreground hover:text-foreground flex items-center gap-2 transition-colors w-fit min-h-[44px] md:min-h-8" data-testid="link-back-to-projects">
+            <ArrowLeft className="w-4 h-4" /> Back to Projects
+          </Link>
+          
+          {/* Collapsible Project Details Header */}
+          <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
           {/* Collapsed View - Always visible */}
           <div 
             className="flex items-center justify-between gap-2 px-3 py-2 md:px-4 md:py-3 cursor-pointer hover-elevate"
@@ -1452,6 +1453,11 @@ export default function ProjectDetails() {
             </div>
           )}
         </div>
+        </div>
+      </div>
+
+      {/* Main content area with top padding for sticky header */}
+      <div className="space-y-6 md:space-y-8 pt-4">
 
         {/* Edit Project Dialog */}
         <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>

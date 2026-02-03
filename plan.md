@@ -467,6 +467,7 @@ Protected Routes:
   - Edit and delete actions only visible when expanded
   - Smooth slide-in animation when expanding
   - Minimizes screen real estate usage on mobile while keeping project context accessible
+  - **Fixed/Sticky positioning**: Header stays at top of page while scrolling through project tools content
 - **Comprehensive Mobile Optimization**: Implemented mobile-first responsive design throughout the application
   - **Light Theme Default**: Changed default theme to light (ChatGPT-style) with dark theme available via toggle
   - **Global Navigation Menu**: Fixed-position menu button in top-right corner accessible from all screens
