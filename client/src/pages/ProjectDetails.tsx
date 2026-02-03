@@ -1979,14 +1979,13 @@ export default function ProjectDetails() {
             )}
           </div>
 
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:justify-between relative z-10">
-            {/* Left side controls */}
-            <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex flex-row items-center gap-1 sm:gap-2 sm:justify-between relative z-10 flex-wrap">
               {/* View Toggle */}
-              <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
+              <div className="flex items-center gap-0.5 sm:gap-1 bg-muted rounded-lg p-0.5 sm:p-1">
                 <Button
                   variant={viewMode === 'grid' ? 'default' : 'ghost'}
-                  size="sm"
+                  size="icon"
+                  className="h-7 w-7 sm:h-8 sm:w-8"
                   onClick={() => setViewMode('grid')}
                   data-testid="button-view-grid"
                 >
@@ -1994,7 +1993,8 @@ export default function ProjectDetails() {
                 </Button>
                 <Button
                   variant={viewMode === 'list' ? 'default' : 'ghost'}
-                  size="sm"
+                  size="icon"
+                  className="h-7 w-7 sm:h-8 sm:w-8"
                   onClick={() => setViewMode('list')}
                   data-testid="button-view-list"
                 >
@@ -2005,7 +2005,8 @@ export default function ProjectDetails() {
               {/* Starred Toggle */}
               <Button
                 variant={showStarredOnly ? 'default' : 'outline'}
-                size="sm"
+                size="icon"
+                className="h-7 w-7 sm:h-auto sm:w-auto sm:px-3"
                 onClick={() => {
                   setShowStarredOnly(!showStarredOnly);
                   if (!showStarredOnly) setCurrentFolderId(null);
@@ -2022,7 +2023,8 @@ export default function ProjectDetails() {
               {/* Select Mode Toggle */}
               <Button
                 variant={isFileSelectMode ? 'default' : 'outline'}
-                size="sm"
+                size="icon"
+                className="h-7 w-7 sm:h-auto sm:w-auto sm:px-3"
                 onClick={() => {
                   setIsFileSelectMode(!isFileSelectMode);
                   if (isFileSelectMode) {
@@ -2035,10 +2037,11 @@ export default function ProjectDetails() {
                 <CheckSquare className="w-4 h-4 sm:mr-1" />
                 <span className="hidden sm:inline">{isFileSelectMode ? 'Cancel' : 'Select'}</span>
               </Button>
-            </div>
+
+              {/* Spacer for desktop layout */}
+              <div className="hidden sm:flex sm:flex-1" />
             
-            {/* Right side actions */}
-            <div className="flex flex-row flex-wrap items-center gap-2">
+              {/* Action buttons */}
               {/* Batch actions when files or folders are selected */}
               {isFileSelectMode && (selectedFiles.size > 0 || selectedFolders.size > 0) && (
                 <div className="flex items-center gap-2">
@@ -2114,7 +2117,6 @@ export default function ProjectDetails() {
                   </NativeFileUploader>
                 </>
               )}
-            </div>
           </div>
 
           {/* Breadcrumb Navigation */}
