@@ -1293,27 +1293,27 @@ export default function ProjectDetails() {
   };
 
   return (
-    <div className="space-y-8 animate-enter">
+    <div className="space-y-6 md:space-y-8 animate-enter overflow-x-hidden">
       {/* Header */}
-      <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-4 md:gap-6">
         <Link href="/projects" className="text-muted-foreground hover:text-foreground flex items-center gap-2 transition-colors w-fit">
           <ArrowLeft className="w-4 h-4" /> Back to Projects
         </Link>
         
-        <div className="flex flex-col md:flex-row md:items-start justify-between gap-4 bg-card p-6 rounded-xl border border-border shadow-sm">
-          <div className="flex-1">
-            <div className="flex items-center gap-3 mb-2 flex-wrap">
+        <div className="flex flex-col md:flex-row md:items-start justify-between gap-4 bg-card p-4 md:p-6 rounded-xl border border-border shadow-sm">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 md:gap-3 mb-2 flex-wrap">
               <div 
-                className="px-3 py-1 rounded text-xs font-bold uppercase tracking-wider text-white"
+                className="px-2 md:px-3 py-1 rounded text-xs font-bold uppercase tracking-wider text-white shrink-0"
                 style={{ backgroundColor: getStatusBgColor(project.status) }}
               >
                 {project.status.replace('_', ' ')}
               </div>
               {project.projectNumber && (
-                <span className="text-sm font-mono text-muted-foreground">{project.projectNumber}</span>
+                <span className="text-xs md:text-sm font-mono text-muted-foreground">{project.projectNumber}</span>
               )}
             </div>
-            <h1 className="text-3xl font-bold font-display mb-2">{project.name}</h1>
+            <h1 className="text-xl md:text-3xl font-bold font-display mb-2 break-words">{project.name}</h1>
             {project.description && (
               <p className="text-muted-foreground mb-4 max-w-2xl">{project.description}</p>
             )}
@@ -1342,13 +1342,13 @@ export default function ProjectDetails() {
               {(project.streetAddress || project.city || project.state || project.zip) && (
                 <div className="flex items-start gap-3">
                   <MapPin className="w-4 h-4 text-primary mt-0.5 shrink-0" />
-                  <div>
+                  <div className="min-w-0">
                     <span className="text-muted-foreground block text-xs uppercase tracking-wide">Address</span>
                     <a 
                       href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([project.streetAddress, project.city, project.state, project.zip].filter(Boolean).join(", "))}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-primary hover:underline"
+                      className="text-primary hover:underline break-words"
                       data-testid="link-project-address"
                     >
                       {[project.streetAddress, project.city, project.state, project.zip].filter(Boolean).join(", ")}
@@ -1403,18 +1403,18 @@ export default function ProjectDetails() {
             )}
           </div>
           
-          <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={() => setIsEditOpen(true)} data-testid="button-edit-project">
+          <div className="flex items-center gap-2 shrink-0">
+            <Button variant="outline" onClick={() => setIsEditOpen(true)} data-testid="button-edit-project" className="min-h-[44px] md:min-h-9">
               <Pencil className="w-4 h-4 mr-2" /> Edit
             </Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="icon" data-testid="button-project-menu">
+                <Button variant="outline" size="icon" data-testid="button-project-menu" className="min-h-[44px] min-w-[44px] md:min-h-9 md:min-w-9">
                   <MoreVertical className="w-4 h-4" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="bg-white dark:bg-zinc-900 text-black dark:text-white">
-                <DropdownMenuItem className="text-destructive focus:text-destructive cursor-pointer" onClick={() => setDeleteProjectOpen(true)} data-testid="button-delete-project">
+                <DropdownMenuItem className="text-destructive focus:text-destructive cursor-pointer min-h-[44px] md:min-h-8" onClick={() => setDeleteProjectOpen(true)} data-testid="button-delete-project">
                   <Trash2 className="w-4 h-4 mr-2" /> Delete Project
                 </DropdownMenuItem>
               </DropdownMenuContent>
@@ -1652,18 +1652,20 @@ export default function ProjectDetails() {
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
-        <TabsList className="mb-4">
-          <TabsTrigger value="tasks" data-testid="tab-tasks">Tasks</TabsTrigger>
-          <TabsTrigger value="documents" data-testid="tab-documents">Documents</TabsTrigger>
-          <TabsTrigger value="photos" data-testid="tab-photos">
-            <Camera className="w-4 h-4 mr-2" />
-            Photos
-          </TabsTrigger>
-          <TabsTrigger value="daily-reports" data-testid="tab-daily-reports">
-            <Calendar className="w-4 h-4 mr-2" />
-            Daily Reports
-          </TabsTrigger>
-        </TabsList>
+        <div className="overflow-x-auto -mx-4 px-4 md:mx-0 md:px-0">
+          <TabsList className="mb-4 w-max md:w-auto">
+            <TabsTrigger value="tasks" data-testid="tab-tasks" className="min-h-[44px] md:min-h-9">Tasks</TabsTrigger>
+            <TabsTrigger value="documents" data-testid="tab-documents" className="min-h-[44px] md:min-h-9">Documents</TabsTrigger>
+            <TabsTrigger value="photos" data-testid="tab-photos" className="min-h-[44px] md:min-h-9">
+              <Camera className="w-4 h-4 mr-1 md:mr-2" />
+              Photos
+            </TabsTrigger>
+            <TabsTrigger value="daily-reports" data-testid="tab-daily-reports" className="min-h-[44px] md:min-h-9">
+              <Calendar className="w-4 h-4 mr-1 md:mr-2" />
+              <span className="hidden sm:inline">Daily </span>Reports
+            </TabsTrigger>
+          </TabsList>
+        </div>
 
         <TabsContent value="tasks" className="space-y-4">
           <div className="flex items-center justify-end mb-4">
@@ -1853,34 +1855,34 @@ export default function ProjectDetails() {
               {tasks?.map(task => (
                 <div 
                   key={task.id} 
-                  className="group bg-card border border-border rounded-lg p-4 hover:border-primary/50 transition-all shadow-sm hover:shadow-md flex items-center justify-between cursor-pointer" 
+                  className="group bg-card border border-border rounded-lg p-3 md:p-4 hover:border-primary/50 transition-all shadow-sm hover:shadow-md flex flex-col md:flex-row md:items-center justify-between cursor-pointer gap-3" 
                   data-testid={`task-item-${task.id}`}
                   onClick={() => handleOpenEditTask(task)}
                 >
-                  <div className="flex items-start gap-4">
+                  <div className="flex items-start gap-3 md:gap-4 min-w-0 flex-1">
                     <div className={cn(
-                      "mt-1 w-2 h-2 rounded-full",
+                      "mt-1.5 w-2 h-2 rounded-full shrink-0",
                       task.status === 'completed' ? "bg-green-500" :
                       task.status === 'in_progress' ? "bg-blue-500" :
                       task.status === 'blocked' ? "bg-red-500" :
                       "bg-gray-400"
                     )} />
-                    <div>
-                      <h3 className="font-semibold text-foreground group-hover:text-primary transition-colors">{task.title}</h3>
-                      <p className="text-sm text-muted-foreground mt-1 line-clamp-1">{task.description || "No description provided."}</p>
-                      <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
+                    <div className="min-w-0 flex-1">
+                      <h3 className="font-semibold text-foreground group-hover:text-primary transition-colors break-words">{task.title}</h3>
+                      <p className="text-sm text-muted-foreground mt-1 line-clamp-2 md:line-clamp-1">{task.description || "No description provided."}</p>
+                      <div className="flex flex-wrap items-center gap-2 md:gap-4 mt-2 text-xs text-muted-foreground">
                         <span className="flex items-center gap-1">
-                          <Calendar className="w-3 h-3" />
+                          <Calendar className="w-3 h-3 shrink-0" />
                           {formatDateRange(task.scheduledDate, task.dueDate)}
                         </span>
                         <span className={cn(
-                          "px-2 py-0.5 rounded uppercase tracking-wider font-bold",
+                          "px-2 py-0.5 rounded uppercase tracking-wider font-bold text-[10px] md:text-xs",
                           task.priority === 'high' ? "bg-red-500/10 text-red-500" : "bg-muted text-muted-foreground"
                         )}>
-                          {task.priority} Priority
+                          {task.priority}
                         </span>
                         {task.percentComplete > 0 && (
-                          <span className="px-2 py-0.5 rounded bg-primary/10 text-primary">
+                          <span className="px-2 py-0.5 rounded bg-primary/10 text-primary text-[10px] md:text-xs">
                             {task.percentComplete}% Complete
                           </span>
                         )}
