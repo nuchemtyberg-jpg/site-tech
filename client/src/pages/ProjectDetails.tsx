@@ -1667,7 +1667,7 @@ export default function ProjectDetails() {
           </TabsList>
         </div>
 
-        <TabsContent value="tasks" className="space-y-4">
+        <TabsContent value="tasks" className="space-y-4 overflow-x-hidden">
           <div className="flex items-center justify-end mb-4">
             <Dialog open={isTaskOpen} onOpenChange={setIsTaskOpen}>
               <DialogTrigger asChild>
@@ -1695,7 +1695,7 @@ export default function ProjectDetails() {
                           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                         </Button>
                       </PopoverTrigger>
-                      <PopoverContent className="w-[400px] p-0 bg-white dark:bg-zinc-900" align="start">
+                      <PopoverContent className="w-[calc(100vw-2rem)] sm:w-[400px] p-0 bg-white dark:bg-zinc-900" align="start">
                         <Command className="bg-white dark:bg-zinc-900">
                           <CommandInput 
                             placeholder="Search task titles..." 
@@ -1907,7 +1907,7 @@ export default function ProjectDetails() {
           )}
         </TabsContent>
 
-        <TabsContent value="documents" className="space-y-4">
+        <TabsContent value="documents" className="space-y-4 overflow-x-hidden">
           {/* Drag and Drop Zone Wrapper */}
           <div
             onDragOver={handleDragOver}
@@ -2213,7 +2213,7 @@ export default function ProjectDetails() {
                   {sortedDateGroups.map(([dateGroup, groupFiles]) => (
                     <div key={dateGroup} className="space-y-3">
                       <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{dateGroup}</h4>
-                      <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2">
+                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2">
                         {groupFiles.map((file: FileMetadata) => (
                           <div 
                             key={file.id} 
@@ -2478,14 +2478,14 @@ export default function ProjectDetails() {
         </TabsContent>
 
         {activeTab === "photos" && (
-          <TabsContent value="photos" className="space-y-4" forceMount>
+          <TabsContent value="photos" className="space-y-4 overflow-x-hidden" forceMount>
             <Suspense fallback={<div className="flex items-center justify-center h-40"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" /></div>}>
               <PhotosTab projectId={projectId} />
             </Suspense>
           </TabsContent>
         )}
 
-        <TabsContent value="daily-reports" className="space-y-4">
+        <TabsContent value="daily-reports" className="space-y-4 overflow-x-hidden">
           {project && <DailyReportsTab project={project} />}
         </TabsContent>
       </Tabs>

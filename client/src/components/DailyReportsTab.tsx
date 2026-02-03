@@ -174,14 +174,14 @@ export function DailyReportsTab({ project }: DailyReportsTabProps) {
         </Card>
       ) : (
         <Card>
-          <CardContent className="p-0">
-            <Table>
+          <CardContent className="p-0 overflow-x-auto">
+            <Table className="min-w-[600px]">
               <TableHeader>
                 <TableRow>
                   <TableHead>Report Date</TableHead>
-                  <TableHead>Weather</TableHead>
-                  <TableHead>Date Created</TableHead>
-                  <TableHead>Last Updated</TableHead>
+                  <TableHead className="hidden sm:table-cell">Weather</TableHead>
+                  <TableHead className="hidden md:table-cell">Date Created</TableHead>
+                  <TableHead className="hidden lg:table-cell">Last Updated</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
@@ -197,7 +197,7 @@ export function DailyReportsTab({ project }: DailyReportsTabProps) {
                     <TableCell className="font-medium">
                       {safeFormatDate(report.reportDate, 'MMM d, yyyy')}
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="hidden sm:table-cell">
                       <div className="flex items-center gap-2">
                         {getWeatherIcon(report.weatherSummary)}
                         <span className="text-sm text-muted-foreground">
@@ -208,10 +208,10 @@ export function DailyReportsTab({ project }: DailyReportsTabProps) {
                         )}
                       </div>
                     </TableCell>
-                    <TableCell className="text-muted-foreground">
+                    <TableCell className="text-muted-foreground hidden md:table-cell">
                       {report.createdAt ? format(new Date(report.createdAt), "MMM d, h:mm a") : "N/A"}
                     </TableCell>
-                    <TableCell className="text-muted-foreground">
+                    <TableCell className="text-muted-foreground hidden lg:table-cell">
                       {report.updatedAt ? format(new Date(report.updatedAt), "MMM d, h:mm a") : "N/A"}
                     </TableCell>
                     <TableCell>

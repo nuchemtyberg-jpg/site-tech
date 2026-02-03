@@ -144,14 +144,14 @@ export function Layout({ children }: { children: React.ReactNode }) {
         </aside>
 
         {/* Main Content */}
-        <main className="flex-1 md:ml-64 min-h-screen bg-background relative">
+        <main className="flex-1 md:ml-64 min-h-screen bg-background relative overflow-x-hidden">
           <div className="absolute inset-0 z-0 opacity-[0.03] pointer-events-none" 
                style={{ 
                  backgroundImage: `linear-gradient(hsl(var(--border)) 1px, transparent 1px), linear-gradient(90deg, hsl(var(--border)) 1px, transparent 1px)`,
                  backgroundSize: '40px 40px' 
                }} 
           />
-          <div className="relative z-10 w-full max-w-7xl mx-auto p-4 md:p-8">
+          <div className="relative z-10 w-full max-w-7xl mx-auto p-4 md:p-8 overflow-x-hidden">
             {children}
           </div>
         </main>
