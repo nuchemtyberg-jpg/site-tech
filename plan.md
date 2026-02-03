@@ -384,8 +384,17 @@ Protected Routes:
 - Delete confirmations required for all destructive actions
 - Red asterisk (*) before mandatory field labels
 - Consistent spacing and component usage
-- Mobile-responsive layouts
 - Toast notifications for user feedback
+
+### Mobile Optimization
+- **Light Theme Default**: ChatGPT-style light theme as default, dark mode available via toggle
+- **44px Tap Targets**: All interactive elements have minimum 44px height on mobile (iOS/Android guideline)
+- **Edge-to-Edge Dialogs**: Forms and dialogs stretch nearly full-width on mobile with minimal margins
+- **Responsive Form Grids**: Forms stack vertically on mobile, expand to multi-column on larger screens
+- **Mobile Keyboard Types**: Phone inputs show numeric keypad, number inputs show appropriate keyboards
+- **Floating Action Button (FAB)**: Quick access to project tools (Documents, Daily Reports, Photos, Tasks)
+- **Fixed Navigation**: Global menu accessible from top-right corner on all screens
+- **No Horizontal Scroll**: Content constrained to viewport width
 
 ---
 
@@ -448,6 +457,36 @@ Protected Routes:
 ---
 
 ## Changelog
+
+### February 3, 2026
+- **Comprehensive Mobile Optimization**: Implemented mobile-first responsive design throughout the application
+  - **Light Theme Default**: Changed default theme to light (ChatGPT-style) with dark theme available via toggle
+  - **Global Navigation Menu**: Fixed-position menu button in top-right corner accessible from all screens
+  - **44px Minimum Tap Targets**: All interactive elements (buttons, inputs, selects, checkboxes) have 44px minimum height on mobile for better touch accessibility
+  - **Floating Project Tools (FAB)**: Bottom-right floating action button for quick access to project tools (Documents, Daily Reports, Photos, Tasks)
+    - Automatically hides during form interactions to prevent accidental taps
+    - Documents is the default landing page when accessing a project
+  - **Responsive Form Layouts**: All forms converted from fixed grids to responsive breakpoints
+    - `grid-cols-2` → `grid-cols-1 md:grid-cols-2` for stacking on mobile
+    - `grid-cols-3` → `grid-cols-1 sm:grid-cols-3` for complex forms
+  - **Mobile Keyboard Optimization**: 
+    - Phone inputs use `type="tel"` for numeric keypad
+    - Quantity fields use `inputMode="numeric"` 
+    - Currency/hours fields use `inputMode="decimal"`
+  - **Dialog Improvements**:
+    - Dialogs are nearly edge-to-edge on mobile (`left-0.5 right-0.5`)
+    - Positioned near top of screen on mobile (`top-2`) for easier reach
+    - Reduced internal padding on mobile (`p-3`)
+    - Close button has 44px tap target on mobile
+    - Maximum height 90vh with scroll for long content
+  - **Horizontal Scroll Prevention**: Added `overflow-x: hidden` to html/body and container elements
+  - **Content Viewport Fit**: All content constrained to viewport width, preventing horizontal overflow
+- **Updated Components**:
+  - `dialog.tsx` - Mobile-first positioning with responsive breakpoints
+  - `input.tsx`, `select.tsx`, `button.tsx`, `checkbox.tsx` - 44px minimum tap targets on mobile
+  - `FloatingProjectTools.tsx` - New FAB component for project tool navigation
+  - `Layout.tsx` - Fixed top-right menu, horizontal scroll prevention
+  - All form pages (Projects, Customers, Equipment, etc.) - Responsive grid layouts
 
 ### February 2, 2026
 - **Cloudinary Migration**: Migrated photo storage from Replit Object Storage to Cloudinary
