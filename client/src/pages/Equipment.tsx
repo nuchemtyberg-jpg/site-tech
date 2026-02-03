@@ -129,7 +129,7 @@ export default function EquipmentPage() {
             </DialogHeader>
             <Form {...form}>
               <form onSubmit={form.handleSubmit((data) => createMutation.mutate(data))} className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <FormField
                     control={form.control}
                     name="name"
@@ -168,7 +168,7 @@ export default function EquipmentPage() {
                     )}
                   />
                 </div>
-                <div className="grid grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <FormField
                     control={form.control}
                     name="make"
@@ -209,7 +209,7 @@ export default function EquipmentPage() {
                     )}
                   />
                 </div>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <FormField
                     control={form.control}
                     name="serialNumber"

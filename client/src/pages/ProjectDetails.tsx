@@ -1478,7 +1478,7 @@ export default function ProjectDetails() {
                       </FormItem>
                     )}
                   />
-                  <div className="grid grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <FormField
                       control={editForm.control}
                       name="city"
@@ -1747,7 +1747,7 @@ export default function ProjectDetails() {
                     <Input id="dueDate" type="date" {...form.register("dueDate")} data-testid="input-task-due" className="bg-white dark:bg-zinc-900 text-black dark:text-white" />
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="grid gap-2">
                       <Label htmlFor="status">Status</Label>
                       <Select onValueChange={(val) => form.setValue("status", val)} defaultValue="pending">

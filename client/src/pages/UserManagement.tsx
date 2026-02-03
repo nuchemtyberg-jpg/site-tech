@@ -203,7 +203,7 @@ export default function UserManagement() {
               <DialogTitle>Add Authorized User</DialogTitle>
             </DialogHeader>
             <div className="space-y-4 py-4">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="firstName">First Name</Label>
                   <Input
@@ -490,7 +490,7 @@ export default function UserManagement() {
                 {editingUser?.email}
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="editFirstName">First Name</Label>
                 <Input

@@ -95,7 +95,7 @@ export default function Customers() {
             </DialogHeader>
             <Form {...form}>
               <form onSubmit={form.handleSubmit((data) => createMutation.mutate(data))} className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <FormField
                     control={form.control}
                     name="name"
@@ -123,7 +123,7 @@ export default function Customers() {
                     )}
                   />
                 </div>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <FormField
                     control={form.control}
                     name="email"
@@ -144,7 +144,7 @@ export default function Customers() {
                       <FormItem>
                         <FormLabel>Phone</FormLabel>
                         <FormControl>
-                          <Input placeholder="(555) 123-4567" {...field} data-testid="input-customer-phone" />
+                          <Input type="tel" placeholder="(555) 123-4567" {...field} data-testid="input-customer-phone" />
                         </FormControl>
                         <FormMessage />
                       </FormItem>

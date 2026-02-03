@@ -561,7 +561,7 @@ export default function Projects() {
                     <FormItem>
                       <FormLabel>Phone</FormLabel>
                       <FormControl>
-                        <Input placeholder="(555) 123-4567" {...field} data-testid="input-customer-phone" className="bg-white dark:bg-zinc-900 text-black dark:text-white" />
+                        <Input type="tel" placeholder="(555) 123-4567" {...field} data-testid="input-customer-phone" className="bg-white dark:bg-zinc-900 text-black dark:text-white" />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
