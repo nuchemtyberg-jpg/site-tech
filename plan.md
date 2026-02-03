@@ -160,6 +160,13 @@ SiteTech is a comprehensive web-based sitework management platform designed for 
 - **Move Feature**: Hierarchical folder picker with breadcrumb navigation, cycle prevention
 - **PDF Viewer**: Annotation tools (pen, highlighter, shapes, text, eraser)
 - **Export**: Save annotated PDFs
+- **Mobile Optimizations**:
+  - Sticky header with search, view toggles, and action buttons
+  - List view default on mobile, grid view on desktop
+  - File names truncate properly (no horizontal scroll)
+  - Dropdown menu (⋮) for file actions on mobile
+  - Star button always visible on right side
+  - Tags hidden on mobile to save space
 
 ### 6. Photo Management
 - **Album System**: Flat album structure (not hierarchical folders)
@@ -457,6 +464,26 @@ Protected Routes:
 ---
 
 ## Changelog
+
+### February 3, 2026 (Evening)
+- **Mobile Document View Optimization**: Comprehensive mobile-first redesign of the project documents page
+  - **Sticky Header on Mobile**: Search bar, view toggles, action buttons, and breadcrumbs fixed at top while documents scroll
+  - **List View Default on Mobile**: Documents default to list view on screens < 640px, grid view on larger screens
+  - **40x40px Action Buttons**: All header action buttons sized to 40x40px with 20x20px icons on mobile for better tap targets
+  - **File Name Truncation**: Long file names properly truncate with ellipsis, preventing horizontal overflow
+  - **Removed Section Labels**: Removed "Folders" and "Files" headings for cleaner interface
+  - **Star Button Repositioned**: Moved star/favorite button to the right side with other action buttons
+  - **Mobile Action Menu**: Added dropdown menu (⋮) on mobile containing all file actions:
+    - Details, Download, Rename, Edit Tags, Delete
+  - **Desktop Hover Actions**: Individual action buttons remain visible on hover for desktop users
+  - **Hidden Tags on Mobile**: File tags hidden on mobile to save space, visible on desktop (sm breakpoint and up)
+  - **Overflow Protection**: Multiple layers of `overflow-hidden` and `overflow-x-hidden` to prevent any horizontal scrolling
+  - **Responsive Metadata**: Date and file size always visible, tags limited to 2 with max-width truncation on desktop
+- **Technical Changes**:
+  - `ProjectDetails.tsx` - Restructured documents tab with sticky header wrapper, responsive viewMode initialization
+  - Added `DropdownMenu` for mobile file actions with all CRUD operations
+  - Applied `w-full max-w-full overflow-hidden` to document containers
+  - File list items use `min-w-0` for proper flexbox truncation
 
 ### February 3, 2026
 - **Collapsible Project Details Header**: Project details section at top of project tools pages is now collapsible
