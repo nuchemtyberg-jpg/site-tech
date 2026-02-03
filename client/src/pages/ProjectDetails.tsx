@@ -2015,8 +2015,8 @@ export default function ProjectDetails() {
                 {/* Starred Toggle */}
                 <Button
                   variant={showStarredOnly ? 'default' : 'outline'}
-                  size="sm"
-                  className="h-9 px-2 sm:px-3"
+                  size="icon"
+                  className="h-9 w-9 sm:w-auto sm:px-3"
                   onClick={() => {
                     setShowStarredOnly(!showStarredOnly);
                     if (!showStarredOnly) setCurrentFolderId(null);
@@ -2033,8 +2033,8 @@ export default function ProjectDetails() {
                 {/* Select Mode Toggle */}
                 <Button
                   variant={isFileSelectMode ? 'default' : 'outline'}
-                  size="sm"
-                  className="h-9 px-2 sm:px-3"
+                  size="icon"
+                  className="h-9 w-9 sm:w-auto sm:px-3"
                   onClick={() => {
                     setIsFileSelectMode(!isFileSelectMode);
                     if (isFileSelectMode) {
@@ -2085,7 +2085,7 @@ export default function ProjectDetails() {
                 <div className="flex flex-row items-center gap-2 sm:gap-3 shrink-0">
                   <Dialog open={isFolderOpen} onOpenChange={setIsFolderOpen}>
                     <DialogTrigger asChild>
-                      <Button variant="outline" size="sm" className="h-9 px-2 sm:px-3" data-testid="button-new-folder">
+                      <Button variant="outline" size="icon" className="h-9 w-9 sm:w-auto sm:px-3" data-testid="button-new-folder">
                         <FolderPlus className="w-4 h-4 sm:mr-2" />
                         <span className="hidden sm:inline">New Folder</span>
                       </Button>
@@ -2120,8 +2120,8 @@ export default function ProjectDetails() {
                     maxFileSize={52428800}
                     allowFolders={true}
                     buttonVariant="outline"
-                    buttonSize="sm"
-                    buttonClassName="h-9 px-2 sm:px-3"
+                    buttonSize="icon"
+                    buttonClassName="h-9 w-9 sm:w-auto sm:px-3"
                     onUploadComplete={handleUploadComplete}
                   >
                     <Upload className="w-4 h-4 sm:mr-2" />
