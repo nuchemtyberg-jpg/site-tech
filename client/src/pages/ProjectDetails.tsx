@@ -1985,7 +1985,7 @@ export default function ProjectDetails() {
                 <Button
                   variant={viewMode === 'grid' ? 'default' : 'ghost'}
                   size="icon"
-                  className="h-8 w-8"
+                  className="h-9 w-9"
                   onClick={() => setViewMode('grid')}
                   data-testid="button-view-grid"
                 >
@@ -1994,7 +1994,7 @@ export default function ProjectDetails() {
                 <Button
                   variant={viewMode === 'list' ? 'default' : 'ghost'}
                   size="icon"
-                  className="h-8 w-8"
+                  className="h-9 w-9"
                   onClick={() => setViewMode('list')}
                   data-testid="button-view-list"
                 >
@@ -2006,7 +2006,7 @@ export default function ProjectDetails() {
               <Button
                 variant={showStarredOnly ? 'default' : 'outline'}
                 size="icon"
-                className="h-8 w-8 sm:h-auto sm:w-auto sm:px-3"
+                className="h-9 w-9 sm:h-auto sm:w-auto sm:px-3"
                 onClick={() => {
                   setShowStarredOnly(!showStarredOnly);
                   if (!showStarredOnly) setCurrentFolderId(null);
@@ -2024,7 +2024,7 @@ export default function ProjectDetails() {
               <Button
                 variant={isFileSelectMode ? 'default' : 'outline'}
                 size="icon"
-                className="h-8 w-8 sm:h-auto sm:w-auto sm:px-3"
+                className="h-9 w-9 sm:h-auto sm:w-auto sm:px-3"
                 onClick={() => {
                   setIsFileSelectMode(!isFileSelectMode);
                   if (isFileSelectMode) {
@@ -2075,7 +2075,7 @@ export default function ProjectDetails() {
                 <>
                   <Dialog open={isFolderOpen} onOpenChange={setIsFolderOpen}>
                     <DialogTrigger asChild>
-                      <Button variant="outline" size="icon" className="h-8 w-8 sm:h-auto sm:w-auto sm:px-3" data-testid="button-new-folder">
+                      <Button variant="outline" size="icon" className="h-9 w-9 sm:h-auto sm:w-auto sm:px-3" data-testid="button-new-folder">
                         <FolderPlus className="w-4 h-4 sm:mr-2" />
                         <span className="hidden sm:inline">New Folder</span>
                       </Button>
@@ -2109,7 +2109,9 @@ export default function ProjectDetails() {
                     maxNumberOfFiles={50}
                     maxFileSize={52428800}
                     allowFolders={true}
-                    buttonClassName="h-8 w-8 sm:h-auto sm:w-auto sm:px-3 p-0 sm:p-2"
+                    buttonVariant="outline"
+                    buttonSize="icon"
+                    buttonClassName="h-9 w-9 sm:h-auto sm:w-auto sm:px-3"
                     onUploadComplete={handleUploadComplete}
                   >
                     <Upload className="w-4 h-4 sm:mr-2" />

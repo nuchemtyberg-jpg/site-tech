@@ -33,6 +33,8 @@ interface NativeFileUploaderProps {
   allowFolders?: boolean;
   onUploadComplete?: (files: Array<{ name: string; cloudinaryPublicId: string; cloudinaryUrl: string; size: number; type: string; width?: number; height?: number; takenAt?: Date; relativePath?: string }>) => void;
   buttonClassName?: string;
+  buttonVariant?: "default" | "destructive" | "outline" | "secondary" | "ghost" | "link";
+  buttonSize?: "default" | "sm" | "lg" | "icon";
   children: ReactNode;
 }
 
@@ -106,6 +108,8 @@ export function NativeFileUploader({
   allowFolders = false,
   onUploadComplete,
   buttonClassName,
+  buttonVariant = "default",
+  buttonSize = "default",
   children,
 }: NativeFileUploaderProps) {
   const [isOpen, setIsOpen] = useState(false);
@@ -291,6 +295,8 @@ export function NativeFileUploader({
     <>
       <Button 
         onClick={() => setIsOpen(true)} 
+        variant={buttonVariant}
+        size={buttonSize}
         className={buttonClassName} 
         data-testid="button-upload-files"
       >
