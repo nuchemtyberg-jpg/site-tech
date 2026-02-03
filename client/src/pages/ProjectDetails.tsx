@@ -1299,10 +1299,10 @@ export default function ProjectDetails() {
 
   return (
     <>
-    <div className="animate-enter">
-      {/* Fixed Header - uses fixed positioning on mobile for proper sticky behavior */}
-      <div className="fixed top-0 left-0 right-0 z-40 bg-background pb-2 md:pb-3 px-4 md:px-8 pt-2 md:relative md:top-auto md:left-auto md:right-auto md:-mx-8 shadow-sm md:shadow-none border-b border-border md:border-b-0">
-        <div className="flex flex-col gap-2 md:gap-3 max-w-7xl mx-auto">
+    <div className="animate-enter overflow-x-hidden">
+      {/* Fixed Header */}
+      <div className="sticky top-0 z-40 bg-background pb-3 md:pb-4 -mx-4 px-4 md:-mx-6 md:px-6 pt-1">
+        <div className="flex flex-col gap-2 md:gap-3">
           <Link href="/projects" className="text-muted-foreground hover:text-foreground flex items-center gap-2 transition-colors w-fit min-h-[44px] md:min-h-8" data-testid="link-back-to-projects">
             <ArrowLeft className="w-4 h-4" /> Back to Projects
           </Link>
@@ -1456,8 +1456,8 @@ export default function ProjectDetails() {
         </div>
       </div>
 
-      {/* Main content area - extra top padding on mobile for fixed header */}
-      <div className="space-y-6 md:space-y-8 pt-[140px] md:pt-4">
+      {/* Main content area with top padding for sticky header */}
+      <div className="space-y-6 md:space-y-8 pt-4">
 
         {/* Edit Project Dialog */}
         <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
