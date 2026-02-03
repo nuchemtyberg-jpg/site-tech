@@ -2150,7 +2150,7 @@ export default function ProjectDetails() {
           </div>
 
           {/* Scrollable Document Content */}
-          <div className="flex-1 overflow-y-auto md:overflow-visible">
+          <div className="flex-1 overflow-y-auto overflow-x-hidden md:overflow-visible">
           {(isFilesLoading || isFoldersLoading) ? (
             <div className="py-10 text-center text-muted-foreground">Loading documents...</div>
           ) : (filteredFolders.length === 0 && allFiles.length === 0) ? (
@@ -2163,7 +2163,7 @@ export default function ProjectDetails() {
               </p>
             </div>
           ) : (
-            <div className="space-y-4">
+            <div className="space-y-4 w-full max-w-full overflow-hidden">
               {/* Folders */}
               {!showStarredOnly && filteredFolders.length > 0 && (
                 <div className="grid gap-2">
@@ -2370,12 +2370,12 @@ export default function ProjectDetails() {
 
               {/* Files - List View */}
               {viewMode === 'list' && allFiles.length > 0 && (
-                <div className="grid gap-2">
+                <div className="grid gap-2 w-full max-w-full overflow-hidden">
                   {allFiles.map((file: FileMetadata) => (
                     <div 
                       key={file.id} 
                       className={cn(
-                        "group bg-card border rounded-lg p-3 hover:border-primary/50 transition-all flex items-center justify-between gap-2",
+                        "group bg-card border rounded-lg p-3 hover:border-primary/50 transition-all flex items-center gap-2 w-full max-w-full overflow-hidden",
                         selectedFiles.has(file.id) ? "border-primary ring-2 ring-primary/30" : "border-border"
                       )} 
                       data-testid={`file-item-${file.id}`}
@@ -2435,7 +2435,7 @@ export default function ProjectDetails() {
                       </button>
                       {!isFileSelectMode && (
                         <div className="flex gap-1 shrink-0">
-                          {/* Star button */}
+                          {/* Star button - always visible */}
                           <Button
                             variant="ghost"
                             size="icon"
@@ -2445,10 +2445,11 @@ export default function ProjectDetails() {
                           >
                             <Star className={cn("w-4 h-4", file.starred && "fill-current")} />
                           </Button>
+                          {/* Other action buttons - hidden on mobile */}
                           <Button 
                             variant="ghost" 
                             size="icon" 
-                            className="opacity-0 group-hover:opacity-100 h-8 w-8"
+                            className="hidden sm:flex opacity-0 group-hover:opacity-100 h-8 w-8"
                             onClick={() => setFileDetailsPanel(file)}
                             data-testid={`button-info-file-${file.id}`}
                           >
@@ -2457,7 +2458,7 @@ export default function ProjectDetails() {
                           <Button 
                             variant="ghost" 
                             size="icon" 
-                            className="opacity-0 group-hover:opacity-100 h-8 w-8"
+                            className="hidden sm:flex opacity-0 group-hover:opacity-100 h-8 w-8"
                             onClick={() => {
                               setRenamingFile(file);
                               setRenameValue(file.name);
@@ -2469,7 +2470,7 @@ export default function ProjectDetails() {
                           <Button 
                             variant="ghost" 
                             size="icon" 
-                            className="opacity-0 group-hover:opacity-100 h-8 w-8"
+                            className="hidden sm:flex opacity-0 group-hover:opacity-100 h-8 w-8"
                             onClick={() => {
                               setEditingFile(file);
                               setEditFileTags(file.tags || []);
@@ -2481,7 +2482,7 @@ export default function ProjectDetails() {
                           <Button 
                             variant="ghost" 
                             size="icon" 
-                            className="opacity-0 group-hover:opacity-100 h-8 w-8"
+                            className="hidden sm:flex opacity-0 group-hover:opacity-100 h-8 w-8"
                             onClick={() => handleDirectDownload(file)}
                             data-testid={`button-download-file-${file.id}`}
                           >
@@ -2490,7 +2491,7 @@ export default function ProjectDetails() {
                           <Button 
                             variant="ghost" 
                             size="icon" 
-                            className="opacity-0 group-hover:opacity-100 h-8 w-8"
+                            className="hidden sm:flex opacity-0 group-hover:opacity-100 h-8 w-8"
                             onClick={() => setDeleteFileId(file.id)}
                             data-testid={`button-delete-file-${file.id}`}
                           >
