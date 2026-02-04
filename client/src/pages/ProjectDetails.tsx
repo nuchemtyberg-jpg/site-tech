@@ -1930,14 +1930,14 @@ export default function ProjectDetails() {
           )}
         </TabsContent>
 
-        <TabsContent value="documents" className="flex flex-col h-[calc(100vh-180px)] md:h-auto md:block overflow-hidden">
+        <TabsContent value="documents" className="flex flex-col h-[calc(100vh-180px)] overflow-hidden">
           {/* Drag and Drop Zone Wrapper */}
           <div
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
             className={cn(
-              "relative rounded-lg transition-all flex flex-col h-full md:h-auto",
+              "relative rounded-lg transition-all flex flex-col h-full",
               isDragOver && "ring-2 ring-primary ring-offset-2 bg-primary/5"
             )}
           >
@@ -2149,7 +2149,7 @@ export default function ProjectDetails() {
           </div>
 
           {/* Scrollable Document Content */}
-          <div className="flex-1 overflow-y-auto overflow-x-hidden md:overflow-visible">
+          <div className="flex-1 overflow-y-auto overflow-x-hidden">
           {(isFilesLoading || isFoldersLoading) ? (
             <div className="py-10 text-center text-muted-foreground">Loading documents...</div>
           ) : (filteredFolders.length === 0 && allFiles.length === 0) ? (
