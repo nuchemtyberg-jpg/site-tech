@@ -161,8 +161,8 @@ export function DailyReportsTab({ project, onFormVisibilityChange }: DailyReport
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      {/* Sticky Header */}
-      <div className="shrink-0 pb-3 bg-background">
+      {/* Fixed Header */}
+      <div className="bg-background pb-3 shrink-0">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <h3 className="text-lg font-semibold text-foreground">Daily Reports</h3>
           <Button onClick={() => setShowNewReportDialog(true)} data-testid="button-new-report" className="h-11 w-full sm:h-9 sm:w-auto">
@@ -172,7 +172,7 @@ export function DailyReportsTab({ project, onFormVisibilityChange }: DailyReport
       </div>
 
       {/* Scrollable Content */}
-      <div className="flex-1 overflow-y-auto space-y-4">
+      <div className="flex-1 overflow-y-auto overflow-x-hidden space-y-4">
 
       {reports.length === 0 ? (
         <Card>
