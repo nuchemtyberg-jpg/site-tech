@@ -1989,6 +1989,7 @@ export default function ProjectDetails() {
                   <Button
                     variant={viewMode === 'grid' ? 'default' : 'ghost'}
                     size="icon"
+                    className="h-9 w-9"
                     onClick={() => setViewMode('grid')}
                     data-testid="button-view-grid"
                   >
@@ -1997,6 +1998,7 @@ export default function ProjectDetails() {
                   <Button
                     variant={viewMode === 'list' ? 'default' : 'ghost'}
                     size="icon"
+                    className="h-9 w-9"
                     onClick={() => setViewMode('list')}
                     data-testid="button-view-list"
                   >

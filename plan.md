@@ -465,18 +465,6 @@ Protected Routes:
 
 ## Changelog
 
-### February 4, 2026
-- **Document Action Button Improvements**: Comprehensive button styling updates for consistency across mobile and desktop
-  - **Square Buttons on Mobile**: All document action buttons (Starred, Select, New Folder, Upload, View Toggle) now display as 44x44px squares on mobile for consistent touch targets
-  - **Expanded Buttons on Desktop**: Buttons expand with text labels on desktop using `sm:w-auto sm:px-4` responsive classes
-  - **Icon Centering**: Icons properly centered in buttons with `inline-flex items-center justify-center gap-2`
-  - **View Toggle Sizing**: Grid/List toggle buttons now match other action button sizes
-  - **Button Component Integration**: Uses `size="icon"` from Button component for consistent mobile sizing (h-11 w-11 on mobile, md:h-9 md:w-9 on desktop)
-- **Sticky Header on Desktop**: Document page header, search bar, and action buttons now stay fixed at top while files/folders scroll
-  - Removed `md:h-auto` and `md:overflow-visible` classes to maintain fixed layout on all screen sizes
-  - Content area uses `flex-1 overflow-y-auto` for scrollable document list
-- **List View Default**: Changed default document view mode to list view on all screen sizes (was grid on desktop)
-
 ### February 3, 2026 (Evening)
 - **Mobile Document View Optimization**: Comprehensive mobile-first redesign of the project documents page
   - **Sticky Header on Mobile**: Search bar, view toggles, action buttons, and breadcrumbs fixed at top while documents scroll
