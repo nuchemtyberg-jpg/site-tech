@@ -725,35 +725,36 @@ export default function DailyReportPage() {
     <div className="min-h-screen bg-background">
       {/* Header */}
       <div className="sticky top-0 z-10 bg-card border-b">
-        <div className="flex items-center justify-between p-4">
-          <div className="flex items-center gap-3">
+        <div className="flex items-center justify-between gap-2 px-3 py-2 md:px-4 md:py-3">
+          <div className="flex items-center gap-2 md:gap-3 min-w-0 flex-1">
             <Button variant="ghost" size="icon" onClick={() => isCompleted ? setLocation(`/projects/${projectId}?tab=daily-reports`) : navigateWithCheck(`/projects/${projectId}?tab=daily-reports`)}>
               <ArrowLeft className="h-5 w-5" />
             </Button>
-            <div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-lg font-semibold text-foreground">
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h1 className="text-base md:text-lg font-semibold text-foreground truncate">
                   Daily Report - {safeFormatDate(report.reportDate, 'MMM d, yyyy')}
                 </h1>
                 {isCompleted && (
-                  <Badge variant="default" className="bg-green-600">
+                  <Badge variant="default" className="bg-green-600 shrink-0">
                     <CheckCircle className="h-3 w-3 mr-1" /> Completed
                   </Badge>
                 )}
               </div>
-              <p className="text-sm text-muted-foreground">{project?.name}</p>
+              <p className="text-sm text-muted-foreground truncate">{project?.name}</p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
                   variant="outline"
-                  size="sm"
+                  className="h-11 w-11 p-0 sm:h-9 sm:w-auto sm:px-4 inline-flex items-center justify-center gap-2"
                   data-testid="button-download-pdf"
                 >
-                  <Download className="h-4 w-4 mr-2" /> Download PDF
-                  <ChevronDown className="h-3 w-3 ml-1" />
+                  <Download className="h-4 w-4 shrink-0" />
+                  <span className="hidden sm:inline">Download PDF</span>
+                  <ChevronDown className="h-3 w-3 hidden sm:inline" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
@@ -776,25 +777,31 @@ export default function DailyReportPage() {
             {isCompleted ? (
               <Button
                 variant="outline"
+                className="h-11 w-11 p-0 sm:h-9 sm:w-auto sm:px-4 inline-flex items-center justify-center gap-2"
                 onClick={() => setLocation(`/projects/${projectId}?tab=daily-reports`)}
                 data-testid="button-close-report"
               >
-                Close
+                <X className="h-4 w-4 shrink-0 sm:hidden" />
+                <span className="hidden sm:inline">Close</span>
               </Button>
             ) : (
               <>
                 <Button
                   variant="outline"
+                  className="h-11 w-11 p-0 sm:h-9 sm:w-auto sm:px-4 inline-flex items-center justify-center gap-2"
                   onClick={handleSaveAndClose}
                   data-testid="button-save"
                 >
-                  <Save className="h-4 w-4 mr-2" /> Save & Close
+                  <Save className="h-4 w-4 shrink-0" />
+                  <span className="hidden sm:inline">Save & Close</span>
                 </Button>
                 <Button
+                  className="h-11 w-11 p-0 sm:h-9 sm:w-auto sm:px-4 inline-flex items-center justify-center gap-2"
                   onClick={handleCompleteAndSign}
                   data-testid="button-complete-sign"
                 >
-                  <PenLine className="h-4 w-4 mr-2" /> Complete & Sign
+                  <PenLine className="h-4 w-4 shrink-0" />
+                  <span className="hidden sm:inline">Complete & Sign</span>
                 </Button>
               </>
             )}
