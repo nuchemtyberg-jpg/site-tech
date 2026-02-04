@@ -722,9 +722,9 @@ export default function DailyReportPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Header */}
-      <div className="sticky top-0 z-10 bg-card border-b">
+    <div className="h-screen flex flex-col bg-background overflow-hidden">
+      {/* Fixed Header */}
+      <div className="shrink-0 bg-card border-b z-10">
         <div className="flex items-center justify-between gap-2 px-3 py-2 md:px-4 md:py-3">
           <div className="flex items-center gap-2 md:gap-3 min-w-0 flex-1">
             <Button variant="ghost" size="icon" onClick={() => isCompleted ? setLocation(`/projects/${projectId}?tab=daily-reports`) : navigateWithCheck(`/projects/${projectId}?tab=daily-reports`)}>
@@ -809,7 +809,9 @@ export default function DailyReportPage() {
         </div>
       </div>
 
-      <div className="max-w-4xl mx-auto p-6 space-y-6">
+      {/* Scrollable Content */}
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-4xl mx-auto p-6 space-y-6">
         {/* Weather Section */}
         {report.weatherSummary && (
           <Card className="bg-blue-50 dark:bg-blue-950 border-blue-200 dark:border-blue-800">
@@ -1338,6 +1340,7 @@ export default function DailyReportPage() {
             />
           </CardContent>
         </Card>
+        </div>
       </div>
 
       {/* Add Task Dialog */}
