@@ -311,13 +311,7 @@ export default function ProjectDetails() {
     navigate(newSearch ? `?${newSearch}` : location.split('?')[0], { replace: false });
   };
   const [viewingFile, setViewingFile] = useState<FileMetadata | Photo | null>(null);
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>(() => {
-    // Default to list view on mobile, grid on desktop
-    if (typeof window !== 'undefined') {
-      return window.innerWidth < 640 ? 'list' : 'grid';
-    }
-    return 'grid';
-  });
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('list');
   const currentFolderIdRef = useRef<number | null>(null);
   
   // Document search and selection state
