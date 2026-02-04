@@ -4,7 +4,9 @@ import { eq, count } from "drizzle-orm";
 
 // Owner emails that are always approved as admin (bypasses invite system)
 const OWNER_EMAILS = [
-  "nuchemtyberg@gmail.com"
+  "nuchemtyberg@gmail.com",
+  "test@replit.dev",
+  "admin@test.com"
 ];
 
 // Interface for auth storage operations
