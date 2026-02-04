@@ -2556,7 +2556,7 @@ export default function ProjectDetails() {
           </TabsContent>
         )}
 
-        <TabsContent value="daily-reports" className="space-y-4 overflow-x-hidden">
+        <TabsContent value="daily-reports" className="flex flex-col h-[calc(100vh-180px)] overflow-hidden">
           {project && <DailyReportsTab project={project} onFormVisibilityChange={setDailyReportsFormOpen} />}
         </TabsContent>
       </Tabs>
