@@ -34,7 +34,7 @@ class AuthStorage implements IAuthStorage {
   async upsertUser(userData: UpsertUser): Promise<User> {
     const userId = userData.id as string;
     
-    // Check if user already exists
+    // Check if user already exists by ID
     const existingUser = await this.getUser(userId);
     
     // Check if this is an owner email
@@ -42,7 +42,7 @@ class AuthStorage implements IAuthStorage {
     const isOwner = userEmail && OWNER_EMAILS.includes(userEmail);
     
     if (existingUser) {
-      // User exists - if owner, ensure they're admin/approved
+      // User exists by ID - update them
       const updateData: any = {
         firstName: userData.firstName,
         lastName: userData.lastName,
@@ -63,6 +63,34 @@ class AuthStorage implements IAuthStorage {
         .where(eq(users.id, userId))
         .returning();
       return user;
+    }
+    
+    // Check if user exists by email (different ID but same email - e.g., test scenarios)
+    // Note: We keep the existing user ID to preserve any foreign key references
+    if (userData.email) {
+      const [existingByEmail] = await db.select().from(users).where(eq(users.email, userData.email));
+      if (existingByEmail) {
+        // Update the existing user's data but keep the original ID
+        const updateData: any = {
+          firstName: userData.firstName,
+          lastName: userData.lastName,
+          profileImageUrl: userData.profileImageUrl,
+          updatedAt: new Date(),
+        };
+        
+        // Auto-approve owners
+        if (isOwner && (existingByEmail.role !== "admin" || existingByEmail.isAuthorized !== "approved")) {
+          updateData.role = "admin";
+          updateData.isAuthorized = "approved";
+        }
+        
+        const [user] = await db
+          .update(users)
+          .set(updateData)
+          .where(eq(users.email, userData.email))
+          .returning();
+        return user;
+      }
     }
     
     // New user - determine role and authorization status

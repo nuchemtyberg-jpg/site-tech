@@ -161,12 +161,13 @@ export function DailyReportsTab({ project, onFormVisibilityChange }: DailyReport
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      {/* Fixed Header */}
-      <div className="bg-background pb-3 shrink-0">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+      {/* Sticky Header */}
+      <div className="sticky top-0 z-20 bg-background pb-3 shrink-0">
+        <div className="flex flex-row items-center justify-between gap-2">
           <h3 className="text-lg font-semibold text-foreground">Daily Reports</h3>
-          <Button onClick={() => setShowNewReportDialog(true)} data-testid="button-new-report" className="h-11 w-full sm:h-9 sm:w-auto">
-            <Plus className="w-4 h-4 mr-2" /> Create New Report
+          <Button onClick={() => setShowNewReportDialog(true)} data-testid="button-new-report" className="h-11 w-11 p-0 sm:h-9 sm:w-auto sm:px-4 inline-flex items-center justify-center gap-2">
+            <Plus className="w-4 h-4 shrink-0" />
+            <span className="hidden sm:inline">Create New Report</span>
           </Button>
         </div>
       </div>
