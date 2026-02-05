@@ -160,9 +160,9 @@ export function DailyReportsTab({ project, onFormVisibilityChange }: DailyReport
   }
 
   return (
-    <div className="flex flex-col h-full overflow-hidden">
-      {/* Sticky Header */}
-      <div className="sticky top-0 z-20 bg-background pb-3 shrink-0">
+    <div className="flex flex-col h-full">
+      {/* Fixed Header - not sticky, just fixed at top of flex container */}
+      <div className="shrink-0 pb-3">
         <div className="flex flex-row items-center justify-between gap-2">
           <h3 className="text-lg font-semibold text-foreground">Daily Reports</h3>
           <Button onClick={() => setShowNewReportDialog(true)} data-testid="button-new-report" className="h-11 w-11 p-0 sm:h-9 sm:w-auto sm:px-4 inline-flex items-center justify-center gap-2">
