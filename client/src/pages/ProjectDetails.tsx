@@ -1924,7 +1924,8 @@ export default function ProjectDetails() {
           )}
         </TabsContent>
 
-        <TabsContent value="documents" className="flex flex-col h-[calc(100vh-180px)] overflow-hidden">
+        <TabsContent value="documents">
+          <div className="flex flex-col h-[calc(100vh-180px)] overflow-hidden">
           {/* Drag and Drop Zone Wrapper */}
           <div
             onDragOver={handleDragOver}
@@ -2546,6 +2547,7 @@ export default function ProjectDetails() {
           {/* End Scrollable Document Content */}
           </div>
           {/* End Drag and Drop Zone Wrapper */}
+          </div>
         </TabsContent>
 
         {activeTab === "photos" && (
@@ -2556,8 +2558,10 @@ export default function ProjectDetails() {
           </TabsContent>
         )}
 
-        <TabsContent value="daily-reports" className="flex flex-col h-[calc(100vh-180px)] overflow-hidden">
-          {project && <DailyReportsTab project={project} onFormVisibilityChange={setDailyReportsFormOpen} />}
+        <TabsContent value="daily-reports">
+          <div className="flex flex-col h-[calc(100vh-180px)] overflow-hidden">
+            {project && <DailyReportsTab project={project} onFormVisibilityChange={setDailyReportsFormOpen} />}
+          </div>
         </TabsContent>
       </Tabs>
 
