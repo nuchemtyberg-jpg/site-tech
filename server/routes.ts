@@ -10,6 +10,10 @@ import { insertAuthorizedUserSchema } from "@shared/schema";
 import { isAdmin, isAuthorizedUser } from "./middleware/auth";
 import { sendInviteEmail } from "./services/email";
 import { generateUploadSignature, deleteFromCloudinary } from "./services/cloudinary";
+import {
+  isOutlookConfigured, getAuthUrl, exchangeCodeForTokens, getRedirectUri,
+  syncProjectEmails, getAttachmentContent, validateOAuthState
+} from "./services/outlook";
 
 // Weather fetch helper using Open-Meteo API
 async function fetchWeatherData(address: string, city: string, state: string): Promise<{
@@ -1936,6 +1940,157 @@ export async function registerRoutes(
 
   app.delete(api.deliveriesApi.delete.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
     await storage.deleteDelivery(Number(req.params.id));
+    res.status(204).send();
+  });
+
+  // ===== Project Email / Outlook Integration Routes =====
+
+  app.get("/api/outlook/configured", isAuthenticated, isAuthorizedUser, async (req, res) => {
+    res.json({ configured: isOutlookConfigured() });
+  });
+
+  app.get("/api/projects/:projectId/email-connection", isAuthenticated, isAuthorizedUser, async (req, res) => {
+    const projectId = Number(req.params.projectId);
+    const connection = await storage.getProjectEmailConnection(projectId);
+    if (!connection) {
+      return res.json({ connected: false });
+    }
+    res.json({
+      connected: true,
+      emailAddress: connection.emailAddress,
+      status: connection.status,
+      lastSyncAt: connection.lastSyncAt,
+      connectedByName: connection.connectedByName,
+    });
+  });
+
+  app.get("/api/outlook/auth/:projectId", isAuthenticated, isAuthorizedUser, async (req, res) => {
+    try {
+      const projectId = Number(req.params.projectId);
+      const authUrl = getAuthUrl(projectId);
+      res.json({ authUrl });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message || "Failed to generate auth URL" });
+    }
+  });
+
+  app.get("/api/outlook/callback", isAuthenticated, isAuthorizedUser, async (req, res) => {
+    try {
+      const { code, state, error } = req.query;
+      if (error) {
+        return res.redirect(`/?outlook_error=${encodeURIComponent(String(error))}`);
+      }
+      if (!code || !state) {
+        return res.redirect("/?outlook_error=missing_params");
+      }
+
+      const projectId = validateOAuthState(String(state));
+      if (projectId === null) {
+        return res.redirect("/?outlook_error=invalid_or_expired_state");
+      }
+
+      const tokens = await exchangeCodeForTokens(String(code));
+
+      const user = req.user as any;
+      const existing = await storage.getProjectEmailConnection(projectId);
+      if (existing) {
+        await storage.updateProjectEmailConnection(existing.id, {
+          accessToken: tokens.accessToken,
+          refreshToken: tokens.refreshToken,
+          tokenExpiresAt: new Date(Date.now() + tokens.expiresIn * 1000),
+          emailAddress: tokens.email,
+          status: "active",
+        });
+      } else {
+        await storage.createProjectEmailConnection({
+          projectId,
+          emailAddress: tokens.email,
+          accessToken: tokens.accessToken,
+          refreshToken: tokens.refreshToken,
+          tokenExpiresAt: new Date(Date.now() + tokens.expiresIn * 1000),
+          status: "active",
+          connectedBy: user?.claims?.sub || null,
+          connectedByName: user?.claims?.first_name
+            ? `${user.claims.first_name} ${user.claims.last_name || ""}`.trim()
+            : null,
+        });
+      }
+
+      try {
+        await syncProjectEmails(projectId);
+      } catch (syncErr) {
+        console.error("Initial sync failed:", syncErr);
+      }
+
+      res.redirect(`/projects/${projectId}?tab=communications&outlook_connected=true`);
+    } catch (err: any) {
+      console.error("Outlook callback error:", err);
+      res.redirect(`/?outlook_error=${encodeURIComponent(err.message || "callback_failed")}`);
+    }
+  });
+
+  app.post("/api/projects/:projectId/emails/sync", isAuthenticated, isAuthorizedUser, async (req, res) => {
+    try {
+      const projectId = Number(req.params.projectId);
+      const result = await syncProjectEmails(projectId);
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message || "Sync failed" });
+    }
+  });
+
+  app.get("/api/projects/:projectId/emails", isAuthenticated, isAuthorizedUser, async (req, res) => {
+    const projectId = Number(req.params.projectId);
+    const { filter, search, limit, offset } = req.query;
+
+    const options: { isInternal?: boolean; search?: string; limit?: number; offset?: number } = {};
+    if (filter === "internal") options.isInternal = true;
+    if (filter === "external") options.isInternal = false;
+    if (search) options.search = String(search);
+    if (limit) options.limit = Number(limit);
+    if (offset) options.offset = Number(offset);
+
+    const emails = await storage.getProjectEmails(projectId, options);
+    const total = await storage.getProjectEmailsCount(
+      projectId,
+      filter === "internal" ? true : filter === "external" ? false : undefined,
+      search ? String(search) : undefined
+    );
+
+    res.json({ emails, total });
+  });
+
+  app.get("/api/projects/:projectId/emails/:emailId", isAuthenticated, isAuthorizedUser, async (req, res) => {
+    const projectId = Number(req.params.projectId);
+    const email = await storage.getProjectEmail(Number(req.params.emailId));
+    if (!email || email.projectId !== projectId) return res.status(404).json({ message: "Email not found" });
+    const attachments = await storage.getProjectEmailAttachments(email.id);
+    res.json({ ...email, attachments });
+  });
+
+  app.get("/api/projects/:projectId/emails/:emailId/attachments/:attachmentId/download", isAuthenticated, isAuthorizedUser, async (req, res) => {
+    try {
+      const projectId = Number(req.params.projectId);
+      const email = await storage.getProjectEmail(Number(req.params.emailId));
+      if (!email || email.projectId !== projectId) return res.status(404).json({ message: "Email not found" });
+
+      const attachments = await storage.getProjectEmailAttachments(email.id);
+      const att = attachments.find(a => a.id === Number(req.params.attachmentId));
+      if (!att) return res.status(404).json({ message: "Attachment not found" });
+
+      const content = await getAttachmentContent(projectId, email.outlookMessageId, att.outlookAttachmentId);
+      if (!content) return res.status(404).json({ message: "Attachment content not available" });
+
+      res.setHeader("Content-Type", content.contentType);
+      res.setHeader("Content-Disposition", `attachment; filename="${content.name}"`);
+      res.send(content.content);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message || "Failed to download attachment" });
+    }
+  });
+
+  app.delete("/api/projects/:projectId/email-connection", isAuthenticated, isAdmin, async (req, res) => {
+    await storage.deleteProjectEmailConnection(Number(req.params.projectId));
     res.status(204).send();
   });
 

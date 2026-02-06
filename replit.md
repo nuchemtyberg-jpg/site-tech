@@ -61,6 +61,16 @@ Key entities defined in `shared/schema.ts` include: Projects, Tasks, TaskStatusH
 - **Daily Report Weather Integration**: Open-Meteo geocoding and weather APIs for local weather conditions.
 - **Signature Capture**: Freehand or typed signatures for completing daily reports.
 
+### Project Communications (Outlook Email Integration)
+- **Purpose**: Centralized, auditable view of all project-related email correspondence
+- **Flow**: Each project can be connected to a dedicated Outlook email account via OAuth. Team members CC this address on customer emails (preserving sender identity) or email it directly for internal discussions.
+- **Classification**: Emails are automatically classified as internal/external based on whether the project's customer email is in the recipients list
+- **Backend**: `server/services/outlook.ts` handles OAuth flow, token refresh, email sync via Microsoft Graph API, and attachment content retrieval
+- **Storage**: Three tables - `projectEmailConnections` (OAuth tokens per project), `projectEmails` (synced email data with full-text search), `projectEmailAttachments` (attachment metadata)
+- **Frontend**: `client/src/components/CommunicationsTab.tsx` - accessible via FloatingProjectTools "Communications" tab on project details page
+- **Features**: Full-text search, internal/external filtering, HTML email rendering, attachment viewing and downloading
+- **Configuration**: Requires `OUTLOOK_CLIENT_ID`, `OUTLOOK_CLIENT_SECRET`, `OUTLOOK_TENANT_ID` environment variables (user deferred setup - will add Azure credentials later)
+
 ### Build System
 - **Development**: Vite dev server with HMR.
 - **Production**: esbuild for server, Vite for client.

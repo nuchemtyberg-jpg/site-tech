@@ -7,6 +7,7 @@ import { lazy, Suspense } from "react";
 
 const PhotosTab = lazy(() => import("@/components/PhotosTab"));
 import { FloatingProjectTools } from "@/components/FloatingProjectTools";
+import { CommunicationsTab } from "@/components/CommunicationsTab";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { 
@@ -296,7 +297,7 @@ export default function ProjectDetails() {
   const activeTab = useMemo(() => {
     const params = new URLSearchParams(search);
     const tab = params.get("tab");
-    return tab && ["tasks", "documents", "photos", "daily-reports"].includes(tab) ? tab : "documents";
+    return tab && ["tasks", "documents", "photos", "daily-reports", "communications"].includes(tab) ? tab : "documents";
   }, [search]);
 
   // Update URL when tab changes using wouter navigation
@@ -2562,6 +2563,10 @@ export default function ProjectDetails() {
           <div className="flex flex-col h-[calc(100vh-180px)] overflow-hidden">
             {project && <DailyReportsTab project={project} onFormVisibilityChange={setDailyReportsFormOpen} />}
           </div>
+        </TabsContent>
+
+        <TabsContent value="communications">
+          {project && <CommunicationsTab project={project} />}
         </TabsContent>
       </Tabs>
 

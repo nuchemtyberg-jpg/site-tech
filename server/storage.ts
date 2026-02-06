@@ -3,19 +3,22 @@ import {
   reportTasks, laborEntries, equipmentEntries, reportTaskPhotos, deliveries, deliveryPhotos,
   dailyReportTaskEntries, dailyReportLaborLines, dailyReportEquipmentLines, dailyReportDeliveryEntries, dailyReportPhotos,
   authorizedUsers,
+  projectEmailConnections, projectEmails, projectEmailAttachments,
   type InsertProject, type InsertTask, type InsertEquipment, type InsertAllocation, type InsertFolder, type InsertFileMetadata, type InsertPhoto,
   type InsertCustomer, type InsertDailyReport, type InsertMaintenanceLog, type InsertCommunication, type InsertTaskStatusHistory, type InsertPhotoAlbum,
   type InsertReportTask, type InsertLaborEntry, type InsertEquipmentEntry, type InsertReportTaskPhoto, type InsertDelivery, type InsertDeliveryPhoto,
   type InsertDailyReportTaskEntry, type InsertDailyReportLaborLine, type InsertDailyReportEquipmentLine, type InsertDailyReportDeliveryEntry, type InsertDailyReportPhoto,
   type InsertAuthorizedUser,
+  type InsertProjectEmailConnection, type InsertProjectEmail, type InsertProjectEmailAttachment,
   type Project, type Task, type Equipment, type Allocation, type Folder, type FileMetadata, type Photo,
   type Customer, type DailyReport, type MaintenanceLog, type Communication, type TaskStatusHistory, type PhotoAlbum,
   type ReportTask, type LaborEntry, type EquipmentEntry, type ReportTaskPhoto, type Delivery, type DeliveryPhoto,
   type DailyReportTaskEntry, type DailyReportLaborLine, type DailyReportEquipmentLine, type DailyReportDeliveryEntry, type DailyReportPhoto,
+  type ProjectEmailConnection, type ProjectEmail, type ProjectEmailAttachment,
   type User, type UpsertUser, type AuthorizedUser
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, and, isNull, sql, lt } from "drizzle-orm";
+import { eq, desc, and, or, isNull, sql, lt, ilike } from "drizzle-orm";
 
 export interface IStorage {
   // Auth
@@ -196,6 +199,23 @@ export interface IStorage {
   getDailyReportPhotos(reportId?: number, taskEntryId?: number, deliveryEntryId?: number): Promise<DailyReportPhoto[]>;
   createDailyReportPhoto(photo: InsertDailyReportPhoto): Promise<DailyReportPhoto>;
   deleteDailyReportPhoto(id: number): Promise<void>;
+
+  // Project Email Connections
+  getProjectEmailConnection(projectId: number): Promise<ProjectEmailConnection | undefined>;
+  createProjectEmailConnection(conn: InsertProjectEmailConnection): Promise<ProjectEmailConnection>;
+  updateProjectEmailConnection(id: number, updates: Partial<InsertProjectEmailConnection>): Promise<ProjectEmailConnection>;
+  deleteProjectEmailConnection(projectId: number): Promise<void>;
+
+  // Project Emails
+  getProjectEmails(projectId: number, options?: { isInternal?: boolean; search?: string; limit?: number; offset?: number }): Promise<ProjectEmail[]>;
+  getProjectEmail(id: number): Promise<ProjectEmail | undefined>;
+  getProjectEmailByOutlookId(projectId: number, outlookMessageId: string): Promise<ProjectEmail | undefined>;
+  createProjectEmail(email: InsertProjectEmail): Promise<ProjectEmail>;
+  getProjectEmailsCount(projectId: number, isInternal?: boolean, search?: string): Promise<number>;
+
+  // Project Email Attachments
+  getProjectEmailAttachments(emailId: number): Promise<ProjectEmailAttachment[]>;
+  createProjectEmailAttachment(att: InsertProjectEmailAttachment): Promise<ProjectEmailAttachment>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -940,6 +960,98 @@ export class DatabaseStorage implements IStorage {
     }
 
     return { prevSnapshot, nextSnapshot };
+  }
+
+  // Project Email Connections
+  async getProjectEmailConnection(projectId: number): Promise<ProjectEmailConnection | undefined> {
+    const [conn] = await db.select().from(projectEmailConnections).where(eq(projectEmailConnections.projectId, projectId));
+    return conn;
+  }
+
+  async createProjectEmailConnection(conn: InsertProjectEmailConnection): Promise<ProjectEmailConnection> {
+    const [result] = await db.insert(projectEmailConnections).values(conn).returning();
+    return result;
+  }
+
+  async updateProjectEmailConnection(id: number, updates: Partial<InsertProjectEmailConnection>): Promise<ProjectEmailConnection> {
+    const [result] = await db.update(projectEmailConnections).set(updates).where(eq(projectEmailConnections.id, id)).returning();
+    return result;
+  }
+
+  async deleteProjectEmailConnection(projectId: number): Promise<void> {
+    await db.delete(projectEmailConnections).where(eq(projectEmailConnections.projectId, projectId));
+  }
+
+  // Project Emails
+  async getProjectEmails(projectId: number, options?: { isInternal?: boolean; search?: string; limit?: number; offset?: number }): Promise<ProjectEmail[]> {
+    const conditions = [eq(projectEmails.projectId, projectId)];
+
+    if (options?.isInternal !== undefined) {
+      conditions.push(eq(projectEmails.isInternal, options.isInternal));
+    }
+
+    if (options?.search) {
+      const pattern = `%${options.search}%`;
+      conditions.push(
+        or(
+          ilike(projectEmails.subject, pattern),
+          ilike(projectEmails.fromEmail, pattern),
+          ilike(projectEmails.fromName, pattern)
+        )!
+      );
+    }
+
+    return await db.select().from(projectEmails)
+      .where(and(...conditions))
+      .orderBy(desc(projectEmails.receivedAt))
+      .limit(options?.limit ?? 50)
+      .offset(options?.offset ?? 0);
+  }
+
+  async getProjectEmail(id: number): Promise<ProjectEmail | undefined> {
+    const [email] = await db.select().from(projectEmails).where(eq(projectEmails.id, id));
+    return email;
+  }
+
+  async getProjectEmailByOutlookId(projectId: number, outlookMessageId: string): Promise<ProjectEmail | undefined> {
+    const [email] = await db.select().from(projectEmails).where(
+      and(eq(projectEmails.projectId, projectId), eq(projectEmails.outlookMessageId, outlookMessageId))
+    );
+    return email;
+  }
+
+  async createProjectEmail(email: InsertProjectEmail): Promise<ProjectEmail> {
+    const [result] = await db.insert(projectEmails).values(email).returning();
+    return result;
+  }
+
+  async getProjectEmailsCount(projectId: number, isInternal?: boolean, search?: string): Promise<number> {
+    const conditions = [eq(projectEmails.projectId, projectId)];
+    if (isInternal !== undefined) {
+      conditions.push(eq(projectEmails.isInternal, isInternal));
+    }
+    if (search) {
+      const pattern = `%${search}%`;
+      conditions.push(
+        or(
+          ilike(projectEmails.subject, pattern),
+          ilike(projectEmails.fromEmail, pattern),
+          ilike(projectEmails.fromName, pattern)
+        )!
+      );
+    }
+    const [result] = await db.select({ count: sql<number>`count(*)` }).from(projectEmails).where(and(...conditions));
+    return Number(result.count);
+  }
+
+  // Project Email Attachments
+  async getProjectEmailAttachments(emailId: number): Promise<ProjectEmailAttachment[]> {
+    return await db.select().from(projectEmailAttachments).where(eq(projectEmailAttachments.emailId, emailId));
+  }
+
+  async createProjectEmailAttachment(att: InsertProjectEmailAttachment): Promise<ProjectEmailAttachment> {
+    const [result] = await db.insert(projectEmailAttachments).values(att).returning();
+    return result;
   }
 }
 

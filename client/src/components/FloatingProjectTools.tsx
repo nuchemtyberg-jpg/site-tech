@@ -11,6 +11,7 @@ import {
   FileText, 
   Camera, 
   Calendar,
+  Mail,
   Wrench,
   X
 } from "lucide-react";
@@ -27,6 +28,7 @@ const toolItems = [
   { value: "daily-reports", label: "Daily Reports", icon: Calendar },
   { value: "photos", label: "Photos", icon: Camera },
   { value: "tasks", label: "Tasks", icon: ClipboardList },
+  { value: "communications", label: "Communications", icon: Mail },
 ];
 
 export function FloatingProjectTools({ activeTab, onTabChange, hidden = false }: FloatingProjectToolsProps) {

@@ -327,6 +327,63 @@ export const insertReportTaskPhotoSchema = createInsertSchema(reportTaskPhotos).
 export type ReportTaskPhoto = typeof reportTaskPhotos.$inferSelect;
 export type InsertReportTaskPhoto = z.infer<typeof insertReportTaskPhotoSchema>;
 
+// Project Email Connections - Outlook OAuth tokens per project
+export const projectEmailConnections = pgTable("project_email_connections", {
+  id: serial("id").primaryKey(),
+  projectId: integer("project_id").notNull(),
+  emailAddress: text("email_address").notNull(),
+  accessToken: text("access_token").notNull(),
+  refreshToken: text("refresh_token").notNull(),
+  tokenExpiresAt: timestamp("token_expires_at").notNull(),
+  status: text("status").notNull().default("active"), // active, expired, error
+  lastSyncAt: timestamp("last_sync_at"),
+  connectedBy: text("connected_by"),
+  connectedByName: text("connected_by_name"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertProjectEmailConnectionSchema = createInsertSchema(projectEmailConnections).omit({ id: true, createdAt: true });
+export type ProjectEmailConnection = typeof projectEmailConnections.$inferSelect;
+export type InsertProjectEmailConnection = z.infer<typeof insertProjectEmailConnectionSchema>;
+
+// Project Emails - synced from Outlook
+export const projectEmails = pgTable("project_emails", {
+  id: serial("id").primaryKey(),
+  projectId: integer("project_id").notNull(),
+  outlookMessageId: text("outlook_message_id").notNull(),
+  conversationId: text("conversation_id"),
+  fromEmail: text("from_email").notNull(),
+  fromName: text("from_name"),
+  toEmails: text("to_emails").array(),
+  ccEmails: text("cc_emails").array(),
+  subject: text("subject"),
+  bodyPreview: text("body_preview"),
+  bodyHtml: text("body_html"),
+  isInternal: boolean("is_internal").default(false),
+  hasAttachments: boolean("has_attachments").default(false),
+  receivedAt: timestamp("received_at").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertProjectEmailSchema = createInsertSchema(projectEmails).omit({ id: true, createdAt: true });
+export type ProjectEmail = typeof projectEmails.$inferSelect;
+export type InsertProjectEmail = z.infer<typeof insertProjectEmailSchema>;
+
+// Project Email Attachments
+export const projectEmailAttachments = pgTable("project_email_attachments", {
+  id: serial("id").primaryKey(),
+  emailId: integer("email_id").notNull(),
+  outlookAttachmentId: text("outlook_attachment_id").notNull(),
+  name: text("name").notNull(),
+  contentType: text("content_type"),
+  size: integer("size"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertProjectEmailAttachmentSchema = createInsertSchema(projectEmailAttachments).omit({ id: true, createdAt: true });
+export type ProjectEmailAttachment = typeof projectEmailAttachments.$inferSelect;
+export type InsertProjectEmailAttachment = z.infer<typeof insertProjectEmailAttachmentSchema>;
+
 // Customer Communications
 export const communications = pgTable("communications", {
   id: serial("id").primaryKey(),
