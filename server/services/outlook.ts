@@ -50,6 +50,9 @@ function getTenantId(): string {
 }
 
 export function getRedirectUri(): string {
+  if (process.env.APP_BASE_URL) {
+    return `${process.env.APP_BASE_URL}/api/outlook/callback`;
+  }
   const base = process.env.REPLIT_DEV_DOMAIN
     ? `https://${process.env.REPLIT_DEV_DOMAIN}`
     : process.env.REPL_SLUG
