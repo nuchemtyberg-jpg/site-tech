@@ -1975,18 +1975,36 @@ export async function registerRoutes(
   });
 
   app.get("/api/outlook/callback", isAuthenticated, isAuthorizedUser, async (req, res) => {
+    const sendCallbackPage = (success: boolean, message: string) => {
+      res.send(`<!DOCTYPE html><html><head><title>Outlook Connection</title>
+        <style>body{font-family:system-ui,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;background:#0f172a;color:#e2e8f0;}
+        .card{text-align:center;padding:2rem;border-radius:0.75rem;background:#1e293b;max-width:400px;}
+        .icon{font-size:3rem;margin-bottom:1rem;}
+        h2{margin:0 0 0.5rem;}
+        p{color:#94a3b8;margin:0 0 1rem;}
+        .btn{display:inline-block;padding:0.5rem 1.5rem;border-radius:0.375rem;background:${success ? '#f97316' : '#ef4444'};color:white;text-decoration:none;cursor:pointer;border:none;font-size:1rem;}
+        </style></head><body><div class="card">
+        <div class="icon">${success ? '&#10003;' : '&#10007;'}</div>
+        <h2>${success ? 'Connected Successfully' : 'Connection Failed'}</h2>
+        <p>${message}</p>
+        <button class="btn" onclick="window.close()">Close this tab</button>
+        </div>
+        <script>if(window.opener){window.opener.postMessage({type:'outlook_callback',success:${success}},'*');}</script>
+        </body></html>`);
+    };
+
     try {
       const { code, state, error } = req.query;
       if (error) {
-        return res.redirect(`/?outlook_error=${encodeURIComponent(String(error))}`);
+        return sendCallbackPage(false, String(error));
       }
       if (!code || !state) {
-        return res.redirect("/?outlook_error=missing_params");
+        return sendCallbackPage(false, "Missing required parameters from Microsoft.");
       }
 
       const projectId = validateOAuthState(String(state));
       if (projectId === null) {
-        return res.redirect("/?outlook_error=invalid_or_expired_state");
+        return sendCallbackPage(false, "The connection request expired. Please try again.");
       }
 
       const tokens = await exchangeCodeForTokens(String(code));
@@ -2022,10 +2040,10 @@ export async function registerRoutes(
         console.error("Initial sync failed:", syncErr);
       }
 
-      res.redirect(`/projects/${projectId}?tab=communications&outlook_connected=true`);
+      sendCallbackPage(true, "Your Outlook email is now connected to this project. You can close this tab and return to SiteTech.");
     } catch (err: any) {
       console.error("Outlook callback error:", err);
-      res.redirect(`/?outlook_error=${encodeURIComponent(err.message || "callback_failed")}`);
+      sendCallbackPage(false, err.message || "An unexpected error occurred. Please try again.");
     }
   });
 

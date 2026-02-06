@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import DOMPurify from "dompurify";
@@ -125,7 +125,7 @@ export function CommunicationsTab({ project }: CommunicationsTabProps) {
       return data.authUrl;
     },
     onSuccess: (authUrl: string) => {
-      window.location.href = authUrl;
+      window.open(authUrl, "_blank");
     },
     onError: (err: Error) => {
       toast({
@@ -135,6 +135,17 @@ export function CommunicationsTab({ project }: CommunicationsTabProps) {
       });
     },
   });
+
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      if (event.data?.type === "outlook_callback") {
+        queryClient.invalidateQueries({ queryKey: ["/api/projects", project.id, "email-connection"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/projects", project.id, "emails"] });
+      }
+    };
+    window.addEventListener("message", handleMessage);
+    return () => window.removeEventListener("message", handleMessage);
+  }, [project.id, queryClient]);
 
   const handleCopyEmail = () => {
     if (connectionData?.emailAddress) {
