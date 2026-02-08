@@ -1,20 +1,42 @@
 import { storage } from "../storage";
 import { Client } from "@replit/object-storage";
+import crypto from "crypto";
 
 const objectStorageClient = new Client();
 const PRIVATE_DIR = process.env.PRIVATE_OBJECT_DIR || "";
 
-interface ParsedInboundEmail {
+interface MailgunInboundEmail {
+  recipient: string;
+  sender: string;
   from: string;
-  to: string;
-  cc?: string;
   subject?: string;
-  text?: string;
-  html?: string;
-  envelope?: string;
-  headers?: string;
-  attachments?: number;
-  "attachment-info"?: string;
+  "body-plain"?: string;
+  "body-html"?: string;
+  "stripped-text"?: string;
+  "stripped-html"?: string;
+  To?: string;
+  Cc?: string;
+  "Message-Id"?: string;
+  "message-headers"?: string;
+  "attachment-count"?: string;
+  timestamp?: string;
+  token?: string;
+  signature?: string;
+}
+
+export function verifyMailgunSignature(timestamp: string, token: string, signature: string): boolean {
+  const apiKey = process.env.MAILGUN_API_KEY;
+  if (!apiKey) {
+    return false;
+  }
+
+  const data = timestamp + token;
+  const hash = crypto.createHmac("sha256", apiKey).update(data).digest("hex");
+  try {
+    return crypto.timingSafeEqual(Buffer.from(hash), Buffer.from(signature));
+  } catch {
+    return false;
+  }
 }
 
 function parseEmailAddress(raw: string): { email: string; name?: string } {
@@ -38,16 +60,12 @@ function parseEmailList(raw: string | undefined): string[] {
   }).filter(Boolean);
 }
 
-function extractRecipientAddresses(to: string): string[] {
-  return parseEmailList(to);
-}
-
 export async function processInboundEmail(
-  body: ParsedInboundEmail,
+  body: MailgunInboundEmail,
   files: { fieldname: string; originalname: string; mimetype: string; size: number; buffer: Buffer }[]
 ) {
-  const toAddresses = extractRecipientAddresses(body.to);
-  const ccAddresses = parseEmailList(body.cc);
+  const toAddresses = parseEmailList(body.recipient || body.To);
+  const ccAddresses = parseEmailList(body.Cc);
   const allRecipients = [...toAddresses, ...ccAddresses];
 
   let matchedProject = null;
@@ -67,11 +85,7 @@ export async function processInboundEmail(
     return { processed: false, reason: "No matching project found" };
   }
 
-  const sender = parseEmailAddress(body.from);
-  let envelopeData: any = {};
-  try {
-    if (body.envelope) envelopeData = JSON.parse(body.envelope);
-  } catch {}
+  const sender = parseEmailAddress(body.from || body.sender);
 
   const customer = matchedProject.customerId
     ? await storage.getCustomer(matchedProject.customerId)
@@ -82,12 +96,15 @@ export async function processInboundEmail(
     ? !allRecipients.includes(customerEmail) && sender.email !== customerEmail
     : true;
 
-  const messageId = `inbound-${Date.now()}-${Math.random().toString(36).substring(2, 10)}`;
+  const messageId = body["Message-Id"] || `inbound-${Date.now()}-${Math.random().toString(36).substring(2, 10)}`;
+
+  const bodyHtml = body["body-html"] || body["stripped-html"];
+  const bodyPlain = body["body-plain"] || body["stripped-text"];
 
   const email = await storage.createProjectEmail({
     projectId: matchedProject.id,
     source: "inbound",
-    sendgridMessageId: messageId,
+    inboundMessageId: messageId,
     outlookMessageId: null,
     conversationId: null,
     fromEmail: sender.email,
@@ -95,21 +112,14 @@ export async function processInboundEmail(
     toEmails: toAddresses,
     ccEmails: ccAddresses.length > 0 ? ccAddresses : null,
     subject: body.subject || "(No Subject)",
-    bodyPreview: body.text ? body.text.substring(0, 250) : null,
-    bodyHtml: body.html || (body.text ? `<pre>${body.text}</pre>` : null),
+    bodyPreview: bodyPlain ? bodyPlain.substring(0, 250) : null,
+    bodyHtml: bodyHtml || (bodyPlain ? `<pre>${bodyPlain}</pre>` : null),
     isInternal,
     hasAttachments: files.length > 0,
     receivedAt: new Date(),
   });
 
   if (files.length > 0) {
-    let attachmentInfo: Record<string, any> = {};
-    try {
-      if (body["attachment-info"]) {
-        attachmentInfo = JSON.parse(body["attachment-info"]);
-      }
-    } catch {}
-
     for (const file of files) {
       const storagePath = `${PRIVATE_DIR}/email-attachments/${matchedProject.id}/${email.id}/${file.originalname}`;
 

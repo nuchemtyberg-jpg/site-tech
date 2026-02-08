@@ -3,7 +3,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Copy, Check, ExternalLink, Mail, Server, Globe, ArrowRight } from "lucide-react";
+import { Copy, Check, ExternalLink, Mail, ArrowRight } from "lucide-react";
 import { useState } from "react";
 
 function CopyField({ label, value }: { label: string; value: string }) {
@@ -40,6 +40,7 @@ export default function EmailSetup() {
     webhookUrl: string;
     domain: string;
     mxRecord: string;
+    mxRecord2: string;
     mxPriority: number;
   }>({
     queryKey: ["/api/admin/email-setup"],
@@ -59,78 +60,110 @@ export default function EmailSetup() {
       <div>
         <h1 className="text-2xl font-bold" data-testid="text-page-title">Project Email Setup</h1>
         <p className="text-muted-foreground mt-1">
-          Configure inbound email so your team can CC project-specific email addresses
-          on their correspondence for automatic tracking.
+          Configure inbound email routing through Mailgun so your team can CC project-specific
+          email addresses on their correspondence for automatic tracking.
         </p>
       </div>
 
       <Card className="p-5 space-y-4">
         <div className="flex items-center gap-2">
           <Badge>Step 1</Badge>
-          <h2 className="font-semibold">Add MX Record in GoDaddy</h2>
+          <h2 className="font-semibold">Add Domain in Mailgun</h2>
         </div>
         <p className="text-sm text-muted-foreground">
-          Add an MX record for the subdomain <strong>{data?.domain}</strong> in your GoDaddy DNS settings.
-          This tells email servers to route emails to SendGrid for processing.
+          Add <strong>{data?.domain}</strong> as a domain in your Mailgun account. This allows
+          Mailgun to receive emails sent to project addresses.
         </p>
-        <div className="space-y-2">
-          <CopyField label="Subdomain" value={data?.domain || ""} />
-          <CopyField label="MX Server" value={data?.mxRecord || ""} />
-          <CopyField label="Priority" value={String(data?.mxPriority || 10)} />
-        </div>
         <div className="text-sm text-muted-foreground space-y-1">
-          <p>In GoDaddy DNS Management:</p>
+          <p>In Mailgun Dashboard:</p>
           <ol className="list-decimal list-inside space-y-1 ml-2">
-            <li>Go to your domain's DNS settings</li>
-            <li>Add a new MX record</li>
-            <li>Set the <strong>Host</strong> to <strong>projects</strong></li>
-            <li>Set the <strong>Points to</strong> value to <strong>{data?.mxRecord}</strong></li>
-            <li>Set <strong>Priority</strong> to <strong>{data?.mxPriority}</strong></li>
-            <li>Save the record</li>
-          </ol>
-        </div>
-      </Card>
-
-      <Card className="p-5 space-y-4">
-        <div className="flex items-center gap-2">
-          <Badge>Step 2</Badge>
-          <h2 className="font-semibold">Configure SendGrid Inbound Parse</h2>
-        </div>
-        <p className="text-sm text-muted-foreground">
-          In your SendGrid dashboard, set up Inbound Parse to forward received emails to your app's webhook.
-        </p>
-        <CopyField label="Webhook URL" value={data?.webhookUrl || ""} />
-        <div className="text-sm text-muted-foreground space-y-1">
-          <p>In SendGrid Dashboard:</p>
-          <ol className="list-decimal list-inside space-y-1 ml-2">
-            <li>Go to <strong>Settings</strong> <ArrowRight className="w-3 h-3 inline" /> <strong>Inbound Parse</strong></li>
-            <li>Click <strong>Add Host & URL</strong></li>
-            <li>For <strong>Receiving Domain</strong>, enter <strong>{data?.domain}</strong></li>
-            <li>For <strong>Destination URL</strong>, paste the webhook URL above</li>
-            <li>Leave "Check incoming emails for spam" unchecked</li>
-            <li>Leave "POST the raw, full MIME message" unchecked</li>
-            <li>Click <strong>Add</strong></li>
+            <li>Go to <strong>Sending</strong> <ArrowRight className="w-3 h-3 inline" /> <strong>Domains</strong></li>
+            <li>Click <strong>Add New Domain</strong></li>
+            <li>Enter <strong>{data?.domain}</strong></li>
+            <li>Follow Mailgun's verification steps (TXT records for SPF and DKIM)</li>
           </ol>
         </div>
         <a
-          href="https://app.sendgrid.com/settings/parse"
+          href="https://app.mailgun.com/mg/sending/domains"
           target="_blank"
           rel="noopener noreferrer"
         >
-          <Button variant="outline" data-testid="button-open-sendgrid">
+          <Button variant="outline" data-testid="button-open-mailgun-domains">
             <ExternalLink className="w-4 h-4 mr-2" />
-            Open SendGrid Settings
+            Open Mailgun Domains
           </Button>
         </a>
       </Card>
 
       <Card className="p-5 space-y-4">
         <div className="flex items-center gap-2">
+          <Badge>Step 2</Badge>
+          <h2 className="font-semibold">Add MX Records in GoDaddy</h2>
+        </div>
+        <p className="text-sm text-muted-foreground">
+          Add MX records for <strong>{data?.domain}</strong> in your GoDaddy DNS settings.
+          This tells email servers to route emails to Mailgun for processing.
+        </p>
+        <div className="space-y-2">
+          <CopyField label="Subdomain" value={data?.domain || ""} />
+          <CopyField label="MX Server 1" value={data?.mxRecord || ""} />
+          <CopyField label="MX Server 2" value={data?.mxRecord2 || ""} />
+          <CopyField label="Priority" value={String(data?.mxPriority || 10)} />
+        </div>
+        <div className="text-sm text-muted-foreground space-y-1">
+          <p>In GoDaddy DNS Management:</p>
+          <ol className="list-decimal list-inside space-y-1 ml-2">
+            <li>Go to your domain's DNS settings</li>
+            <li>Add two new MX records</li>
+            <li>For both, set the <strong>Host</strong> to <strong>projects</strong></li>
+            <li>Set first record's <strong>Points to</strong> to <strong>{data?.mxRecord}</strong></li>
+            <li>Set second record's <strong>Points to</strong> to <strong>{data?.mxRecord2}</strong></li>
+            <li>Set <strong>Priority</strong> to <strong>{data?.mxPriority}</strong> for both</li>
+            <li>Save both records</li>
+          </ol>
+        </div>
+      </Card>
+
+      <Card className="p-5 space-y-4">
+        <div className="flex items-center gap-2">
           <Badge>Step 3</Badge>
+          <h2 className="font-semibold">Create Inbound Route in Mailgun</h2>
+        </div>
+        <p className="text-sm text-muted-foreground">
+          In Mailgun, create an inbound route that forwards received emails to your app's webhook.
+        </p>
+        <CopyField label="Webhook URL" value={data?.webhookUrl || ""} />
+        <div className="text-sm text-muted-foreground space-y-1">
+          <p>In Mailgun Dashboard:</p>
+          <ol className="list-decimal list-inside space-y-1 ml-2">
+            <li>Go to <strong>Receiving</strong> <ArrowRight className="w-3 h-3 inline" /> <strong>Create Route</strong></li>
+            <li>Set <strong>Expression Type</strong> to <strong>Match Recipient</strong></li>
+            <li>Set the pattern to <strong>.*@{data?.domain}</strong> (catch all for the subdomain)</li>
+            <li>Under <strong>Actions</strong>, check <strong>Forward</strong></li>
+            <li>Paste the webhook URL above as the forward destination</li>
+            <li>Set <strong>Priority</strong> to <strong>0</strong></li>
+            <li>Click <strong>Create Route</strong></li>
+          </ol>
+        </div>
+        <a
+          href="https://app.mailgun.com/mg/receiving/routes"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          <Button variant="outline" data-testid="button-open-mailgun-routes">
+            <ExternalLink className="w-4 h-4 mr-2" />
+            Open Mailgun Routes
+          </Button>
+        </a>
+      </Card>
+
+      <Card className="p-5 space-y-4">
+        <div className="flex items-center gap-2">
+          <Badge>Step 4</Badge>
           <h2 className="font-semibold">Start Using Project Emails</h2>
         </div>
         <p className="text-sm text-muted-foreground">
-          Once the MX record and SendGrid are configured, each project will have a unique email address.
+          Once the domain and routes are configured, each project will have a unique email address.
           Your team can CC this address on emails related to that project, and they'll automatically
           appear in the project's Communications tab.
         </p>

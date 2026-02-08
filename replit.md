@@ -63,15 +63,16 @@ Key entities defined in `shared/schema.ts` include: Projects, Tasks, TaskStatusH
 
 ### Project Communications (Email Integration)
 - **Purpose**: Centralized, auditable view of all project-related email correspondence
-- **Primary Method - Auto-Generated Project Emails (SendGrid Inbound Parse)**:
+- **Primary Method - Auto-Generated Project Emails (Mailgun Inbound Routing)**:
   - Each project gets an auto-generated email address: `{slug}-{id}@projects.sitetechnj.com`
   - Email addresses are generated on project creation and backfilled for existing projects
   - Team members CC the project email on relevant correspondence; emails are automatically captured
-  - SendGrid Inbound Parse webhook at `/api/webhooks/inbound-email` receives and processes emails
+  - Mailgun inbound route forwards to webhook at `/api/webhooks/inbound-email` which receives and processes emails
+  - Webhook includes Mailgun signature verification (HMAC SHA256 using MAILGUN_API_KEY)
   - Attachments stored in Replit Object Storage under `email-attachments/{projectId}/{emailId}/`
   - Service: `server/services/inboundEmail.ts`
-  - One-time setup required: MX record for `projects.sitetechnj.com` pointing to `mx.sendgrid.net`, SendGrid Inbound Parse configured to forward to webhook URL
-  - Admin setup page: `/admin/email-setup` with step-by-step DNS and SendGrid instructions
+  - One-time setup required: Add domain in Mailgun, MX records for `projects.sitetechnj.com` pointing to `mxa.mailgun.org` and `mxb.mailgun.org`, create Mailgun inbound route forwarding to webhook URL
+  - Admin setup page: `/admin/email-setup` with step-by-step DNS and Mailgun instructions
 - **Secondary Method - Outlook OAuth (Optional)**:
   - Projects can optionally connect to Outlook email accounts via OAuth for additional email sync
   - Backend: `server/services/outlook.ts` handles OAuth flow, token refresh, email sync via Microsoft Graph API

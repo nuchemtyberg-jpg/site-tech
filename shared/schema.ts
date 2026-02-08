@@ -347,13 +347,13 @@ export const insertProjectEmailConnectionSchema = createInsertSchema(projectEmai
 export type ProjectEmailConnection = typeof projectEmailConnections.$inferSelect;
 export type InsertProjectEmailConnection = z.infer<typeof insertProjectEmailConnectionSchema>;
 
-// Project Emails - from inbound (SendGrid) or synced from Outlook
+// Project Emails - from inbound (Mailgun) or synced from Outlook
 export const projectEmails = pgTable("project_emails", {
   id: serial("id").primaryKey(),
   projectId: integer("project_id").notNull(),
   source: text("source").notNull().default("inbound"), // inbound, outlook
   outlookMessageId: text("outlook_message_id"),
-  sendgridMessageId: text("sendgrid_message_id"),
+  inboundMessageId: text("inbound_message_id"),
   conversationId: text("conversation_id"),
   fromEmail: text("from_email").notNull(),
   fromName: text("from_name"),

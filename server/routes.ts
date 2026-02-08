@@ -14,7 +14,7 @@ import {
   isOutlookConfigured, getAuthUrl, exchangeCodeForTokens, getRedirectUri,
   syncProjectEmails, getAttachmentContent, validateOAuthState
 } from "./services/outlook";
-import { processInboundEmail } from "./services/inboundEmail";
+import { processInboundEmail, verifyMailgunSignature } from "./services/inboundEmail";
 import multer from "multer";
 
 // Weather fetch helper using Open-Meteo API
@@ -2127,6 +2127,18 @@ export async function registerRoutes(
   const inboundUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
   app.post("/api/webhooks/inbound-email", inboundUpload.any(), async (req, res) => {
     try {
+      const { timestamp, token, signature } = req.body;
+      if (process.env.MAILGUN_API_KEY) {
+        if (!timestamp || !token || !signature) {
+          console.warn("Inbound email webhook: missing Mailgun signature fields");
+          return res.status(406).json({ processed: false, error: "Missing authentication" });
+        }
+        if (!verifyMailgunSignature(timestamp, token, signature)) {
+          console.warn("Inbound email webhook: invalid Mailgun signature");
+          return res.status(406).json({ processed: false, error: "Invalid signature" });
+        }
+      }
+
       const result = await processInboundEmail(req.body, (req.files as any[]) || []);
       res.status(200).json(result);
     } catch (err: any) {
@@ -2146,7 +2158,8 @@ export async function registerRoutes(
     res.json({
       webhookUrl: `${baseUrl}/api/webhooks/inbound-email`,
       domain: "projects.sitetechnj.com",
-      mxRecord: "mx.sendgrid.net",
+      mxRecord: "mxa.mailgun.org",
+      mxRecord2: "mxb.mailgun.org",
       mxPriority: 10,
     });
   });
