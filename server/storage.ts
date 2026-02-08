@@ -20,7 +20,7 @@ import {
 import { db } from "./db";
 import { eq, desc, and, or, isNull, sql, lt, ilike } from "drizzle-orm";
 
-const PROJECT_EMAIL_DOMAIN = "projects.sitetechnj.com";
+const PROJECT_EMAIL_DOMAIN = "email.sitetechnj.com";
 
 function generateProjectEmailSlug(name: string, id: number): string {
   const slug = name

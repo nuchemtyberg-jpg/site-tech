@@ -2157,7 +2157,7 @@ export async function registerRoutes(
     const baseUrl = process.env.APP_BASE_URL || `https://${process.env.REPL_SLUG}.replit.app`;
     res.json({
       webhookUrl: `${baseUrl}/api/webhooks/inbound-email`,
-      domain: "projects.sitetechnj.com",
+      domain: "email.sitetechnj.com",
       mxRecord: "mxa.mailgun.org",
       mxRecord2: "mxb.mailgun.org",
       mxPriority: 10,
