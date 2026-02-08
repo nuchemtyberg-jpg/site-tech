@@ -22,6 +22,7 @@ import PendingAccessPage from "@/pages/PendingAccessPage";
 import PDFViewerPage from "@/pages/PDFViewerPage";
 import DailyReportPage from "@/pages/DailyReportPage";
 import UserManagement from "@/pages/UserManagement";
+import EmailSetup from "@/pages/EmailSetup";
 import NotFound from "@/pages/not-found";
 
 function ProtectedRoute({ component: Component, adminOnly = false }: { component: React.ComponentType; adminOnly?: boolean }) {
@@ -91,6 +92,7 @@ function Router() {
       <Route path="/equipment" component={() => <ProtectedRoute component={Equipment} />} />
       <Route path="/equipment/:id" component={() => <ProtectedRoute component={EquipmentDetails} />} />
       <Route path="/admin/users" component={() => <ProtectedRoute component={UserManagement} adminOnly />} />
+      <Route path="/admin/email-setup" component={() => <ProtectedRoute component={EmailSetup} adminOnly />} />
       <Route component={NotFound} />
     </Switch>
   );

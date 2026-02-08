@@ -23,6 +23,7 @@ import {
   ArrowDownLeft,
   Users,
   ExternalLink,
+  Inbox,
 } from "lucide-react";
 import { format } from "date-fns";
 import type { Project, ProjectEmail, ProjectEmailAttachment } from "@shared/schema";
@@ -48,19 +49,18 @@ export function CommunicationsTab({ project }: CommunicationsTabProps) {
   const [selectedEmailId, setSelectedEmailId] = useState<number | null>(null);
   const [copied, setCopied] = useState(false);
 
-  const { data: outlookConfig } = useQuery<{ configured: boolean }>({
-    queryKey: ["/api/outlook/configured"],
-  });
-
   const { data: connectionData, isLoading: isConnectionLoading } = useQuery<{
     connected: boolean;
     emailAddress?: string;
     status?: string;
     lastSyncAt?: string;
     connectedByName?: string;
+    projectEmail?: string;
   }>({
     queryKey: ["/api/projects", project.id, "email-connection"],
   });
+
+  const projectEmail = connectionData?.projectEmail || project.projectEmail;
 
   const { data: emailsData, isLoading: isEmailsLoading } = useQuery<{
     emails: ProjectEmail[];
@@ -78,7 +78,6 @@ export function CommunicationsTab({ project }: CommunicationsTabProps) {
       if (!res.ok) throw new Error("Failed to fetch emails");
       return res.json();
     },
-    enabled: connectionData?.connected === true,
   });
 
   const { data: selectedEmail, isLoading: isEmailDetailLoading } = useQuery<
@@ -117,39 +116,9 @@ export function CommunicationsTab({ project }: CommunicationsTabProps) {
     },
   });
 
-  const connectMutation = useMutation({
-    mutationFn: async () => {
-      const res = await fetch(`/api/outlook/auth/${project.id}`, { credentials: "include" });
-      if (!res.ok) throw new Error("Failed to start connection");
-      const data = await res.json();
-      return data.authUrl;
-    },
-    onSuccess: (authUrl: string) => {
-      window.open(authUrl, "_blank");
-    },
-    onError: (err: Error) => {
-      toast({
-        title: "Connection failed",
-        description: err.message,
-        variant: "destructive",
-      });
-    },
-  });
-
-  useEffect(() => {
-    const handleMessage = (event: MessageEvent) => {
-      if (event.data?.type === "outlook_callback") {
-        queryClient.invalidateQueries({ queryKey: ["/api/projects", project.id, "email-connection"] });
-        queryClient.invalidateQueries({ queryKey: ["/api/projects", project.id, "emails"] });
-      }
-    };
-    window.addEventListener("message", handleMessage);
-    return () => window.removeEventListener("message", handleMessage);
-  }, [project.id, queryClient]);
-
   const handleCopyEmail = () => {
-    if (connectionData?.emailAddress) {
-      navigator.clipboard.writeText(connectionData.emailAddress);
+    if (projectEmail) {
+      navigator.clipboard.writeText(projectEmail);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     }
@@ -160,68 +129,6 @@ export function CommunicationsTab({ project }: CommunicationsTabProps) {
       <div className="space-y-4 p-4">
         <Skeleton className="h-8 w-48" />
         <Skeleton className="h-32 w-full" />
-      </div>
-    );
-  }
-
-  if (!outlookConfig?.configured) {
-    return (
-      <div className="flex flex-col items-center justify-center py-16 px-4">
-        <div className="bg-muted rounded-full p-4 mb-4">
-          <AlertCircle className="w-8 h-8 text-muted-foreground" />
-        </div>
-        <h3 className="text-lg font-semibold mb-2">Outlook Not Configured</h3>
-        <p className="text-muted-foreground text-center max-w-md">
-          To use the communications feature, Outlook credentials need to be set up.
-          Contact your administrator to configure the OUTLOOK_CLIENT_ID, OUTLOOK_CLIENT_SECRET,
-          and OUTLOOK_TENANT_ID.
-        </p>
-      </div>
-    );
-  }
-
-  if (!connectionData?.connected) {
-    return (
-      <div className="flex flex-col items-center justify-center py-16 px-4">
-        <div className="bg-muted rounded-full p-4 mb-4">
-          <Mail className="w-8 h-8 text-muted-foreground" />
-        </div>
-        <h3 className="text-lg font-semibold mb-2">Connect Project Email</h3>
-        <p className="text-muted-foreground text-center max-w-md mb-6">
-          Connect an Outlook email account dedicated to this project. Your team can CC this
-          address on customer emails for shared visibility, or email it directly for internal
-          project discussions.
-        </p>
-        <Button
-          onClick={() => connectMutation.mutate()}
-          disabled={connectMutation.isPending}
-          data-testid="button-connect-email"
-        >
-          <Link2 className="w-4 h-4 mr-2" />
-          {connectMutation.isPending ? "Connecting..." : "Connect Outlook Account"}
-        </Button>
-      </div>
-    );
-  }
-
-  if (connectionData.status === "expired") {
-    return (
-      <div className="flex flex-col items-center justify-center py-16 px-4">
-        <div className="bg-destructive/10 rounded-full p-4 mb-4">
-          <AlertCircle className="w-8 h-8 text-destructive" />
-        </div>
-        <h3 className="text-lg font-semibold mb-2">Connection Expired</h3>
-        <p className="text-muted-foreground text-center max-w-md mb-6">
-          The Outlook connection for this project has expired and needs to be re-authorized.
-        </p>
-        <Button
-          onClick={() => connectMutation.mutate()}
-          disabled={connectMutation.isPending}
-          data-testid="button-reconnect-email"
-        >
-          <Link2 className="w-4 h-4 mr-2" />
-          {connectMutation.isPending ? "Reconnecting..." : "Reconnect Outlook"}
-        </Button>
       </div>
     );
   }
@@ -247,37 +154,47 @@ export function CommunicationsTab({ project }: CommunicationsTabProps) {
   }
 
   const emails = emailsData?.emails || [];
+  const hasOutlookConnection = connectionData?.connected === true;
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-        <div className="flex items-center gap-2 min-w-0">
-          <div className="flex items-center gap-2 bg-muted px-3 py-1.5 rounded-md min-w-0">
-            <Mail className="w-4 h-4 text-muted-foreground shrink-0" />
-            <span className="text-sm truncate" data-testid="text-project-email">
-              {connectionData.emailAddress}
-            </span>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-6 w-6 shrink-0"
-              onClick={handleCopyEmail}
-              data-testid="button-copy-email"
-            >
-              {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
-            </Button>
+      {projectEmail && (
+        <Card className="p-4">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-xs text-muted-foreground mb-1">Project Email Address</p>
+              <div className="flex items-center gap-2 min-w-0">
+                <Inbox className="w-4 h-4 text-primary shrink-0" />
+                <span className="text-sm font-medium truncate" data-testid="text-project-email">
+                  {projectEmail}
+                </span>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={handleCopyEmail}
+                  data-testid="button-copy-email"
+                >
+                  {copied ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground mt-1.5">
+                CC this address on project emails for shared visibility
+              </p>
+            </div>
+            {hasOutlookConnection && (
+              <Button
+                variant="outline"
+                onClick={() => syncMutation.mutate()}
+                disabled={syncMutation.isPending}
+                data-testid="button-sync-emails"
+              >
+                <RefreshCw className={`w-4 h-4 mr-2 ${syncMutation.isPending ? "animate-spin" : ""}`} />
+                {syncMutation.isPending ? "Syncing..." : "Sync Outlook"}
+              </Button>
+            )}
           </div>
-        </div>
-        <Button
-          variant="outline"
-          onClick={() => syncMutation.mutate()}
-          disabled={syncMutation.isPending}
-          data-testid="button-sync-emails"
-        >
-          <RefreshCw className={`w-4 h-4 mr-2 ${syncMutation.isPending ? "animate-spin" : ""}`} />
-          {syncMutation.isPending ? "Syncing..." : "Sync"}
-        </Button>
-      </div>
+        </Card>
+      )}
 
       <div className="flex flex-col sm:flex-row gap-3">
         <div className="relative flex-1">
@@ -305,9 +222,9 @@ export function CommunicationsTab({ project }: CommunicationsTabProps) {
         </div>
       </div>
 
-      {connectionData.lastSyncAt && (
+      {hasOutlookConnection && connectionData?.lastSyncAt && (
         <p className="text-xs text-muted-foreground">
-          Last synced: {format(new Date(connectionData.lastSyncAt), "MMM d, yyyy h:mm a")}
+          Outlook last synced: {format(new Date(connectionData.lastSyncAt), "MMM d, yyyy h:mm a")}
         </p>
       )}
 
@@ -320,12 +237,12 @@ export function CommunicationsTab({ project }: CommunicationsTabProps) {
       ) : emails.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-12">
           <Mail className="w-12 h-12 text-muted-foreground mb-3" />
-          <p className="text-muted-foreground">
+          <p className="text-muted-foreground text-center max-w-md">
             {searchQuery
               ? "No emails match your search"
               : filter !== "all"
                 ? `No ${filter} emails yet`
-                : "No emails synced yet. Click Sync to pull in the latest emails."}
+                : "No emails yet. CC the project email address above on your emails to start tracking communications here."}
           </p>
         </div>
       ) : (

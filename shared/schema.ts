@@ -43,11 +43,12 @@ export const projects = pgTable("projects", {
   estimatedValue: integer("estimated_value"),
   notes: text("notes"),
   color: text("color").notNull().default("#f97316"),
+  projectEmail: text("project_email"),
   createdAt: timestamp("created_at").defaultNow(),
   deletedAt: timestamp("deleted_at"), // Soft delete support
 });
 
-export const insertProjectSchema = createInsertSchema(projects).omit({ id: true, projectNumber: true, createdAt: true, deletedAt: true });
+export const insertProjectSchema = createInsertSchema(projects).omit({ id: true, projectNumber: true, projectEmail: true, createdAt: true, deletedAt: true });
 export type Project = typeof projects.$inferSelect;
 export type InsertProject = z.infer<typeof insertProjectSchema>;
 
@@ -346,11 +347,13 @@ export const insertProjectEmailConnectionSchema = createInsertSchema(projectEmai
 export type ProjectEmailConnection = typeof projectEmailConnections.$inferSelect;
 export type InsertProjectEmailConnection = z.infer<typeof insertProjectEmailConnectionSchema>;
 
-// Project Emails - synced from Outlook
+// Project Emails - from inbound (SendGrid) or synced from Outlook
 export const projectEmails = pgTable("project_emails", {
   id: serial("id").primaryKey(),
   projectId: integer("project_id").notNull(),
-  outlookMessageId: text("outlook_message_id").notNull(),
+  source: text("source").notNull().default("inbound"), // inbound, outlook
+  outlookMessageId: text("outlook_message_id"),
+  sendgridMessageId: text("sendgrid_message_id"),
   conversationId: text("conversation_id"),
   fromEmail: text("from_email").notNull(),
   fromName: text("from_name"),
@@ -373,7 +376,8 @@ export type InsertProjectEmail = z.infer<typeof insertProjectEmailSchema>;
 export const projectEmailAttachments = pgTable("project_email_attachments", {
   id: serial("id").primaryKey(),
   emailId: integer("email_id").notNull(),
-  outlookAttachmentId: text("outlook_attachment_id").notNull(),
+  outlookAttachmentId: text("outlook_attachment_id"),
+  storagePath: text("storage_path"),
   name: text("name").notNull(),
   contentType: text("content_type"),
   size: integer("size"),

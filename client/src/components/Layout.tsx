@@ -10,7 +10,8 @@ import {
   Menu,
   X,
   User,
-  Shield
+  Shield,
+  Mail
 } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -32,6 +33,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   
   const adminItems = [
     { href: "/admin/users", label: "User Management", icon: Shield },
+    { href: "/admin/email-setup", label: "Email Setup", icon: Mail },
   ];
 
   return (

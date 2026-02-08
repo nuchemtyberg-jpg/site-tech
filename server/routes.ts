@@ -14,6 +14,8 @@ import {
   isOutlookConfigured, getAuthUrl, exchangeCodeForTokens, getRedirectUri,
   syncProjectEmails, getAttachmentContent, validateOAuthState
 } from "./services/outlook";
+import { processInboundEmail } from "./services/inboundEmail";
+import multer from "multer";
 
 // Weather fetch helper using Open-Meteo API
 async function fetchWeatherData(address: string, city: string, state: string): Promise<{
@@ -1951,16 +1953,15 @@ export async function registerRoutes(
 
   app.get("/api/projects/:projectId/email-connection", isAuthenticated, isAuthorizedUser, async (req, res) => {
     const projectId = Number(req.params.projectId);
+    const project = await storage.getProject(projectId);
     const connection = await storage.getProjectEmailConnection(projectId);
-    if (!connection) {
-      return res.json({ connected: false });
-    }
     res.json({
-      connected: true,
-      emailAddress: connection.emailAddress,
-      status: connection.status,
-      lastSyncAt: connection.lastSyncAt,
-      connectedByName: connection.connectedByName,
+      connected: !!connection,
+      emailAddress: connection?.emailAddress,
+      status: connection?.status,
+      lastSyncAt: connection?.lastSyncAt,
+      connectedByName: connection?.connectedByName,
+      projectEmail: project?.projectEmail || null,
     });
   });
 
@@ -2096,12 +2097,23 @@ export async function registerRoutes(
       const att = attachments.find(a => a.id === Number(req.params.attachmentId));
       if (!att) return res.status(404).json({ message: "Attachment not found" });
 
-      const content = await getAttachmentContent(projectId, email.outlookMessageId, att.outlookAttachmentId);
-      if (!content) return res.status(404).json({ message: "Attachment content not available" });
-
-      res.setHeader("Content-Type", content.contentType);
-      res.setHeader("Content-Disposition", `attachment; filename="${content.name}"`);
-      res.send(content.content);
+      if (att.storagePath) {
+        const { Client } = await import("@replit/object-storage");
+        const client = new Client();
+        const { ok, value } = await client.downloadAsBytes(att.storagePath);
+        if (!ok) return res.status(404).json({ message: "Attachment file not found" });
+        res.setHeader("Content-Type", att.contentType || "application/octet-stream");
+        res.setHeader("Content-Disposition", `attachment; filename="${att.name}"`);
+        res.send(Buffer.from(value));
+      } else if (att.outlookAttachmentId && email.outlookMessageId) {
+        const content = await getAttachmentContent(projectId, email.outlookMessageId, att.outlookAttachmentId);
+        if (!content) return res.status(404).json({ message: "Attachment content not available" });
+        res.setHeader("Content-Type", content.contentType);
+        res.setHeader("Content-Disposition", `attachment; filename="${content.name}"`);
+        res.send(content.content);
+      } else {
+        return res.status(404).json({ message: "Attachment content not available" });
+      }
     } catch (err: any) {
       res.status(500).json({ message: err.message || "Failed to download attachment" });
     }
@@ -2110,6 +2122,33 @@ export async function registerRoutes(
   app.delete("/api/projects/:projectId/email-connection", isAuthenticated, isAdmin, async (req, res) => {
     await storage.deleteProjectEmailConnection(Number(req.params.projectId));
     res.status(204).send();
+  });
+
+  const inboundUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
+  app.post("/api/webhooks/inbound-email", inboundUpload.any(), async (req, res) => {
+    try {
+      const result = await processInboundEmail(req.body, (req.files as any[]) || []);
+      res.status(200).json(result);
+    } catch (err: any) {
+      console.error("Inbound email webhook error:", err);
+      res.status(200).json({ processed: false, error: err.message });
+    }
+  });
+
+  app.get("/api/projects/:projectId/project-email", isAuthenticated, isAuthorizedUser, async (req, res) => {
+    const project = await storage.getProject(Number(req.params.projectId));
+    if (!project) return res.status(404).json({ message: "Project not found" });
+    res.json({ projectEmail: project.projectEmail });
+  });
+
+  app.get("/api/admin/email-setup", isAuthenticated, isAdmin, async (req, res) => {
+    const baseUrl = process.env.APP_BASE_URL || `https://${process.env.REPL_SLUG}.replit.app`;
+    res.json({
+      webhookUrl: `${baseUrl}/api/webhooks/inbound-email`,
+      domain: "projects.sitetechnj.com",
+      mxRecord: "mx.sendgrid.net",
+      mxPriority: 10,
+    });
   });
 
   return httpServer;

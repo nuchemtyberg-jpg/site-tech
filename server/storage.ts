@@ -20,6 +20,17 @@ import {
 import { db } from "./db";
 import { eq, desc, and, or, isNull, sql, lt, ilike } from "drizzle-orm";
 
+const PROJECT_EMAIL_DOMAIN = "projects.sitetechnj.com";
+
+function generateProjectEmailSlug(name: string, id: number): string {
+  const slug = name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .substring(0, 30);
+  return `${slug}-${id}@${PROJECT_EMAIL_DOMAIN}`;
+}
+
 export interface IStorage {
   // Auth
   getUser(id: string): Promise<User | undefined>;
@@ -49,6 +60,7 @@ export interface IStorage {
   createProject(project: InsertProject): Promise<Project>;
   updateProject(id: number, project: Partial<InsertProject>): Promise<Project>;
   deleteProject(id: number): Promise<void>;
+  getProjectByEmail(email: string): Promise<Project | undefined>;
 
   // Tasks
   getTasks(projectId?: number): Promise<Task[]>;
@@ -328,7 +340,6 @@ export class DatabaseStorage implements IStorage {
   }
   
   async createProject(insertProject: InsertProject): Promise<Project> {
-    // Auto-generate project number
     const projectNumber = await this.getNextProjectNumber();
     
     const [project] = await db.insert(projects).values({
@@ -336,10 +347,15 @@ export class DatabaseStorage implements IStorage {
       projectNumber
     }).returning();
     
-    // Create default folder structure for new projects
+    const projectEmail = generateProjectEmailSlug(project.name, project.id);
+    const [updated] = await db.update(projects)
+      .set({ projectEmail })
+      .where(eq(projects.id, project.id))
+      .returning();
+    
     await this.createDefaultFolders(project.id);
     
-    return project;
+    return updated;
   }
   
   private async createDefaultFolders(projectId: number): Promise<void> {
@@ -389,6 +405,12 @@ export class DatabaseStorage implements IStorage {
   }
   async deleteProject(id: number): Promise<void> {
     await db.update(projects).set({ deletedAt: new Date() }).where(eq(projects.id, id));
+  }
+
+  async getProjectByEmail(email: string): Promise<Project | undefined> {
+    const [project] = await db.select().from(projects)
+      .where(and(eq(projects.projectEmail, email), isNull(projects.deletedAt)));
+    return project;
   }
 
   // Tasks (with soft delete)
