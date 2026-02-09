@@ -61,6 +61,7 @@ export interface IStorage {
   updateProject(id: number, project: Partial<InsertProject>): Promise<Project>;
   deleteProject(id: number): Promise<void>;
   getProjectByEmail(email: string): Promise<Project | undefined>;
+  backfillProjectEmails(): Promise<{ id: number; name: string; projectEmail: string }[]>;
 
   // Tasks
   getTasks(projectId?: number): Promise<Task[]>;
@@ -411,6 +412,26 @@ export class DatabaseStorage implements IStorage {
     const [project] = await db.select().from(projects)
       .where(and(eq(projects.projectEmail, email), isNull(projects.deletedAt)));
     return project;
+  }
+
+  async backfillProjectEmails(): Promise<{ id: number; name: string; projectEmail: string }[]> {
+    const allProjects = await db.select().from(projects)
+      .where(and(
+        isNull(projects.deletedAt),
+        or(isNull(projects.projectEmail), sql`${projects.projectEmail} = ''`)
+      ));
+
+    const updated: { id: number; name: string; projectEmail: string }[] = [];
+
+    for (const project of allProjects) {
+      const email = generateProjectEmailSlug(project.name, project.id);
+      await db.update(projects)
+        .set({ projectEmail: email })
+        .where(eq(projects.id, project.id));
+      updated.push({ id: project.id, name: project.name, projectEmail: email });
+    }
+
+    return updated;
   }
 
   // Tasks (with soft delete)

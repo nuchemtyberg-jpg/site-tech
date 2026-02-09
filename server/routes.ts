@@ -2153,6 +2153,16 @@ export async function registerRoutes(
     res.json({ projectEmail: project.projectEmail });
   });
 
+  app.post("/api/admin/backfill-project-emails", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const updated = await storage.backfillProjectEmails();
+      res.json({ success: true, updated });
+    } catch (error: any) {
+      console.error("Failed to backfill project emails:", error);
+      res.status(500).json({ message: "Failed to backfill project emails", error: error.message });
+    }
+  });
+
   app.get("/api/admin/email-setup", isAuthenticated, isAdmin, async (req, res) => {
     const baseUrl = process.env.APP_BASE_URL || `https://${process.env.REPL_SLUG}.replit.app`;
     res.json({
