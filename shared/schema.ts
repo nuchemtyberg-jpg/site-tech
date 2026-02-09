@@ -1,4 +1,4 @@
-import { pgTable, text, serial, integer, boolean, timestamp, date } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, boolean, timestamp, date, uniqueIndex } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 import { users } from "./models/auth";
@@ -317,6 +317,39 @@ export const deliveryPhotos = pgTable("delivery_photos", {
 export const insertDeliveryPhotoSchema = createInsertSchema(deliveryPhotos).omit({ id: true, createdAt: true });
 export type DeliveryPhoto = typeof deliveryPhotos.$inferSelect;
 export type InsertDeliveryPhoto = z.infer<typeof insertDeliveryPhotoSchema>;
+
+// Fingercheck Employees - synced from Fingercheck API
+export const fingercheckEmployees = pgTable("fingercheck_employees", {
+  id: serial("id").primaryKey(),
+  employeeId: integer("employee_id").notNull().unique(),
+  employeeNumber: text("employee_number"),
+  firstName: text("first_name").notNull(),
+  lastName: text("last_name").notNull(),
+  middleInitial: text("middle_initial"),
+  email: text("email"),
+  phone: text("phone"),
+  mobilePhone: text("mobile_phone"),
+  jobTitle: text("job_title"),
+  position: text("position"),
+  department: text("department"),
+  location: text("location"),
+  hireDate: text("hire_date"),
+  terminationDate: text("termination_date"),
+  status: text("status").notNull().default("active"),
+  payType: text("pay_type"),
+  address1: text("address_1"),
+  address2: text("address_2"),
+  city: text("city"),
+  state: text("state"),
+  zipCode: text("zip_code"),
+  isSupervisor: boolean("is_supervisor").default(false),
+  lastSyncedAt: timestamp("last_synced_at").defaultNow(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertFingercheckEmployeeSchema = createInsertSchema(fingercheckEmployees).omit({ id: true, createdAt: true, lastSyncedAt: true });
+export type FingercheckEmployee = typeof fingercheckEmployees.$inferSelect;
+export type InsertFingercheckEmployee = z.infer<typeof insertFingercheckEmployeeSchema>;
 
 export const reportTaskPhotos = pgTable("report_task_photos", {
   id: serial("id").primaryKey(),

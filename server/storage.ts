@@ -4,17 +4,20 @@ import {
   dailyReportTaskEntries, dailyReportLaborLines, dailyReportEquipmentLines, dailyReportDeliveryEntries, dailyReportPhotos,
   authorizedUsers,
   projectEmailConnections, projectEmails, projectEmailAttachments,
+  fingercheckEmployees,
   type InsertProject, type InsertTask, type InsertEquipment, type InsertAllocation, type InsertFolder, type InsertFileMetadata, type InsertPhoto,
   type InsertCustomer, type InsertDailyReport, type InsertMaintenanceLog, type InsertCommunication, type InsertTaskStatusHistory, type InsertPhotoAlbum,
   type InsertReportTask, type InsertLaborEntry, type InsertEquipmentEntry, type InsertReportTaskPhoto, type InsertDelivery, type InsertDeliveryPhoto,
   type InsertDailyReportTaskEntry, type InsertDailyReportLaborLine, type InsertDailyReportEquipmentLine, type InsertDailyReportDeliveryEntry, type InsertDailyReportPhoto,
   type InsertAuthorizedUser,
   type InsertProjectEmailConnection, type InsertProjectEmail, type InsertProjectEmailAttachment,
+  type InsertFingercheckEmployee,
   type Project, type Task, type Equipment, type Allocation, type Folder, type FileMetadata, type Photo,
   type Customer, type DailyReport, type MaintenanceLog, type Communication, type TaskStatusHistory, type PhotoAlbum,
   type ReportTask, type LaborEntry, type EquipmentEntry, type ReportTaskPhoto, type Delivery, type DeliveryPhoto,
   type DailyReportTaskEntry, type DailyReportLaborLine, type DailyReportEquipmentLine, type DailyReportDeliveryEntry, type DailyReportPhoto,
   type ProjectEmailConnection, type ProjectEmail, type ProjectEmailAttachment,
+  type FingercheckEmployee,
   type User, type UpsertUser, type AuthorizedUser
 } from "@shared/schema";
 import { db } from "./db";
@@ -229,6 +232,13 @@ export interface IStorage {
   // Project Email Attachments
   getProjectEmailAttachments(emailId: number): Promise<ProjectEmailAttachment[]>;
   createProjectEmailAttachment(att: InsertProjectEmailAttachment): Promise<ProjectEmailAttachment>;
+
+  // Fingercheck Employees
+  getFingercheckEmployees(): Promise<FingercheckEmployee[]>;
+  getFingercheckEmployee(id: number): Promise<FingercheckEmployee | undefined>;
+  getFingercheckEmployeeByEmployeeId(employeeId: number): Promise<FingercheckEmployee | undefined>;
+  upsertFingercheckEmployee(employee: InsertFingercheckEmployee): Promise<FingercheckEmployee>;
+  deleteFingercheckEmployee(id: number): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1095,6 +1105,41 @@ export class DatabaseStorage implements IStorage {
   async createProjectEmailAttachment(att: InsertProjectEmailAttachment): Promise<ProjectEmailAttachment> {
     const [result] = await db.insert(projectEmailAttachments).values(att).returning();
     return result;
+  }
+
+  // Fingercheck Employees
+  async getFingercheckEmployees(): Promise<FingercheckEmployee[]> {
+    return await db.select().from(fingercheckEmployees).orderBy(fingercheckEmployees.lastName, fingercheckEmployees.firstName);
+  }
+
+  async getFingercheckEmployee(id: number): Promise<FingercheckEmployee | undefined> {
+    const [employee] = await db.select().from(fingercheckEmployees).where(eq(fingercheckEmployees.id, id));
+    return employee;
+  }
+
+  async getFingercheckEmployeeByEmployeeId(employeeId: number): Promise<FingercheckEmployee | undefined> {
+    const [employee] = await db.select().from(fingercheckEmployees).where(eq(fingercheckEmployees.employeeId, employeeId));
+    return employee;
+  }
+
+  async upsertFingercheckEmployee(employee: InsertFingercheckEmployee): Promise<FingercheckEmployee> {
+    const now = new Date();
+    const [result] = await db
+      .insert(fingercheckEmployees)
+      .values({ ...employee, lastSyncedAt: now })
+      .onConflictDoUpdate({
+        target: fingercheckEmployees.employeeId,
+        set: {
+          ...employee,
+          lastSyncedAt: now,
+        },
+      })
+      .returning();
+    return result;
+  }
+
+  async deleteFingercheckEmployee(id: number): Promise<void> {
+    await db.delete(fingercheckEmployees).where(eq(fingercheckEmployees.id, id));
   }
 }
 

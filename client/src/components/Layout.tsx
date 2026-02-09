@@ -6,6 +6,7 @@ import {
   Calendar, 
   Truck, 
   Users,
+  HardHat,
   LogOut, 
   Menu,
   X,
@@ -30,6 +31,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     { href: "/customers", label: "Customers", icon: Users },
     { href: "/schedule", label: "Schedule", icon: Calendar },
     { href: "/equipment", label: "Equipment", icon: Truck },
+    { href: "/employees", label: "Employees", icon: HardHat },
   ];
   
   const adminItems = [

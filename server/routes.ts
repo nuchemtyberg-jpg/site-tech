@@ -2425,5 +2425,60 @@ export async function registerRoutes(
     });
   });
 
+  // Fingercheck Employees
+  app.get("/api/employees", isAuthenticated, isAuthorizedUser, async (req, res) => {
+    const employees = await storage.getFingercheckEmployees();
+    res.json(employees);
+  });
+
+  app.get("/api/employees/:id", isAuthenticated, isAuthorizedUser, async (req, res) => {
+    const employee = await storage.getFingercheckEmployee(Number(req.params.id));
+    if (!employee) return res.status(404).json({ message: "Employee not found" });
+    res.json(employee);
+  });
+
+  app.post("/api/employees/sync", isAuthenticated, isAuthorizedUser, async (req, res) => {
+    try {
+      const { fetchEmployeesFromFingercheck, mapFingercheckEmployee, isValidEmployee } = await import("./services/fingercheck");
+      const fcEmployees = await fetchEmployeesFromFingercheck();
+      
+      const results = [];
+      const skipped = [];
+      for (const fcEmp of fcEmployees) {
+        if (!isValidEmployee(fcEmp)) {
+          skipped.push(fcEmp.EmployeeID || "unknown");
+          continue;
+        }
+        try {
+          const mapped = mapFingercheckEmployee(fcEmp);
+          const employee = await storage.upsertFingercheckEmployee(mapped);
+          results.push(employee);
+        } catch (innerErr) {
+          console.error(`Failed to sync employee ${fcEmp.EmployeeID}:`, innerErr);
+          skipped.push(fcEmp.EmployeeID);
+        }
+      }
+
+      res.json({ 
+        message: `Synced ${results.length} employees from Fingercheck${skipped.length ? `, ${skipped.length} skipped` : ""}`,
+        count: results.length,
+        skipped: skipped.length,
+        employees: results,
+      });
+    } catch (err: any) {
+      console.error("Fingercheck sync error:", err);
+      res.status(500).json({ message: err.message || "Failed to sync employees from Fingercheck" });
+    }
+  });
+
+  app.delete("/api/employees/:id", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      await storage.deleteFingercheckEmployee(Number(req.params.id));
+      res.json({ message: "Employee deleted" });
+    } catch (err) {
+      res.status(500).json({ message: "Failed to delete employee" });
+    }
+  });
+
   return httpServer;
 }

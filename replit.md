@@ -130,6 +130,20 @@ Key entities defined in `shared/schema.ts` include: Projects, Tasks, TaskStatusH
    - **Cause**: Performance tracking used requestAnimationFrame loops that weren't cancelled on cleanup, causing multiple parallel animation frames.
    - **Fix**: Added `cancelAnimationFrame` call and `stopped` flag to ensure clean termination.
 
+### Fingercheck Integration (Employee Sync)
+- **Purpose**: Pull employee data from Fingercheck payroll/HR system into SiteTech
+- **API**: Fingercheck REST API at `https://developer.fingercheck.com/api`
+- **Authentication**: Uses `FINGERCHECK_API_KEY` and `FINGERCHECK_CLIENT_SECRET` secrets
+- **Service**: `server/services/fingercheck.ts` — fetches and maps employee data
+- **Database**: `fingercheck_employees` table with unique constraint on `employee_id`
+- **Routes**: 
+  - `GET /api/employees` — list all synced employees
+  - `GET /api/employees/:id` — get single employee
+  - `POST /api/employees/sync` — trigger sync from Fingercheck API
+  - `DELETE /api/employees/:id` — delete employee (admin only)
+- **Frontend**: `client/src/pages/Employees.tsx` — table view with search, status filtering, detail dialog, and sync button
+- **Sidebar**: "Employees" nav item with HardHat icon
+
 ### Verification Checklist
 
 - [ ] **Navigation works from library page**: After viewing photos and scrolling, clicking sidebar links should navigate immediately
