@@ -351,6 +351,49 @@ export const insertFingercheckEmployeeSchema = createInsertSchema(fingercheckEmp
 export type FingercheckEmployee = typeof fingercheckEmployees.$inferSelect;
 export type InsertFingercheckEmployee = z.infer<typeof insertFingercheckEmployeeSchema>;
 
+// Fingercheck Time Punches - raw punch-in/out records from Fingercheck API
+export const fingercheckTimePunches = pgTable("fingercheck_time_punches", {
+  id: serial("id").primaryKey(),
+  guid: text("guid").notNull().unique(),
+  employeeId: integer("employee_id").notNull(),
+  employeeNumber: text("employee_number"),
+  firstName: text("first_name"),
+  lastName: text("last_name"),
+  date: text("date").notNull(),
+  actualTime: text("actual_time").notNull(),
+  roundedTime: text("rounded_time"),
+  punchType: integer("punch_type").notNull(),
+  jobCode: text("job_code"),
+  jobDescription: text("job_description"),
+  taskCode: text("task_code"),
+  taskDescription: text("task_description"),
+  note: text("note"),
+  entryDetails: text("entry_details"),
+  entryType: text("entry_type"),
+  isPunchEdit: boolean("is_punch_edit").default(false),
+  lastSyncedAt: timestamp("last_synced_at").defaultNow(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertFingercheckTimePunchSchema = createInsertSchema(fingercheckTimePunches).omit({ id: true, createdAt: true, lastSyncedAt: true });
+export type FingercheckTimePunch = typeof fingercheckTimePunches.$inferSelect;
+export type InsertFingercheckTimePunch = z.infer<typeof insertFingercheckTimePunchSchema>;
+
+// Fingercheck Project Mappings - links SiteTech projects to Fingercheck job codes
+export const fingercheckProjectMappings = pgTable("fingercheck_project_mappings", {
+  id: serial("id").primaryKey(),
+  projectId: integer("project_id").notNull(),
+  fingercheckJobCode: text("fingercheck_job_code").notNull(),
+  fingercheckJobDescription: text("fingercheck_job_description"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  uniqueIndex("unique_project_job_mapping").on(table.projectId, table.fingercheckJobCode),
+]);
+
+export const insertFingercheckProjectMappingSchema = createInsertSchema(fingercheckProjectMappings).omit({ id: true, createdAt: true });
+export type FingercheckProjectMapping = typeof fingercheckProjectMappings.$inferSelect;
+export type InsertFingercheckProjectMapping = z.infer<typeof insertFingercheckProjectMappingSchema>;
+
 export const reportTaskPhotos = pgTable("report_task_photos", {
   id: serial("id").primaryKey(),
   reportTaskId: integer("report_task_id").notNull(),

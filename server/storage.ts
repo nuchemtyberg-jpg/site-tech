@@ -4,20 +4,20 @@ import {
   dailyReportTaskEntries, dailyReportLaborLines, dailyReportEquipmentLines, dailyReportDeliveryEntries, dailyReportPhotos,
   authorizedUsers,
   projectEmailConnections, projectEmails, projectEmailAttachments,
-  fingercheckEmployees,
+  fingercheckEmployees, fingercheckTimePunches, fingercheckProjectMappings,
   type InsertProject, type InsertTask, type InsertEquipment, type InsertAllocation, type InsertFolder, type InsertFileMetadata, type InsertPhoto,
   type InsertCustomer, type InsertDailyReport, type InsertMaintenanceLog, type InsertCommunication, type InsertTaskStatusHistory, type InsertPhotoAlbum,
   type InsertReportTask, type InsertLaborEntry, type InsertEquipmentEntry, type InsertReportTaskPhoto, type InsertDelivery, type InsertDeliveryPhoto,
   type InsertDailyReportTaskEntry, type InsertDailyReportLaborLine, type InsertDailyReportEquipmentLine, type InsertDailyReportDeliveryEntry, type InsertDailyReportPhoto,
   type InsertAuthorizedUser,
   type InsertProjectEmailConnection, type InsertProjectEmail, type InsertProjectEmailAttachment,
-  type InsertFingercheckEmployee,
+  type InsertFingercheckEmployee, type InsertFingercheckTimePunch, type InsertFingercheckProjectMapping,
   type Project, type Task, type Equipment, type Allocation, type Folder, type FileMetadata, type Photo,
   type Customer, type DailyReport, type MaintenanceLog, type Communication, type TaskStatusHistory, type PhotoAlbum,
   type ReportTask, type LaborEntry, type EquipmentEntry, type ReportTaskPhoto, type Delivery, type DeliveryPhoto,
   type DailyReportTaskEntry, type DailyReportLaborLine, type DailyReportEquipmentLine, type DailyReportDeliveryEntry, type DailyReportPhoto,
   type ProjectEmailConnection, type ProjectEmail, type ProjectEmailAttachment,
-  type FingercheckEmployee,
+  type FingercheckEmployee, type FingercheckTimePunch, type FingercheckProjectMapping,
   type User, type UpsertUser, type AuthorizedUser
 } from "@shared/schema";
 import { db } from "./db";
@@ -239,6 +239,18 @@ export interface IStorage {
   getFingercheckEmployeeByEmployeeId(employeeId: number): Promise<FingercheckEmployee | undefined>;
   upsertFingercheckEmployee(employee: InsertFingercheckEmployee): Promise<FingercheckEmployee>;
   deleteFingercheckEmployee(id: number): Promise<void>;
+
+  // Fingercheck Time Punches
+  getTimePunches(filters?: { employeeId?: number; startDate?: string; endDate?: string; jobCode?: string }): Promise<FingercheckTimePunch[]>;
+  upsertTimePunch(punch: InsertFingercheckTimePunch): Promise<FingercheckTimePunch>;
+  deleteTimePunchesByDateRange(startDate: string, endDate: string): Promise<void>;
+
+  // Fingercheck Project Mappings
+  getProjectMappings(): Promise<FingercheckProjectMapping[]>;
+  getProjectMappingsByProjectId(projectId: number): Promise<FingercheckProjectMapping[]>;
+  getProjectMappingByJobCode(jobCode: string): Promise<FingercheckProjectMapping | undefined>;
+  createProjectMapping(mapping: InsertFingercheckProjectMapping): Promise<FingercheckProjectMapping>;
+  deleteProjectMapping(id: number): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1140,6 +1152,75 @@ export class DatabaseStorage implements IStorage {
 
   async deleteFingercheckEmployee(id: number): Promise<void> {
     await db.delete(fingercheckEmployees).where(eq(fingercheckEmployees.id, id));
+  }
+
+  // Fingercheck Time Punches
+  async getTimePunches(filters?: { employeeId?: number; startDate?: string; endDate?: string; jobCode?: string }): Promise<FingercheckTimePunch[]> {
+    const conditions = [];
+    if (filters?.employeeId) {
+      conditions.push(eq(fingercheckTimePunches.employeeId, filters.employeeId));
+    }
+    if (filters?.startDate) {
+      conditions.push(sql`${fingercheckTimePunches.date} >= ${filters.startDate}`);
+    }
+    if (filters?.endDate) {
+      conditions.push(sql`${fingercheckTimePunches.date} <= ${filters.endDate + "T23:59:59"}`);
+    }
+    if (filters?.jobCode) {
+      conditions.push(eq(fingercheckTimePunches.jobCode, filters.jobCode));
+    }
+    if (conditions.length > 0) {
+      return db.select().from(fingercheckTimePunches).where(and(...conditions)).orderBy(fingercheckTimePunches.actualTime);
+    }
+    return db.select().from(fingercheckTimePunches).orderBy(fingercheckTimePunches.actualTime);
+  }
+
+  async upsertTimePunch(punch: InsertFingercheckTimePunch): Promise<FingercheckTimePunch> {
+    const now = new Date();
+    const [result] = await db
+      .insert(fingercheckTimePunches)
+      .values({ ...punch, lastSyncedAt: now })
+      .onConflictDoUpdate({
+        target: fingercheckTimePunches.guid,
+        set: {
+          ...punch,
+          lastSyncedAt: now,
+        },
+      })
+      .returning();
+    return result;
+  }
+
+  async deleteTimePunchesByDateRange(startDate: string, endDate: string): Promise<void> {
+    await db.delete(fingercheckTimePunches).where(
+      and(
+        sql`${fingercheckTimePunches.date} >= ${startDate}`,
+        sql`${fingercheckTimePunches.date} <= ${endDate + "T23:59:59"}`
+      )
+    );
+  }
+
+  // Fingercheck Project Mappings
+  async getProjectMappings(): Promise<FingercheckProjectMapping[]> {
+    return db.select().from(fingercheckProjectMappings).orderBy(fingercheckProjectMappings.createdAt);
+  }
+
+  async getProjectMappingsByProjectId(projectId: number): Promise<FingercheckProjectMapping[]> {
+    return db.select().from(fingercheckProjectMappings).where(eq(fingercheckProjectMappings.projectId, projectId));
+  }
+
+  async getProjectMappingByJobCode(jobCode: string): Promise<FingercheckProjectMapping | undefined> {
+    const [result] = await db.select().from(fingercheckProjectMappings).where(eq(fingercheckProjectMappings.fingercheckJobCode, jobCode));
+    return result;
+  }
+
+  async createProjectMapping(mapping: InsertFingercheckProjectMapping): Promise<FingercheckProjectMapping> {
+    const [result] = await db.insert(fingercheckProjectMappings).values(mapping).returning();
+    return result;
+  }
+
+  async deleteProjectMapping(id: number): Promise<void> {
+    await db.delete(fingercheckProjectMappings).where(eq(fingercheckProjectMappings.id, id));
   }
 }
 

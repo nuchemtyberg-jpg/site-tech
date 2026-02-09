@@ -130,19 +130,34 @@ Key entities defined in `shared/schema.ts` include: Projects, Tasks, TaskStatusH
    - **Cause**: Performance tracking used requestAnimationFrame loops that weren't cancelled on cleanup, causing multiple parallel animation frames.
    - **Fix**: Added `cancelAnimationFrame` call and `stopped` flag to ensure clean termination.
 
-### Fingercheck Integration (Employee Sync)
-- **Purpose**: Pull employee data from Fingercheck payroll/HR system into SiteTech
+### Fingercheck Integration (Employee Sync + Time Tracking)
+- **Purpose**: Pull employee data and time punch records from Fingercheck payroll/HR system into SiteTech
 - **API**: Fingercheck REST API at `https://developer.fingercheck.com/api`
 - **Authentication**: Uses `FINGERCHECK_API_KEY` and `FINGERCHECK_CLIENT_SECRET` secrets
-- **Service**: `server/services/fingercheck.ts` — fetches and maps employee data
-- **Database**: `fingercheck_employees` table with unique constraint on `employee_id`
+- **Service**: `server/services/fingercheck.ts` — fetches/maps employee data and time card data, builds daily time summaries by pairing punch-in/out records into shifts
+- **Database Tables**:
+  - `fingercheck_employees` — synced employee records (unique on `employee_id`)
+  - `fingercheck_time_punches` — raw punch-in/out records (unique on `guid`)
+  - `fingercheck_project_mappings` — maps SiteTech projects to Fingercheck job codes (unique on `projectId` + `fingercheckJobCode`)
 - **Routes**: 
   - `GET /api/employees` — list all synced employees
   - `GET /api/employees/:id` — get single employee
-  - `POST /api/employees/sync` — trigger sync from Fingercheck API
+  - `POST /api/employees/sync` — trigger employee sync from Fingercheck API
   - `DELETE /api/employees/:id` — delete employee (admin only)
-- **Frontend**: `client/src/pages/Employees.tsx` — table view with search, status filtering, detail dialog, and sync button
+  - `GET /api/time-punches` — list time punches with optional filters (employeeId, startDate, endDate, jobCode)
+  - `GET /api/time-punches/summary` — aggregated daily time summaries with shifts (requires startDate, endDate)
+  - `POST /api/time-punches/sync` — sync time punch data from Fingercheck for a date range
+  - `GET /api/fingercheck-jobs` — list distinct Fingercheck job codes from synced punches
+  - `GET /api/project-mappings` — list all project-to-job mappings
+  - `GET /api/project-mappings/project/:projectId` — mappings for a specific project
+  - `POST /api/project-mappings` — create a project-to-job mapping
+  - `DELETE /api/project-mappings/:id` — delete a mapping
+- **Frontend**: `client/src/pages/Employees.tsx` — tabbed page with:
+  - **Roster tab**: Employee table with search, status filtering, detail dialog, sync button
+  - **Time Tracking tab**: Per-employee daily punch-in/out history, filterable by date range, employee, and job
+  - **Hours Dashboard tab**: Summary cards (total hours, employees, avg), hours by employee table, hours by job table with project mapping display
 - **Sidebar**: "Employees" nav item with HardHat icon
+- **Time Tracking Details**: PunchType 1=in, 0=out; shifts are paired chronologically; incomplete pairs shown as "Missing"; hours calculated from time differences
 
 ### Verification Checklist
 

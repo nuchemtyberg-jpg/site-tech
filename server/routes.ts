@@ -2480,5 +2480,125 @@ export async function registerRoutes(
     }
   });
 
+  // Fingercheck Time Punches
+  app.get("/api/time-punches", isAuthenticated, isAuthorizedUser, async (req, res) => {
+    const { employeeId, startDate, endDate, jobCode } = req.query;
+    const punches = await storage.getTimePunches({
+      employeeId: employeeId ? Number(employeeId) : undefined,
+      startDate: startDate as string | undefined,
+      endDate: endDate as string | undefined,
+      jobCode: jobCode as string | undefined,
+    });
+    res.json(punches);
+  });
+
+  app.get("/api/time-punches/summary", isAuthenticated, isAuthorizedUser, async (req, res) => {
+    const { startDate, endDate, employeeId, jobCode } = req.query;
+    if (!startDate || !endDate) {
+      return res.status(400).json({ message: "startDate and endDate are required" });
+    }
+    const punches = await storage.getTimePunches({
+      employeeId: employeeId ? Number(employeeId) : undefined,
+      startDate: startDate as string,
+      endDate: endDate as string,
+      jobCode: jobCode as string | undefined,
+    });
+    const { buildDailyTimeSummaries } = await import("./services/fingercheck");
+    const summaries = buildDailyTimeSummaries(punches);
+    res.json(summaries);
+  });
+
+  app.post("/api/time-punches/sync", isAuthenticated, isAuthorizedUser, async (req, res) => {
+    try {
+      const { startDate, endDate } = req.body;
+      if (!startDate || !endDate) {
+        return res.status(400).json({ message: "startDate and endDate are required" });
+      }
+
+      const { fetchTimeCardData, mapTimePunch, isValidTimePunch } = await import("./services/fingercheck");
+      const rawPunches = await fetchTimeCardData(startDate, endDate);
+
+      let synced = 0;
+      let skipped = 0;
+      for (const punch of rawPunches) {
+        if (!isValidTimePunch(punch)) {
+          skipped++;
+          continue;
+        }
+        try {
+          const mapped = mapTimePunch(punch);
+          await storage.upsertTimePunch(mapped);
+          synced++;
+        } catch (innerErr) {
+          console.error(`Failed to sync punch ${punch.TimeClockHistoryGuid}:`, innerErr);
+          skipped++;
+        }
+      }
+
+      res.json({
+        message: `Synced ${synced} time punches${skipped ? `, ${skipped} skipped` : ""}`,
+        synced,
+        skipped,
+        total: rawPunches.length,
+      });
+    } catch (err: any) {
+      console.error("Time punch sync error:", err);
+      res.status(500).json({ message: err.message || "Failed to sync time punches" });
+    }
+  });
+
+  // Fingercheck Jobs (derived from synced time punches)
+  app.get("/api/fingercheck-jobs", isAuthenticated, isAuthorizedUser, async (req, res) => {
+    const allPunches = await storage.getTimePunches();
+    const jobMap = new Map<string, string>();
+    for (const p of allPunches) {
+      if (p.jobCode && !jobMap.has(p.jobCode)) {
+        jobMap.set(p.jobCode, p.jobDescription || p.jobCode);
+      }
+    }
+    const jobs = Array.from(jobMap.entries()).map(([code, description]) => ({ code, description }));
+    res.json(jobs);
+  });
+
+  // Fingercheck Project Mappings
+  app.get("/api/project-mappings", isAuthenticated, isAuthorizedUser, async (req, res) => {
+    const mappings = await storage.getProjectMappings();
+    res.json(mappings);
+  });
+
+  app.get("/api/project-mappings/project/:projectId", isAuthenticated, isAuthorizedUser, async (req, res) => {
+    const mappings = await storage.getProjectMappingsByProjectId(Number(req.params.projectId));
+    res.json(mappings);
+  });
+
+  app.post("/api/project-mappings", isAuthenticated, isAuthorizedUser, async (req, res) => {
+    try {
+      const { projectId, fingercheckJobCode, fingercheckJobDescription } = req.body;
+      if (!projectId || !fingercheckJobCode) {
+        return res.status(400).json({ message: "projectId and fingercheckJobCode are required" });
+      }
+      const mapping = await storage.createProjectMapping({
+        projectId: Number(projectId),
+        fingercheckJobCode,
+        fingercheckJobDescription: fingercheckJobDescription || null,
+      });
+      res.json(mapping);
+    } catch (err: any) {
+      if (err.message?.includes("unique") || err.code === "23505") {
+        return res.status(409).json({ message: "This project is already mapped to that Fingercheck job" });
+      }
+      res.status(500).json({ message: "Failed to create project mapping" });
+    }
+  });
+
+  app.delete("/api/project-mappings/:id", isAuthenticated, isAuthorizedUser, async (req, res) => {
+    try {
+      await storage.deleteProjectMapping(Number(req.params.id));
+      res.json({ message: "Mapping deleted" });
+    } catch (err) {
+      res.status(500).json({ message: "Failed to delete mapping" });
+    }
+  });
+
   return httpServer;
 }
