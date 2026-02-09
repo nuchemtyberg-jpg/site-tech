@@ -670,9 +670,9 @@ export default function DailyReportPage() {
   };
 
   const handleCompleteAndSign = () => {
-    if (user && !signerName) {
+    if (user) {
       const fullName = [user.firstName, user.lastName].filter(Boolean).join(' ');
-      if (fullName) setSignerName(fullName);
+      setSignerName(fullName || user.email || '');
     }
     setShowSignatureDialog(true);
   };
@@ -1595,16 +1595,8 @@ export default function DailyReportPage() {
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label htmlFor="signer-name">
-                <span className="text-destructive">*</span> Your Name
-              </Label>
-              <Input
-                id="signer-name"
-                value={signerName}
-                onChange={(e) => setSignerName(e.target.value)}
-                placeholder="Enter your name"
-                data-testid="input-signer-name"
-              />
+              <Label>Your Name</Label>
+              <p className="text-sm font-medium text-foreground" data-testid="text-signer-name">{signerName}</p>
             </div>
             
             <div className="flex gap-2">
