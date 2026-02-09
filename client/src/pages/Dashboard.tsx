@@ -70,7 +70,7 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6 md:space-y-8 animate-enter">
-      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-2 pr-[100px] md:pr-0">
+      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-2">
         <div>
           <h1 className="text-2xl md:text-3xl font-bold text-foreground">Welcome back{user?.firstName ? `, ${user.firstName}` : ""}</h1>
           <p className="text-sm md:text-base text-muted-foreground mt-1">Here's what's happening with your sitework operations.</p>

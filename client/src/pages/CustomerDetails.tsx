@@ -139,19 +139,22 @@ export default function CustomerDetails() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-4 pr-[100px] md:pr-0">
-        <Button variant="ghost" size="icon" onClick={() => navigate("/customers")} data-testid="button-back">
-          <ArrowLeft className="w-5 h-5" />
-        </Button>
-        <div className="flex-1 min-w-0">
-          <h1 className="text-3xl font-bold tracking-tight truncate">{customer.name}</h1>
-          {customer.company && <p className="text-muted-foreground truncate">{customer.company}</p>}
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+        <div className="flex items-center gap-3 min-w-0 flex-1">
+          <Button variant="ghost" size="icon" onClick={() => navigate("/customers")} data-testid="button-back">
+            <ArrowLeft className="w-5 h-5" />
+          </Button>
+          <div className="min-w-0 flex-1">
+            <h1 className="text-3xl font-bold tracking-tight truncate">{customer.name}</h1>
+            {customer.company && <p className="text-muted-foreground truncate">{customer.company}</p>}
+          </div>
         </div>
         <Button
           variant="destructive"
           size="sm"
           onClick={() => setDeleteConfirmOpen(true)}
           data-testid="button-delete-customer"
+          className="self-start sm:self-auto"
         >
           <Trash2 className="w-4 h-4 mr-2" />
           Delete

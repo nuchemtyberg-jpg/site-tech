@@ -142,26 +142,30 @@ export default function EquipmentDetails() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-4 pr-[100px] md:pr-0">
-        <Button variant="ghost" size="icon" onClick={() => navigate("/equipment")} data-testid="button-back">
-          <ArrowLeft className="w-5 h-5" />
-        </Button>
-        <div className="flex-1 min-w-0">
-          <h1 className="text-3xl font-bold tracking-tight truncate">{equipment.name}</h1>
-          <p className="text-muted-foreground capitalize truncate">{equipment.type.replace("_", " ")}</p>
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+        <div className="flex items-center gap-3 min-w-0 flex-1">
+          <Button variant="ghost" size="icon" onClick={() => navigate("/equipment")} data-testid="button-back">
+            <ArrowLeft className="w-5 h-5" />
+          </Button>
+          <div className="min-w-0 flex-1">
+            <h1 className="text-3xl font-bold tracking-tight truncate">{equipment.name}</h1>
+            <p className="text-muted-foreground capitalize truncate">{equipment.type.replace("_", " ")}</p>
+          </div>
         </div>
-        <Badge className={statusColors[equipment.status] || ""} variant="outline">
-          {equipment.status.replace("_", " ")}
-        </Badge>
-        <Button
-          variant="destructive"
-          size="sm"
-          onClick={() => setDeleteConfirmOpen(true)}
-          data-testid="button-delete-equipment"
-        >
-          <Trash2 className="w-4 h-4 mr-2" />
-          Delete
-        </Button>
+        <div className="flex items-center gap-2 self-start sm:self-auto">
+          <Badge className={statusColors[equipment.status] || ""} variant="outline">
+            {equipment.status.replace("_", " ")}
+          </Badge>
+          <Button
+            variant="destructive"
+            size="sm"
+            onClick={() => setDeleteConfirmOpen(true)}
+            data-testid="button-delete-equipment"
+          >
+            <Trash2 className="w-4 h-4 mr-2" />
+            Delete
+          </Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

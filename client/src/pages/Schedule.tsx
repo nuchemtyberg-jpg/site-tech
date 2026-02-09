@@ -54,12 +54,12 @@ export default function Schedule() {
 
   return (
     <div className="space-y-6 h-[calc(100vh-8rem)] flex flex-col">
-      <div className="flex items-center justify-between flex-wrap gap-4 pr-[100px] md:pr-0">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h1 className="text-3xl font-bold">Scheduling</h1>
           <p className="text-muted-foreground mt-1">Weekly calendar view of tasks and allocations</p>
         </div>
-        <div className="flex items-center gap-2 bg-card border border-border p-1 rounded-lg">
+        <div className="flex items-center gap-2 bg-card border border-border p-1 rounded-lg self-start sm:self-auto">
           <Button variant="ghost" size="icon" onClick={prevWeek} data-testid="button-prev-week">
             <ChevronLeft className="w-4 h-4" />
           </Button>
