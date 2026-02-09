@@ -752,303 +752,531 @@ export async function registerRoutes(
       const pdfDoc = await PDFDocument.create();
       const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
       const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+      const italicFont = await pdfDoc.embedFont(StandardFonts.HelveticaOblique);
       
-      let page = pdfDoc.addPage([612, 792]); // Letter size
+      const pageWidth = 612;
+      const pageHeight = 792;
+      let page = pdfDoc.addPage([pageWidth, pageHeight]);
       const { height } = page.getSize();
-      let y = height - 50;
-      const margin = 50;
+      let y = height;
+      const margin = 45;
+      const contentWidth = pageWidth - margin * 2;
+      const rightEdge = pageWidth - margin;
       const lineHeight = 14;
+
+      const brandNavy = rgb(0.12, 0.18, 0.28);
+      const brandGold = rgb(0.82, 0.66, 0.2);
+      const darkText = rgb(0.1, 0.1, 0.1);
+      const mediumText = rgb(0.35, 0.35, 0.35);
+      const lightText = rgb(0.55, 0.55, 0.55);
+      const sectionBg = rgb(0.94, 0.95, 0.97);
+      const tableBorder = rgb(0.82, 0.84, 0.88);
+      const successGreen = rgb(0.18, 0.55, 0.24);
+      const warningRed = rgb(0.7, 0.15, 0.15);
       
-      const drawText = (text: string, x: number, yPos: number, size = 10, useBold = false) => {
-        page.drawText(text, { x, y: yPos, size, font: useBold ? boldFont : font, color: rgb(0, 0, 0) });
+      const drawText = (text: string, x: number, yPos: number, size = 10, useBold = false, color = darkText) => {
+        const safeText = (text || '').replace(/[\n\r\t]/g, ' ');
+        page.drawText(safeText, { x, y: yPos, size, font: useBold ? boldFont : font, color });
       };
-      
-      const addNewPageIfNeeded = () => {
-        if (y < 80) {
-          page = pdfDoc.addPage([612, 792]);
-          y = height - 50;
-          // Add DRAFT watermark to new page if draft
-          if (report.status === 'draft') {
-            page.drawText("DRAFT", {
-              x: 200,
-              y: 400,
-              size: 80,
-              font: boldFont,
-              color: rgb(0.9, 0.9, 0.9),
-              rotate: degrees(45),
-            });
+
+      const drawItalicText = (text: string, x: number, yPos: number, size = 10, color = mediumText) => {
+        const safeText = (text || '').replace(/[\n\r\t]/g, ' ');
+        page.drawText(safeText, { x, y: yPos, size, font: italicFont, color });
+      };
+
+      const wrapText = (text: string, maxWidth: number, fontSize: number, useFont = font): string[] => {
+        const lines: string[] = [];
+        const paragraphs = (text || '').split('\n');
+        for (const para of paragraphs) {
+          const words = para.split(' ');
+          let currentLine = '';
+          for (const word of words) {
+            const testLine = currentLine + (currentLine ? ' ' : '') + word;
+            const w = useFont.widthOfTextAtSize(testLine, fontSize);
+            if (w > maxWidth && currentLine) {
+              lines.push(currentLine);
+              currentLine = word;
+            } else {
+              currentLine = testLine;
+            }
           }
+          if (currentLine) lines.push(currentLine);
+        }
+        return lines;
+      };
+
+      const addDraftWatermark = (pg: any) => {
+        if (report.status === 'draft') {
+          pg.drawText("DRAFT", {
+            x: 150,
+            y: 350,
+            size: 100,
+            font: boldFont,
+            color: rgb(0.92, 0.92, 0.92),
+            rotate: degrees(45),
+          });
         }
       };
       
-      // Add DRAFT watermark if status is draft
-      if (report.status === 'draft') {
-        page.drawText("DRAFT", {
-          x: 200,
-          y: 400,
-          size: 80,
+      const addNewPageIfNeeded = (spaceNeeded = 80) => {
+        if (y < spaceNeeded) {
+          page = pdfDoc.addPage([pageWidth, pageHeight]);
+          y = height - 50;
+          addDraftWatermark(page);
+        }
+      };
+
+      const drawSectionHeader = (title: string) => {
+        addNewPageIfNeeded(60);
+        page.drawRectangle({
+          x: margin,
+          y: y - 6,
+          width: contentWidth,
+          height: 22,
+          color: brandNavy,
+        });
+        page.drawText(title, {
+          x: margin + 10,
+          y: y,
+          size: 10,
           font: boldFont,
-          color: rgb(0.9, 0.9, 0.9),
-          rotate: degrees(45),
+          color: rgb(1, 1, 1),
+        });
+        y -= 28;
+      };
+
+      const drawInfoRow = (label: string, value: string, x: number, labelWidth = 90) => {
+        drawText(label, x, y, 9, true, mediumText);
+        drawText(value, x + labelWidth, y, 9, false, darkText);
+        y -= lineHeight;
+      };
+
+      const drawTableHeader = (columns: { label: string; x: number; width: number }[]) => {
+        page.drawRectangle({
+          x: margin + 10,
+          y: y - 4,
+          width: contentWidth - 20,
+          height: 16,
+          color: sectionBg,
+        });
+        page.drawLine({
+          start: { x: margin + 10, y: y - 4 },
+          end: { x: rightEdge - 10, y: y - 4 },
+          thickness: 0.5,
+          color: tableBorder,
+        });
+        for (const col of columns) {
+          page.drawText(col.label, {
+            x: col.x,
+            y: y,
+            size: 8,
+            font: boldFont,
+            color: mediumText,
+          });
+        }
+        y -= 18;
+      };
+      
+      addDraftWatermark(page);
+
+      // === HEADER WITH LOGO ===
+      let logoImage: any = null;
+      try {
+        const fs = await import('fs');
+        const path = await import('path');
+        const logoPaths = [
+          path.resolve('attached_assets/Logo_1770600587313.png'),
+          path.resolve('client/src/assets/sitetech-logo.png'),
+          path.join(__dirname, '..', 'attached_assets', 'Logo_1770600587313.png'),
+          path.join(__dirname, '..', 'client', 'src', 'assets', 'sitetech-logo.png'),
+        ];
+        for (const lp of logoPaths) {
+          try {
+            if (fs.existsSync(lp)) {
+              const logoBytes = fs.readFileSync(lp);
+              logoImage = await pdfDoc.embedPng(logoBytes);
+              break;
+            }
+          } catch { continue; }
+        }
+      } catch (logoErr) {
+        console.log('[PDF] Could not embed logo:', logoErr);
+      }
+
+      page.drawRectangle({
+        x: 0,
+        y: height - 90,
+        width: pageWidth,
+        height: 90,
+        color: brandNavy,
+      });
+
+      page.drawRectangle({
+        x: 0,
+        y: height - 94,
+        width: pageWidth,
+        height: 4,
+        color: brandGold,
+      });
+
+      if (logoImage) {
+        const logoMaxH = 55;
+        const logoMaxW = 140;
+        const logoScale = Math.min(logoMaxW / logoImage.width, logoMaxH / logoImage.height);
+        const logoW = logoImage.width * logoScale;
+        const logoH = logoImage.height * logoScale;
+        page.drawImage(logoImage, {
+          x: margin,
+          y: height - 18 - logoH,
+          width: logoW,
+          height: logoH,
+        });
+      } else {
+        page.drawText("SiteTech", {
+          x: margin,
+          y: height - 55,
+          size: 24,
+          font: boldFont,
+          color: rgb(1, 1, 1),
         });
       }
-      
-      // Header
-      drawText("DAILY FIELD REPORT", margin, y, 18, true);
-      y -= 30;
-      
-      // Project info
-      if (project) {
-        drawText(`Project: ${project.projectNumber} - ${project.name}`, margin, y, 12, true);
-        y -= lineHeight;
-        if (project.streetAddress || project.city || project.state) {
-          const address = [project.streetAddress, project.city, project.state].filter(Boolean).join(", ");
-          drawText(`Location: ${address}`, margin, y, 10);
-          y -= lineHeight;
-        }
-      }
-      
-      // Report date
+
+      page.drawText("DAILY FIELD REPORT", {
+        x: rightEdge - boldFont.widthOfTextAtSize("DAILY FIELD REPORT", 18),
+        y: height - 42,
+        size: 18,
+        font: boldFont,
+        color: rgb(1, 1, 1),
+      });
+
+      const statusLabel = report.status === 'completed' ? 'COMPLETED' : 'DRAFT';
+      const statusColor = report.status === 'completed' ? successGreen : brandGold;
+      const statusWidth = boldFont.widthOfTextAtSize(statusLabel, 9);
+      page.drawRectangle({
+        x: rightEdge - statusWidth - 14,
+        y: height - 64,
+        width: statusWidth + 14,
+        height: 16,
+        color: statusColor,
+        borderColor: statusColor,
+        borderWidth: 0,
+      });
+      page.drawText(statusLabel, {
+        x: rightEdge - statusWidth - 7,
+        y: height - 60,
+        size: 9,
+        font: boldFont,
+        color: rgb(1, 1, 1),
+      });
+
+      y = height - 110;
+
+      // === PROJECT INFO BAND ===
+      page.drawRectangle({
+        x: margin,
+        y: y - 8,
+        width: contentWidth,
+        height: 56,
+        color: sectionBg,
+        borderColor: tableBorder,
+        borderWidth: 0.5,
+      });
+
       const reportDate = new Date(report.reportDate);
       const formattedDate = reportDate.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
-      drawText(`Date: ${formattedDate}`, margin, y, 10);
-      y -= lineHeight;
+
+      const infoLeftX = margin + 12;
+      const infoRightX = margin + contentWidth / 2 + 10;
+      let infoY = y + 30;
+
+      if (project) {
+        drawText('Project:', infoLeftX, infoY, 8, true, mediumText);
+        drawText(`${project.projectNumber || ''} - ${project.name}`, infoLeftX + 45, infoY, 9, true, darkText);
+      }
+      drawText('Date:', infoRightX, infoY, 8, true, mediumText);
+      drawText(formattedDate, infoRightX + 32, infoY, 9, false, darkText);
+      infoY -= 16;
+
+      if (project && (project.streetAddress || project.city || project.state)) {
+        const address = [project.streetAddress, project.city, project.state].filter(Boolean).join(", ");
+        drawText('Location:', infoLeftX, infoY, 8, true, mediumText);
+        drawText(address, infoLeftX + 50, infoY, 9, false, darkText);
+      }
+      if (report.status === 'completed' && report.completedByName) {
+        drawText('Prepared by:', infoRightX, infoY, 8, true, mediumText);
+        drawText(report.completedByName, infoRightX + 65, infoY, 9, false, darkText);
+      }
+
+      y -= 20;
+
+      // === WEATHER CONDITIONS ===
+      drawSectionHeader("WEATHER CONDITIONS");
       
-      // Status
-      drawText(`Status: ${report.status.charAt(0).toUpperCase() + report.status.slice(1)}`, margin, y, 10);
-      y -= 25;
-      
-      // Weather section
-      drawText("WEATHER CONDITIONS", margin, y, 12, true);
-      y -= lineHeight + 2;
-      page.drawLine({ start: { x: margin, y: y + 6 }, end: { x: 562, y: y + 6 }, thickness: 0.5, color: rgb(0.7, 0.7, 0.7) });
-      y -= 4;
-      
-      const weatherInfo = [
+      const weatherItems = [
         report.weatherSummary ? `Conditions: ${report.weatherSummary}` : null,
-        report.temperature ? `Temperature: ${report.temperature}°F` : null,
+        report.temperature ? `Temperature: ${report.temperature}\u00B0F` : null,
         (report.temperatureHigh || report.temperatureLow) 
-          ? `High/Low: ${report.temperatureHigh || '--'}°F / ${report.temperatureLow || '--'}°F` 
+          ? `High/Low: ${report.temperatureHigh || '--'}\u00B0F / ${report.temperatureLow || '--'}\u00B0F` 
           : null,
         report.windSpeed ? `Wind: ${report.windSpeed} mph` : null,
       ].filter(Boolean);
       
-      if (weatherInfo.length > 0) {
-        weatherInfo.forEach((info) => {
-          drawText(info as string, margin + 10, y, 10);
+      if (weatherItems.length > 0) {
+        const weatherCol1 = weatherItems.slice(0, 2);
+        const weatherCol2 = weatherItems.slice(2);
+        const maxRows = Math.max(weatherCol1.length, weatherCol2.length);
+        for (let i = 0; i < maxRows; i++) {
+          if (weatherCol1[i]) drawText(weatherCol1[i] as string, margin + 12, y, 9, false, darkText);
+          if (weatherCol2[i]) drawText(weatherCol2[i] as string, margin + contentWidth / 2, y, 9, false, darkText);
           y -= lineHeight;
-        });
+        }
       } else {
-        drawText("No weather data recorded", margin + 10, y, 10);
+        drawItalicText("No weather data recorded", margin + 12, y, 9);
         y -= lineHeight;
       }
-      y -= 15;
-      
-      // Task Entries
-      addNewPageIfNeeded();
-      drawText("DAILY OPERATIONS", margin, y, 12, true);
-      y -= lineHeight + 2;
-      page.drawLine({ start: { x: margin, y: y + 6 }, end: { x: 562, y: y + 6 }, thickness: 0.5, color: rgb(0.7, 0.7, 0.7) });
-      y -= 4;
+      y -= 10;
+
+      // === DAILY OPERATIONS ===
+      drawSectionHeader("DAILY OPERATIONS");
       
       if (taskEntriesWithLines.length === 0) {
-        drawText("No tasks recorded", margin + 10, y, 10);
+        drawItalicText("No tasks recorded", margin + 12, y, 9);
         y -= lineHeight;
       } else {
-        for (const entry of taskEntriesWithLines) {
-          addNewPageIfNeeded();
-          drawText(`• ${entry.taskTitleSnapshot}`, margin + 10, y, 10, true);
-          y -= lineHeight;
-          drawText(`  Progress: ${entry.percentComplete}%`, margin + 20, y, 9);
-          y -= lineHeight;
+        for (let tIdx = 0; tIdx < taskEntriesWithLines.length; tIdx++) {
+          const entry = taskEntriesWithLines[tIdx];
+          addNewPageIfNeeded(50);
+
+          page.drawRectangle({
+            x: margin + 5,
+            y: y - 4,
+            width: contentWidth - 10,
+            height: 18,
+            color: rgb(0.96, 0.97, 0.99),
+            borderColor: tableBorder,
+            borderWidth: 0.3,
+          });
+          drawText(`${tIdx + 1}. ${entry.taskTitleSnapshot}`, margin + 12, y, 10, true, brandNavy);
+          
+          const progressLabel = `${entry.percentComplete}%`;
+          const progressLabelWidth = boldFont.widthOfTextAtSize(progressLabel, 9);
+          const progressBarX = rightEdge - 100;
+          const progressBarWidth = 80;
+          const progressFill = (entry.percentComplete / 100) * progressBarWidth;
+
+          page.drawRectangle({ x: progressBarX, y: y - 2, width: progressBarWidth, height: 10, color: rgb(0.88, 0.88, 0.88) });
+          page.drawRectangle({ x: progressBarX, y: y - 2, width: progressFill, height: 10, color: brandGold });
+          drawText(progressLabel, progressBarX - progressLabelWidth - 5, y, 9, true, darkText);
+          y -= 24;
           
           if (entry.comments) {
-            drawText(`  Notes: ${entry.comments}`, margin + 20, y, 9);
-            y -= lineHeight;
+            const commentLines = wrapText(entry.comments, contentWidth - 40, 9);
+            for (const cLine of commentLines) {
+              addNewPageIfNeeded();
+              drawItalicText(cLine, margin + 15, y, 9, mediumText);
+              y -= lineHeight;
+            }
+            y -= 2;
           }
           
-          // Labor lines
           if (entry.laborLines && entry.laborLines.length > 0) {
-            drawText("  Labor:", margin + 20, y, 9, true);
-            y -= lineHeight;
+            addNewPageIfNeeded(40);
+            drawText("Labor", margin + 15, y, 9, true, mediumText);
+            y -= 14;
+            
+            const laborCols = [
+              { label: "TYPE", x: margin + 20, width: 200 },
+              { label: "WORKERS", x: margin + 250, width: 80 },
+              { label: "HOURS", x: margin + 350, width: 80 },
+              { label: "TOTAL HRS", x: margin + 430, width: 80 },
+            ];
+            drawTableHeader(laborCols);
+            
+            let totalWorkers = 0;
+            let totalHours = 0;
             for (const labor of entry.laborLines) {
-              drawText(`    - ${labor.laborType}: ${labor.quantity} x ${labor.hours} hrs`, margin + 30, y, 9);
-              y -= lineHeight;
               addNewPageIfNeeded();
+              drawText(labor.laborType, margin + 20, y, 9);
+              drawText(String(labor.quantity), margin + 270, y, 9);
+              drawText(String(labor.hours), margin + 365, y, 9);
+              const lineTotal = labor.quantity * labor.hours;
+              drawText(String(lineTotal), margin + 450, y, 9);
+              totalWorkers += labor.quantity;
+              totalHours += lineTotal;
+              y -= lineHeight;
             }
+            page.drawLine({
+              start: { x: margin + 10, y: y + 4 },
+              end: { x: rightEdge - 10, y: y + 4 },
+              thickness: 0.5,
+              color: tableBorder,
+            });
+            drawText("Totals:", margin + 20, y, 9, true, mediumText);
+            drawText(String(totalWorkers), margin + 270, y, 9, true, darkText);
+            drawText(String(totalHours), margin + 450, y, 9, true, darkText);
+            y -= lineHeight + 4;
           }
           
-          // Equipment lines
           if (entry.equipmentLines && entry.equipmentLines.length > 0) {
-            drawText("  Equipment:", margin + 20, y, 9, true);
-            y -= lineHeight;
+            addNewPageIfNeeded(40);
+            drawText("Equipment", margin + 15, y, 9, true, mediumText);
+            y -= 14;
+            
+            const equipCols = [
+              { label: "TYPE", x: margin + 20, width: 200 },
+              { label: "UNITS", x: margin + 250, width: 80 },
+              { label: "HOURS", x: margin + 350, width: 80 },
+              { label: "TOTAL HRS", x: margin + 430, width: 80 },
+            ];
+            drawTableHeader(equipCols);
+            
+            let totalUnits = 0;
+            let totalEquipHours = 0;
             for (const equip of entry.equipmentLines) {
-              drawText(`    - ${equip.equipmentType}: ${equip.quantity} x ${equip.hours} hrs`, margin + 30, y, 9);
-              y -= lineHeight;
               addNewPageIfNeeded();
+              drawText(equip.equipmentType, margin + 20, y, 9);
+              drawText(String(equip.quantity), margin + 270, y, 9);
+              drawText(String(equip.hours), margin + 365, y, 9);
+              const lineTotal = equip.quantity * equip.hours;
+              drawText(String(lineTotal), margin + 450, y, 9);
+              totalUnits += equip.quantity;
+              totalEquipHours += lineTotal;
+              y -= lineHeight;
             }
+            page.drawLine({
+              start: { x: margin + 10, y: y + 4 },
+              end: { x: rightEdge - 10, y: y + 4 },
+              thickness: 0.5,
+              color: tableBorder,
+            });
+            drawText("Totals:", margin + 20, y, 9, true, mediumText);
+            drawText(String(totalUnits), margin + 270, y, 9, true, darkText);
+            drawText(String(totalEquipHours), margin + 450, y, 9, true, darkText);
+            y -= lineHeight + 4;
           }
           
-          // Add photos for this task entry if any
           if (entry.photos && entry.photos.length > 0) {
-            drawText("  Photos:", margin + 20, y, 9, true);
+            addNewPageIfNeeded(40);
+            drawText("Photos", margin + 15, y, 9, true, mediumText);
             y -= lineHeight + 5;
             
-            // Process photos in pairs for 2-column layout
-            const photoMaxWidth = 240;
+            const photoMaxWidth = 235;
             const photoMaxHeight = 160;
             const photoGap = 20;
             
             for (let i = 0; i < entry.photos.length; i += 2) {
               const photosInRow: { image: any; width: number; height: number }[] = [];
-              
-              // Load up to 2 photos for this row
               for (let j = 0; j < 2 && i + j < entry.photos.length; j++) {
                 const photo = entry.photos[i + j];
                 try {
                   const imageBytes = await getPhotoBytes(photo.url);
                   if (!imageBytes) continue;
-                  
                   let embeddedImage;
-                  try {
-                    embeddedImage = await pdfDoc.embedJpg(imageBytes);
-                  } catch {
-                    try {
-                      embeddedImage = await pdfDoc.embedPng(imageBytes);
-                    } catch {
-                      console.log(`[PDF Photo] Could not embed as JPG or PNG: ${photo.url}`);
-                      continue;
-                    }
-                  }
-                  
+                  try { embeddedImage = await pdfDoc.embedJpg(imageBytes); }
+                  catch { try { embeddedImage = await pdfDoc.embedPng(imageBytes); } catch { continue; } }
                   const scale = Math.min(photoMaxWidth / embeddedImage.width, photoMaxHeight / embeddedImage.height);
-                  photosInRow.push({
-                    image: embeddedImage,
-                    width: embeddedImage.width * scale,
-                    height: embeddedImage.height * scale
-                  });
-                } catch (err) {
-                  console.error("Failed to embed task photo:", err);
-                }
+                  photosInRow.push({ image: embeddedImage, width: embeddedImage.width * scale, height: embeddedImage.height * scale });
+                } catch (err) { console.error("Failed to embed task photo:", err); }
               }
-              
               if (photosInRow.length > 0) {
                 const maxRowHeight = Math.max(...photosInRow.map(p => p.height));
-                
-                if (y - maxRowHeight < 80) {
-                  page = pdfDoc.addPage([612, 792]);
-                  y = height - 50;
-                  if (report.status === 'draft') {
-                    page.drawText("DRAFT", { x: 200, y: 400, size: 80, font: boldFont, color: rgb(0.9, 0.9, 0.9), rotate: degrees(45) });
-                  }
-                }
-                
-                let xPos = margin + 20;
+                if (y - maxRowHeight < 80) { page = pdfDoc.addPage([pageWidth, pageHeight]); y = height - 50; addDraftWatermark(page); }
+                let xPos = margin + 15;
                 for (const p of photosInRow) {
+                  page.drawRectangle({ x: xPos - 2, y: y - p.height - 2, width: p.width + 4, height: p.height + 4, borderColor: tableBorder, borderWidth: 0.5, color: rgb(1, 1, 1) });
                   page.drawImage(p.image, { x: xPos, y: y - p.height, width: p.width, height: p.height });
                   xPos += p.width + photoGap;
                 }
-                y -= maxRowHeight + 10;
+                y -= maxRowHeight + 12;
               }
             }
           }
           
-          y -= 5;
+          if (tIdx < taskEntriesWithLines.length - 1) {
+            page.drawLine({
+              start: { x: margin + 10, y: y + 2 },
+              end: { x: rightEdge - 10, y: y + 2 },
+              thickness: 0.3,
+              color: rgb(0.85, 0.85, 0.85),
+            });
+            y -= 8;
+          }
         }
       }
-      y -= 15;
-      
-      // Deliveries
-      addNewPageIfNeeded();
-      drawText("DELIVERIES", margin, y, 12, true);
-      y -= lineHeight + 2;
-      page.drawLine({ start: { x: margin, y: y + 6 }, end: { x: 562, y: y + 6 }, thickness: 0.5, color: rgb(0.7, 0.7, 0.7) });
-      y -= 4;
+      y -= 12;
+
+      // === DELIVERIES ===
+      drawSectionHeader("DELIVERIES");
       
       if (deliveryEntriesWithPhotos.length === 0) {
-        drawText("No deliveries recorded", margin + 10, y, 10);
+        drawItalicText("No deliveries recorded", margin + 12, y, 9);
         y -= lineHeight;
       } else {
         for (const delivery of deliveryEntriesWithPhotos) {
-          addNewPageIfNeeded();
-          drawText(`• ${delivery.vendor || 'Unknown vendor'}`, margin + 10, y, 10, true);
-          y -= lineHeight;
+          addNewPageIfNeeded(50);
+          drawText(delivery.vendor || 'Unknown vendor', margin + 12, y, 10, true, darkText);
           if (delivery.deliveryTime) {
-            drawText(`  Time: ${delivery.deliveryTime}`, margin + 20, y, 9);
-            y -= lineHeight;
+            const timeStr = delivery.deliveryTime;
+            drawText(timeStr, rightEdge - 10 - font.widthOfTextAtSize(timeStr, 9), y, 9, false, mediumText);
           }
+          y -= lineHeight + 2;
+          
           if (delivery.description) {
-            drawText(`  Description: ${delivery.description}`, margin + 20, y, 9);
-            y -= lineHeight;
-          }
-          const deliveryStatus = delivery.allDelivered ? "All items delivered" : "Missing items";
-          drawText(`  Status: ${deliveryStatus}`, margin + 20, y, 9);
-          y -= lineHeight;
-          if (!delivery.allDelivered && delivery.missingItemsDetails) {
-            drawText(`  Missing: ${delivery.missingItemsDetails}`, margin + 20, y, 9);
-            y -= lineHeight;
+            const descLines = wrapText(delivery.description, contentWidth - 40, 9);
+            for (const dLine of descLines) {
+              addNewPageIfNeeded();
+              drawText(dLine, margin + 15, y, 9, false, darkText);
+              y -= lineHeight;
+            }
           }
           
-          // Add photos for this delivery if any
+          const delivered = delivery.allDelivered;
+          const statusText = delivered ? "All items delivered" : "Missing items";
+          const statusClr = delivered ? successGreen : warningRed;
+          drawText("Status: ", margin + 15, y, 9, true, mediumText);
+          drawText(statusText, margin + 55, y, 9, true, statusClr);
+          y -= lineHeight;
+          
+          if (!delivery.allDelivered && delivery.missingItemsDetails) {
+            drawText("Missing: ", margin + 15, y, 9, true, mediumText);
+            const missingLines = wrapText(delivery.missingItemsDetails, contentWidth - 90, 9);
+            for (let mIdx = 0; mIdx < missingLines.length; mIdx++) {
+              addNewPageIfNeeded();
+              drawText(missingLines[mIdx], mIdx === 0 ? margin + 60 : margin + 15, y, 9, false, warningRed);
+              y -= lineHeight;
+            }
+          }
+          
           if (delivery.photos && delivery.photos.length > 0) {
-            drawText("  Photos:", margin + 20, y, 9, true);
+            drawText("Photos:", margin + 15, y, 9, true, mediumText);
             y -= lineHeight + 5;
-            
-            // Process photos in pairs for 2-column layout
-            const photoMaxWidth = 240;
+            const photoMaxWidth = 235;
             const photoMaxHeight = 160;
             const photoGap = 20;
-            
             for (let i = 0; i < delivery.photos.length; i += 2) {
               const photosInRow: { image: any; width: number; height: number }[] = [];
-              
-              // Load up to 2 photos for this row
               for (let j = 0; j < 2 && i + j < delivery.photos.length; j++) {
                 const photo = delivery.photos[i + j];
                 try {
                   const imageBytes = await getPhotoBytes(photo.url);
                   if (!imageBytes) continue;
-                  
                   let embeddedImage;
-                  try {
-                    embeddedImage = await pdfDoc.embedJpg(imageBytes);
-                  } catch {
-                    try {
-                      embeddedImage = await pdfDoc.embedPng(imageBytes);
-                    } catch {
-                      console.log(`[PDF Photo] Could not embed delivery photo as JPG or PNG: ${photo.url}`);
-                      continue;
-                    }
-                  }
-                  
+                  try { embeddedImage = await pdfDoc.embedJpg(imageBytes); }
+                  catch { try { embeddedImage = await pdfDoc.embedPng(imageBytes); } catch { continue; } }
                   const scale = Math.min(photoMaxWidth / embeddedImage.width, photoMaxHeight / embeddedImage.height);
-                  photosInRow.push({
-                    image: embeddedImage,
-                    width: embeddedImage.width * scale,
-                    height: embeddedImage.height * scale
-                  });
-                } catch (err) {
-                  console.error("Failed to embed delivery photo:", err);
-                }
+                  photosInRow.push({ image: embeddedImage, width: embeddedImage.width * scale, height: embeddedImage.height * scale });
+                } catch (err) { console.error("Failed to embed delivery photo:", err); }
               }
-              
               if (photosInRow.length > 0) {
                 const maxRowHeight = Math.max(...photosInRow.map(p => p.height));
-                
-                if (y - maxRowHeight < 80) {
-                  page = pdfDoc.addPage([612, 792]);
-                  y = height - 50;
-                  if (report.status === 'draft') {
-                    page.drawText("DRAFT", { x: 200, y: 400, size: 80, font: boldFont, color: rgb(0.9, 0.9, 0.9), rotate: degrees(45) });
-                  }
-                }
-                
-                let xPos = margin + 20;
+                if (y - maxRowHeight < 80) { page = pdfDoc.addPage([pageWidth, pageHeight]); y = height - 50; addDraftWatermark(page); }
+                let xPos = margin + 15;
                 for (const p of photosInRow) {
+                  page.drawRectangle({ x: xPos - 2, y: y - p.height - 2, width: p.width + 4, height: p.height + 4, borderColor: tableBorder, borderWidth: 0.5, color: rgb(1, 1, 1) });
                   page.drawImage(p.image, { x: xPos, y: y - p.height, width: p.width, height: p.height });
                   xPos += p.width + photoGap;
                 }
-                y -= maxRowHeight + 10;
+                y -= maxRowHeight + 12;
               }
             }
           }
@@ -1057,101 +1285,91 @@ export async function registerRoutes(
           addNewPageIfNeeded();
         }
       }
-      y -= 15;
+      y -= 12;
       
-      // Notes
+      // === NOTES ===
       if (report.notes) {
-        addNewPageIfNeeded();
-        drawText("NOTES", margin, y, 12, true);
-        y -= lineHeight + 2;
-        page.drawLine({ start: { x: margin, y: y + 6 }, end: { x: 562, y: y + 6 }, thickness: 0.5, color: rgb(0.7, 0.7, 0.7) });
-        y -= 4;
-        
-        // Word wrap notes
-        const words = report.notes.split(' ');
-        let line = '';
-        const maxWidth = 500;
-        for (const word of words) {
-          const testLine = line + (line ? ' ' : '') + word;
-          const width = font.widthOfTextAtSize(testLine, 10);
-          if (width > maxWidth) {
-            drawText(line, margin + 10, y, 10);
-            y -= lineHeight;
-            line = word;
-            addNewPageIfNeeded();
-          } else {
-            line = testLine;
-          }
-        }
-        if (line) {
-          drawText(line, margin + 10, y, 10);
+        drawSectionHeader("NOTES");
+        const noteLines = wrapText(report.notes, contentWidth - 30, 9);
+        for (const nLine of noteLines) {
+          addNewPageIfNeeded();
+          drawText(nLine, margin + 12, y, 9, false, darkText);
           y -= lineHeight;
         }
-        y -= 15;
+        y -= 12;
       }
       
-      // Signature section (if completed)
+      // === SIGNATURE ===
       if (report.status === 'completed' && report.completedByName) {
-        addNewPageIfNeeded();
-        drawText("SIGNATURE", margin, y, 12, true);
-        y -= lineHeight + 2;
-        page.drawLine({ start: { x: margin, y: y + 6 }, end: { x: 562, y: y + 6 }, thickness: 0.5, color: rgb(0.7, 0.7, 0.7) });
-        y -= 4;
-        
-        drawText(`Signed by: ${report.completedByName}`, margin + 10, y, 10);
-        y -= lineHeight;
-        if (report.completedAt) {
-          const signedDate = new Date(report.completedAt).toLocaleString('en-US');
-          drawText(`Date: ${signedDate}`, margin + 10, y, 10);
-          y -= lineHeight;
-        }
-        if (report.signatureType === 'typed' && report.signatureValue) {
-          drawText(`Signature: ${report.signatureValue}`, margin + 10, y, 10);
-          y -= lineHeight;
-        } else if (report.signatureType === 'freehand' && report.signatureValue) {
+        drawSectionHeader("VERIFICATION & SIGNATURE");
+
+        drawText("I hereby certify that this report is an accurate record of the day's activities.", margin + 12, y, 9, false, mediumText);
+        y -= lineHeight + 8;
+
+        if (report.signatureType === 'freehand' && report.signatureValue) {
           try {
             const base64Data = report.signatureValue.replace(/^data:image\/\w+;base64,/, '');
             const signatureBytes = Buffer.from(base64Data, 'base64');
             let signatureImage;
-            try {
-              signatureImage = await pdfDoc.embedPng(signatureBytes);
-            } catch {
-              try {
-                signatureImage = await pdfDoc.embedJpg(signatureBytes);
-              } catch {
-                signatureImage = null;
-              }
-            }
+            try { signatureImage = await pdfDoc.embedPng(signatureBytes); }
+            catch { try { signatureImage = await pdfDoc.embedJpg(signatureBytes); } catch { signatureImage = null; } }
             if (signatureImage) {
               const sigMaxWidth = 200;
               const sigMaxHeight = 60;
               const sigScale = Math.min(sigMaxWidth / signatureImage.width, sigMaxHeight / signatureImage.height);
               const sigWidth = signatureImage.width * sigScale;
               const sigHeight = signatureImage.height * sigScale;
-              
-              if (y - sigHeight < 80) {
-                page = pdfDoc.addPage([612, 792]);
-                y = height - 50;
-                if (report.status === 'draft') {
-                  page.drawText("DRAFT", { x: 200, y: 400, size: 80, font: boldFont, color: rgb(0.9, 0.9, 0.9), rotate: degrees(45) });
-                }
-              }
-              
-              page.drawImage(signatureImage, { x: margin + 10, y: y - sigHeight, width: sigWidth, height: sigHeight });
-              y -= sigHeight + 10;
+              if (y - sigHeight < 80) { page = pdfDoc.addPage([pageWidth, pageHeight]); y = height - 50; addDraftWatermark(page); }
+              page.drawImage(signatureImage, { x: margin + 12, y: y - sigHeight, width: sigWidth, height: sigHeight });
+              y -= sigHeight + 6;
             }
           } catch (sigErr) {
             console.error("Failed to embed signature image:", sigErr);
           }
+        } else if (report.signatureType === 'typed' && report.signatureValue) {
+          drawItalicText(report.signatureValue, margin + 12, y, 16, darkText);
+          y -= 24;
         }
+
+        page.drawLine({
+          start: { x: margin + 12, y: y },
+          end: { x: margin + 220, y: y },
+          thickness: 1,
+          color: darkText,
+        });
+        y -= 14;
+        drawText(report.completedByName, margin + 12, y, 10, true, darkText);
+        
+        if (report.completedAt) {
+          const signedDate = new Date(report.completedAt).toLocaleString('en-US', {
+            year: 'numeric', month: 'long', day: 'numeric', hour: 'numeric', minute: '2-digit'
+          });
+          drawText(signedDate, margin + 240, y, 9, false, mediumText);
+        }
+        y -= lineHeight;
+        drawText("Signature", margin + 12, y, 8, false, lightText);
+        drawText("Date", margin + 240, y, 8, false, lightText);
       }
       
-      // Footer
+      // === FOOTER ON ALL PAGES ===
       const totalPages = pdfDoc.getPageCount();
       for (let i = 0; i < totalPages; i++) {
         const pg = pdfDoc.getPage(i);
-        pg.drawText(`Page ${i + 1} of ${totalPages}`, { x: 500, y: 20, size: 8, font, color: rgb(0.5, 0.5, 0.5) });
-        pg.drawText(`Generated: ${new Date().toLocaleString('en-US')}`, { x: 50, y: 20, size: 8, font, color: rgb(0.5, 0.5, 0.5) });
+        pg.drawLine({
+          start: { x: margin, y: 38 },
+          end: { x: pageWidth - margin, y: 38 },
+          thickness: 0.5,
+          color: tableBorder,
+        });
+        pg.drawText("SiteTech", { x: margin, y: 24, size: 8, font: boldFont, color: mediumText });
+        pg.drawText(`Page ${i + 1} of ${totalPages}`, {
+          x: pageWidth / 2 - font.widthOfTextAtSize(`Page ${i + 1} of ${totalPages}`, 8) / 2,
+          y: 24, size: 8, font, color: lightText
+        });
+        pg.drawText(`Generated: ${new Date().toLocaleString('en-US')}`, {
+          x: pageWidth - margin - font.widthOfTextAtSize(`Generated: ${new Date().toLocaleString('en-US')}`, 7),
+          y: 24, size: 7, font, color: lightText
+        });
       }
       
       const pdfBytes = await pdfDoc.save();
