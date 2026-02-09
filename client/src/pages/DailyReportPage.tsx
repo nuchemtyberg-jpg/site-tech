@@ -293,6 +293,8 @@ export default function DailyReportPage() {
   };
   
   const handleSaveAndLeave = async () => {
+    if (!checkDeliveryMissingItems()) return;
+    
     // Save any pending changes
     const savePromises: Promise<any>[] = [];
     
@@ -581,7 +583,24 @@ export default function DailyReportPage() {
     onSuccess: () => refetchReport(),
   });
 
+  const checkDeliveryMissingItems = (): boolean => {
+    const deliveries = report?.deliveryEntries;
+    if (!deliveries) return true;
+    for (const d of deliveries) {
+      if (d.allDelivered === false) {
+        const missing = (localDeliveryMissing[d.id] ?? d.missingItemsDetails ?? '').trim();
+        if (!missing) {
+          toast({ title: "Please describe what was missing for all incomplete deliveries", variant: "destructive" });
+          return false;
+        }
+      }
+    }
+    return true;
+  };
+
   const handleSaveAndClose = async () => {
+    if (!checkDeliveryMissingItems()) return;
+    
     const savePromises: Promise<any>[] = [];
     
     // Save notes if changed
@@ -683,14 +702,7 @@ export default function DailyReportPage() {
       return;
     }
 
-    const incompleteDeliveries = report?.deliveryEntries?.filter(d => {
-      const missing = localDeliveryMissing[d.id] ?? d.missingItemsDetails ?? '';
-      return d.allDelivered === false && !missing.trim();
-    });
-    if (incompleteDeliveries && incompleteDeliveries.length > 0) {
-      toast({ title: "Please describe what was missing for all incomplete deliveries", variant: "destructive" });
-      return;
-    }
+    if (!checkDeliveryMissingItems()) return;
 
     let signatureValue = '';
     if (signatureType === 'freehand') {
