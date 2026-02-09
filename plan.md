@@ -463,6 +463,104 @@ Protected Routes:
 
 ---
 
+## Mailgun Inbound Email Integration - Progress Log
+
+### Goal
+Integrate Mailgun-based inbound email routing for SiteTech projects. Each project gets an auto-generated email address at `{slug}-{id}@email.sitetechnj.com`. Team members CC these addresses on project correspondence, which are automatically captured via Mailgun's inbound routing webhook and displayed in the project's Communications tab.
+
+### Completed Steps
+
+#### 1. Email Domain Configuration - DONE
+- Changed email domain from `projects.sitetechnj.com` to `email.sitetechnj.com` throughout codebase
+- Updated `PROJECT_EMAIL_DOMAIN` constant in `server/storage.ts`
+- Updated admin setup page (`client/src/pages/EmailSetup.tsx`) instructions
+
+#### 2. DNS Records - DONE (Verified in Mailgun)
+- MX records for `email.sitetechnj.com` pointing to:
+  - `mxa.mailgun.org` (priority 10)
+  - `mxb.mailgun.org` (priority 10)
+- SPF and DKIM records in place
+- Domain verified in Mailgun US region (`app.mailgun.com`)
+
+#### 3. Mailgun Inbound Route - DONE
+- Route pattern: `match_recipient(".*@email.sitetechnj.com")`
+- Action: Forward to `https://sitetech-app.replit.app/api/webhooks/inbound-email`
+- Route configured in Mailgun dashboard under Receiving > Inbound Routes
+
+#### 4. Webhook Endpoint - DONE (Published)
+- Endpoint: `POST /api/webhooks/inbound-email` in `server/routes.ts`
+- Service logic: `server/services/inboundEmail.ts`
+- Features:
+  - Parses multipart form data from Mailgun (using multer)
+  - Verifies Mailgun signature (HMAC SHA256 using `MAILGUN_API_KEY`)
+  - Extracts sender, recipients, subject, body (plain + HTML)
+  - Matches recipient email to project via `getProjectByEmail()`
+  - Stores email in `projectEmails` table
+  - Handles attachments: stores in Replit Object Storage under `email-attachments/{projectId}/{emailId}/`
+  - Classifies emails as internal/external based on customer email
+
+#### 5. Project Email Address Generation - DONE
+- Format: `{slug}-{id}@email.sitetechnj.com`
+- Slug: project name lowercased, non-alphanumeric replaced with hyphens, trimmed, max 30 chars
+- Auto-generated on project creation (`storage.createProject()`)
+- Backfill endpoint: `POST /api/admin/backfill-project-emails` (admin-only)
+
+#### 6. Production Database - Email Address Backfill - DONE (Feb 9, 2026)
+- All 4 production projects now have email addresses:
+
+| ID | Project Name | Email Address |
+|----|-------------|---------------|
+| 1 | 215 forest Ave. | 215-forest-ave-1@email.sitetechnj.com |
+| 2 | Massachusetts project | massachusetts-project-2@email.sitetechnj.com |
+| 3 | TEST PROJECT | test-project-3@email.sitetechnj.com |
+| 4 | 319 Albert | 319-albert-4@email.sitetechnj.com |
+
+#### 7. Development Database - Email Address Backfill - DONE (previously completed)
+- All 8 dev projects have email addresses
+
+#### 8. App Published - DONE
+- Latest code with webhook endpoint and backfill endpoint deployed to `sitetech-app.replit.app`
+
+### Remaining / To Verify
+
+#### 9. MAILGUN_API_KEY Secret - NEEDS VERIFICATION
+- The `MAILGUN_API_KEY` secret must contain the **HTTP webhook signing key** (ending in `bdfb5`), NOT a regular API key
+- This is the key Mailgun uses to sign POST payloads sent to the webhook
+- User needs to verify/update this in Replit Secrets tab
+- The signing key is found in Mailgun under: Settings > API Keys > HTTP webhook signing key
+
+#### 10. End-to-End Test - PENDING
+- Once MAILGUN_API_KEY is confirmed correct, send a test email to one of the project addresses (e.g., `319-albert-4@email.sitetechnj.com`)
+- Verify it appears in the project's Communications tab
+- Check Mailgun Logs for delivery/webhook activity
+
+#### 11. Communications Tab UI - EXISTING (already built)
+- Located at `client/src/components/CommunicationsTab.tsx`
+- Accessible via FloatingProjectTools on project details page
+- Features: project email display with copy button, full-text search, internal/external filtering, HTML email rendering, attachment viewing
+
+### Key Files
+| File | Purpose |
+|------|---------|
+| `server/services/inboundEmail.ts` | Mailgun webhook processing, signature verification |
+| `server/routes.ts` | Webhook endpoint, admin backfill endpoint |
+| `server/storage.ts` | `backfillProjectEmails()`, `getProjectByEmail()`, email slug generation |
+| `shared/schema.ts` | `projectEmails`, `projectEmailAttachments`, `projectEmailConnections` tables |
+| `client/src/components/CommunicationsTab.tsx` | Frontend email display |
+| `client/src/pages/EmailSetup.tsx` | Admin setup instructions page |
+
+### Email Flow
+1. External user sends email, CC'ing `{slug}-{id}@email.sitetechnj.com`
+2. Email arrives at Mailgun (MX records route to Mailgun servers)
+3. Mailgun matches inbound route, forwards POST to webhook URL
+4. Webhook verifies Mailgun HMAC signature
+5. Webhook looks up project by recipient email address
+6. Email stored in `projectEmails` table with metadata
+7. Attachments stored in Replit Object Storage
+8. Email appears in project's Communications tab
+
+---
+
 ## Changelog
 
 ### February 3, 2026 (Evening)
