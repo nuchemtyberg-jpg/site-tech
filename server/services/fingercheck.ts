@@ -91,30 +91,38 @@ export function isValidEmployee(emp: FingercheckEmployeeResponse): boolean {
 }
 
 export function mapFingercheckEmployee(emp: FingercheckEmployeeResponse) {
-  const isTerminated = emp.DivisionEmployeeStatus?.toLowerCase() === "terminated" || !!emp.TerminationDate;
+  const statusStr = (emp.DivisionEmployeeStatus || "").trim().toUpperCase();
+  const isTerminated = statusStr === "T" || statusStr === "TERMINATED" || !!emp.TerminationDate;
   
+  const clean = (val: string | null | undefined): string | null => {
+    if (!val) return null;
+    const trimmed = val.trim();
+    if (trimmed === "" || trimmed === "()-" || trimmed === "() -") return null;
+    return trimmed;
+  };
+
   return {
     employeeId: emp.EmployeeID,
-    employeeNumber: emp.EmployeeNumber || null,
-    firstName: emp.FirstName || "Unknown",
-    lastName: emp.LastName || "Unknown",
-    middleInitial: emp.MiddleInitial || null,
-    email: emp.Email || null,
-    phone: emp.Phone || null,
-    mobilePhone: emp.MobilePhone || null,
-    jobTitle: emp.JobTitle || null,
-    position: emp.Position || null,
-    department: emp.CostCenter1 || emp.Job || null,
-    location: emp.Location || null,
+    employeeNumber: clean(emp.EmployeeNumber),
+    firstName: clean(emp.FirstName) || "Unknown",
+    lastName: clean(emp.LastName) || "Unknown",
+    middleInitial: clean(emp.MiddleInitial),
+    email: clean(emp.Email),
+    phone: clean(emp.Phone),
+    mobilePhone: clean(emp.MobilePhone),
+    jobTitle: clean(emp.JobTitle),
+    position: clean(emp.Position),
+    department: clean(emp.CostCenter1) || clean(emp.Job),
+    location: clean(emp.Location),
     hireDate: emp.HireDate || null,
     terminationDate: emp.TerminationDate || null,
     status: isTerminated ? "terminated" : "active",
-    payType: emp.PayType || null,
-    address1: emp.Address1 || null,
-    address2: emp.Address2 || null,
-    city: emp.City || null,
-    state: emp.State || null,
-    zipCode: emp.ZipCode || null,
+    payType: clean(emp.PayType),
+    address1: clean(emp.Address1),
+    address2: clean(emp.Address2),
+    city: clean(emp.City),
+    state: clean(emp.State),
+    zipCode: clean(emp.ZipCode),
     isSupervisor: emp.IsASupervisor || false,
   };
 }
