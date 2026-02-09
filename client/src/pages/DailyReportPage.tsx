@@ -1586,7 +1586,7 @@ export default function DailyReportPage() {
 
       {/* Signature Dialog */}
       <Dialog open={showSignatureDialog} onOpenChange={setShowSignatureDialog}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md overflow-hidden">
           <DialogHeader>
             <DialogTitle>Complete & Sign Report</DialogTitle>
             <DialogDescription>
@@ -1624,13 +1624,14 @@ export default function DailyReportPage() {
                   width={400}
                   height={150}
                   className="border rounded bg-white cursor-crosshair w-full"
+                  style={{ touchAction: 'none' }}
                   onMouseDown={startDrawing}
                   onMouseMove={draw}
                   onMouseUp={stopDrawing}
                   onMouseLeave={stopDrawing}
-                  onTouchStart={startDrawing}
-                  onTouchMove={draw}
-                  onTouchEnd={stopDrawing}
+                  onTouchStart={(e) => { e.preventDefault(); startDrawing(e); }}
+                  onTouchMove={(e) => { e.preventDefault(); draw(e); }}
+                  onTouchEnd={(e) => { e.preventDefault(); stopDrawing(); }}
                   data-testid="canvas-signature"
                 />
                 <Button variant="outline" size="sm" onClick={clearCanvas}>
