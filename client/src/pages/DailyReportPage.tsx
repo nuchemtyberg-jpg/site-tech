@@ -683,6 +683,15 @@ export default function DailyReportPage() {
       return;
     }
 
+    const incompleteDeliveries = report?.deliveryEntries?.filter(d => {
+      const missing = localDeliveryMissing[d.id] ?? d.missingItemsDetails ?? '';
+      return d.allDelivered === false && !missing.trim();
+    });
+    if (incompleteDeliveries && incompleteDeliveries.length > 0) {
+      toast({ title: "Please describe what was missing for all incomplete deliveries", variant: "destructive" });
+      return;
+    }
+
     let signatureValue = '';
     if (signatureType === 'freehand') {
       const canvas = canvasRef.current;
@@ -823,6 +832,7 @@ export default function DailyReportPage() {
                   id="report-date"
                   type="date"
                   value={newReportDate}
+                  max={format(new Date(), "yyyy-MM-dd")}
                   onChange={(e) => setNewReportDate(e.target.value)}
                   data-testid="input-new-report-date"
                 />
@@ -832,7 +842,13 @@ export default function DailyReportPage() {
                   Cancel
                 </Button>
                 <Button
-                  onClick={() => createReportMutation.mutate(newReportDate)}
+                  onClick={() => {
+                    if (newReportDate > format(new Date(), "yyyy-MM-dd")) {
+                      toast({ title: "Cannot create reports for future dates", variant: "destructive" });
+                      return;
+                    }
+                    createReportMutation.mutate(newReportDate);
+                  }}
                   disabled={createReportMutation.isPending}
                   data-testid="button-submit-create-report"
                 >

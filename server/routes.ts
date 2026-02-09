@@ -522,6 +522,11 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Report date is required" });
       }
       
+      const today = new Date().toISOString().split('T')[0];
+      if (reportDate > today) {
+        return res.status(400).json({ message: "Cannot create reports for future dates" });
+      }
+      
       // Check for existing report on same date - return 409 if exists
       const existingReport = await storage.getDailyReportByDate(projectId, reportDate);
       if (existingReport) {
