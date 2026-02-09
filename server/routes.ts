@@ -671,19 +671,47 @@ export async function registerRoutes(
         return url;
       };
       
-      // Helper to read photo bytes directly from object storage
+      const fetchPhotoFromUrl = async (url: string): Promise<Uint8Array | null> => {
+        try {
+          const response = await fetch(url);
+          if (!response.ok) {
+            console.log(`[PDF Photo] HTTP fetch failed for: ${url} (${response.status})`);
+            return null;
+          }
+          const arrayBuffer = await response.arrayBuffer();
+          return new Uint8Array(arrayBuffer);
+        } catch (err) {
+          console.error(`[PDF Photo] Failed to fetch photo from URL: ${url}`, err);
+          return null;
+        }
+      };
+
       const getPhotoBytes = async (url: string): Promise<Uint8Array | null> => {
         try {
+          if (url.startsWith('http://') || url.startsWith('https://')) {
+            const objectPath = getObjectPath(url);
+            if (objectPath.startsWith('/objects/')) {
+              try {
+                const file = await objectStorageService.getObjectEntityFile(objectPath);
+                const [buffer] = await file.download();
+                return new Uint8Array(buffer);
+              } catch {
+                console.log(`[PDF Photo] Object storage failed, trying HTTP fetch: ${url}`);
+              }
+            }
+            return await fetchPhotoFromUrl(url);
+          }
+
           const objectPath = getObjectPath(url);
           if (!objectPath.startsWith('/objects/')) {
-            console.log(`[PDF Photo] Skipping non-object URL: ${url}`);
+            console.log(`[PDF Photo] Skipping unrecognized URL: ${url}`);
             return null;
           }
           const file = await objectStorageService.getObjectEntityFile(objectPath);
           const [buffer] = await file.download();
           return new Uint8Array(buffer);
         } catch (err) {
-          console.error(`[PDF Photo] Failed to read photo from storage: ${url}`, err);
+          console.error(`[PDF Photo] Failed to read photo: ${url}`, err);
           return null;
         }
       };
