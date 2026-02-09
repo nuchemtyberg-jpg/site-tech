@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Truck } from "lucide-react";
+import siteTechLogo from "@assets/Logo_1770600587313.png";
 
 export default function AuthPage() {
   return (
@@ -10,11 +11,8 @@ export default function AuthPage() {
         <div className="absolute inset-0 bg-grid-white/[0.05] bg-[size:40px_40px]" />
         <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent" />
         
-        <div className="relative z-10 flex items-center gap-2">
-           <div className="w-10 h-10 bg-primary rounded-lg flex items-center justify-center">
-             <span className="font-display font-bold text-xl text-primary-foreground">ST</span>
-           </div>
-           <span className="font-display font-bold text-2xl text-white tracking-wide">SiteTech</span>
+        <div className="relative z-10">
+           <img src={siteTechLogo} alt="SiteTech" className="h-14 w-auto" data-testid="img-logo-auth-desktop" />
         </div>
 
         <div className="relative z-10 max-w-lg">
@@ -27,7 +25,7 @@ export default function AuthPage() {
         </div>
 
         <div className="relative z-10 text-zinc-500 text-sm">
-          &copy; 2024 SiteTech. All rights reserved.
+          &copy; 2025 SiteTech. All rights reserved.
         </div>
       </div>
 
@@ -35,10 +33,7 @@ export default function AuthPage() {
       <div className="flex items-center justify-center bg-background p-6">
         <div className="w-full max-w-md space-y-8">
           <div className="text-center lg:hidden mb-8">
-             <div className="w-12 h-12 bg-primary rounded-lg flex items-center justify-center mx-auto mb-4">
-               <span className="font-display font-bold text-2xl text-primary-foreground">ST</span>
-             </div>
-             <h1 className="text-2xl font-bold">SiteTech</h1>
+             <img src={siteTechLogo} alt="SiteTech" className="h-12 w-auto mx-auto mb-4" data-testid="img-logo-auth-mobile" />
           </div>
 
           <Card className="border-border shadow-xl">

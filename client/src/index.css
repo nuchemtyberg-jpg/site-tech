@@ -13,9 +13,9 @@
   --background: 0 0% 98%;
   --foreground: 222 47% 11%;
 
-  /* Safety Orange Primary */
-  --primary: 24 95% 53%;
-  --primary-foreground: 0 0% 100%;
+  /* SiteTech Golden Yellow Primary */
+  --primary: 43 96% 56%;
+  --primary-foreground: 0 0% 10%;
 
   /* Soft muted grays */
   --muted: 220 14% 96%;
@@ -50,7 +50,7 @@
   --destructive-foreground: 0 0% 100%;
 
   /* UI Elements */
-  --ring: 24 95% 53%;
+  --ring: 43 96% 56%;
   --radius: 0.5rem;
 
   /* Sidebar */
@@ -59,16 +59,16 @@
   --sidebar-border: 220 13% 91%;
   --sidebar-accent: 220 14% 96%;
   --sidebar-accent-foreground: 222 47% 11%;
-  --sidebar-primary: 24 95% 53%;
-  --sidebar-primary-foreground: 0 0% 100%;
-  --sidebar-ring: 24 95% 53%;
+  --sidebar-primary: 43 96% 56%;
+  --sidebar-primary-foreground: 0 0% 10%;
+  --sidebar-ring: 43 96% 56%;
 
   /* Chart colors */
-  --chart-1: 24 95% 53%;
-  --chart-2: 173 58% 39%;
+  --chart-1: 43 96% 56%;
+  --chart-2: 0 0% 60%;
   --chart-3: 197 37% 24%;
   --chart-4: 43 74% 66%;
-  --chart-5: 27 87% 67%;
+  --chart-5: 0 0% 45%;
 }
 
 /* ===== DARK THEME ===== */
@@ -77,9 +77,9 @@
   --background: 222 47% 11%;
   --foreground: 210 40% 98%;
 
-  /* Safety Orange Primary */
-  --primary: 24 95% 53%;
-  --primary-foreground: 222 47% 11%;
+  /* SiteTech Golden Yellow Primary */
+  --primary: 43 96% 56%;
+  --primary-foreground: 0 0% 10%;
 
   /* Muted Slate */
   --muted: 217 33% 17%;
@@ -114,7 +114,7 @@
   --destructive-foreground: 210 40% 98%;
 
   /* UI Elements */
-  --ring: 24 95% 53%;
+  --ring: 43 96% 56%;
 
   /* Sidebar */
   --sidebar: 217 33% 15%;
@@ -122,9 +122,9 @@
   --sidebar-border: 217 33% 20%;
   --sidebar-accent: 217 33% 20%;
   --sidebar-accent-foreground: 210 40% 98%;
-  --sidebar-primary: 24 95% 53%;
-  --sidebar-primary-foreground: 222 47% 11%;
-  --sidebar-ring: 24 95% 53%;
+  --sidebar-primary: 43 96% 56%;
+  --sidebar-primary-foreground: 0 0% 10%;
+  --sidebar-ring: 43 96% 56%;
 }
 
 /* ===== BASE STYLES ===== */

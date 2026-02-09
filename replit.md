@@ -20,7 +20,8 @@ Preferred communication style: Simple, everyday language.
 - **State Management**: TanStack React Query for server state, custom hooks for specific domains.
 - **Styling**: Tailwind CSS, custom CSS variables, and shadcn/ui (Radix UI).
 - **Build Tool**: Vite.
-- **Design Theme**: Dark slate blue with safety orange accents.
+- **Design Theme**: Dark slate blue with golden yellow accents (matching SiteTech logo).
+- **Logo**: SiteTech logo saved at `client/src/assets/sitetech-logo.png` and `attached_assets/Logo_1770600587313.png`. Import via `@assets/Logo_1770600587313.png` in frontend code.
 
 ### Backend Architecture
 - **Framework**: Express.js with TypeScript.

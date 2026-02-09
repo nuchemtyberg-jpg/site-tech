@@ -17,6 +17,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import siteTechLogo from "@assets/Logo_1770600587313.png";
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
@@ -58,11 +59,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
           "hidden md:flex fixed inset-y-0 left-0 z-50 bg-card border-r border-border w-64 flex-col"
         )}>
           <div className="p-6 flex items-center gap-3">
-            <div className="w-10 h-10 bg-gradient-to-br from-primary to-orange-600 rounded-lg shadow-lg shadow-primary/20 flex items-center justify-center">
-              <span className="text-primary-foreground font-bold font-display text-xl">ST</span>
-            </div>
+            <img src={siteTechLogo} alt="SiteTech" className="h-10 w-auto" data-testid="img-logo-sidebar" />
             <div className="flex flex-col">
-              <span className="font-display font-bold text-xl tracking-tight">SiteTech</span>
               <span className="text-xs text-muted-foreground uppercase tracking-widest">Sitework Management</span>
             </div>
           </div>
@@ -168,7 +166,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
           />
           <div className="fixed inset-y-0 right-0 w-72 bg-card border-l border-border z-50 md:hidden flex flex-col safe-area-inset-top">
             <div className="flex items-center justify-between p-4 border-b border-border">
-              <span className="font-display font-bold">Menu</span>
+              <img src={siteTechLogo} alt="SiteTech" className="h-8 w-auto" data-testid="img-logo-mobile" />
               <Button 
                 variant="ghost" 
                 size="icon"
