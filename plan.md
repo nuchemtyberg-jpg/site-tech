@@ -110,6 +110,17 @@ SiteTech is a comprehensive web-based sitework management platform designed for 
 - [x] Analytics charts using Recharts
 - [x] Quick access navigation
 
+#### Phase 12: Fingercheck Integration (Employee Sync)
+- [x] Fingercheck REST API integration (GetAllEmployees endpoint)
+- [x] Employee data sync with upsert pattern (no duplicates)
+- [x] Database table with unique constraint on employee_id
+- [x] Data cleaning (whitespace trimming, empty phone filtering)
+- [x] Status detection (Active "A" / Terminated "T" / by termination date)
+- [x] Employees page with table view, search, and status filtering
+- [x] Employee detail dialog with full contact/employment info
+- [x] Robust error handling with user-friendly messages (401/403/invalid response)
+- [x] Sidebar navigation with HardHat icon
+
 ---
 
 ## Current Features Detail
@@ -186,6 +197,14 @@ SiteTech is a comprehensive web-based sitework management platform designed for 
 - **Metrics**: Active projects, pending tasks, equipment status
 - **Charts**: Visual analytics using Recharts
 - **Quick Actions**: Navigate to key sections
+
+### 9. Employee Management (Fingercheck Integration)
+- **Sync**: One-click sync pulls all employees from Fingercheck payroll/HR system
+- **Employee Table**: Searchable, filterable list with name, email, title, status, hire date
+- **Status Filtering**: Filter by Active, Terminated, or All employees
+- **Detail View**: Click any employee to see full contact info, employment details, and address
+- **Data Cleaning**: Trims whitespace, removes empty phone placeholders, normalizes status codes
+- **Upsert Pattern**: Re-syncing updates existing records without creating duplicates
 
 ---
 
@@ -323,6 +342,12 @@ POST   /api/customers            - Create
 PATCH  /api/customers/:id        - Update
 DELETE /api/customers/:id        - Delete
 
+Employees (Fingercheck):
+GET    /api/employees            - List all synced employees
+GET    /api/employees/:id        - Get single employee
+POST   /api/employees/sync       - Sync from Fingercheck API
+DELETE /api/employees/:id        - Delete employee
+
 Files & Uploads:
 POST   /api/uploads/request-url  - Get presigned upload URL
 GET    /api/projects/:id/files   - List project files
@@ -375,6 +400,8 @@ Protected Routes:
 | CLOUDINARY_CLOUD_NAME | Cloudinary account cloud name |
 | CLOUDINARY_API_KEY | Cloudinary API key |
 | CLOUDINARY_API_SECRET | Cloudinary API secret |
+| FINGERCHECK_API_KEY | Fingercheck API authentication key |
+| FINGERCHECK_CLIENT_SECRET | Fingercheck client secret key |
 
 ---
 
@@ -433,7 +460,8 @@ Protected Routes:
 │   │   └── auth.ts          # Authentication & authorization
 │   ├── services/
 │   │   ├── email.ts         # Mailgun email service
-│   │   └── cloudinary.ts    # Cloudinary upload/transform service
+│   │   ├── cloudinary.ts    # Cloudinary upload/transform service
+│   │   └── fingercheck.ts   # Fingercheck API integration
 │   ├── replit_integrations/
 │   │   └── auth/            # Replit Auth integration
 │   ├── routes.ts
@@ -453,13 +481,91 @@ Protected Routes:
 - [ ] Email notifications for task assignments
 - [ ] Mobile app (React Native)
 - [ ] Offline mode for field workers
-- [ ] Time tracking integration
+- [x] Fingercheck employee sync (completed Feb 9, 2026)
+- [ ] Fingercheck time tracking integration (deferred)
 - [ ] Invoice generation
 - [ ] Subcontractor portal
 - [ ] Equipment GPS tracking
 - [ ] Custom report templates
 - [ ] Project templates
 - [ ] Bulk import/export
+
+---
+
+## Fingercheck Integration - Progress Log
+
+### Goal
+Integrate with Fingercheck payroll/HR platform to pull employee data into SiteTech. Enables viewing and managing the workforce roster directly within the construction management platform.
+
+### Completed Steps
+
+#### 1. Database Schema - DONE
+- Created `fingercheck_employees` table in `shared/schema.ts`
+- Fields: employeeId, employeeNumber, firstName, lastName, middleInitial, email, phone, mobilePhone, jobTitle, position, department, location, hireDate, terminationDate, status, payType, address fields, isSupervisor, lastSyncedAt
+- Unique constraint on `employee_id` to prevent duplicates on re-sync
+- Insert schema with `createInsertSchema` from drizzle-zod
+
+#### 2. Fingercheck API Service - DONE
+- Service file: `server/services/fingercheck.ts`
+- Endpoint: `GET https://developer.fingercheck.com/api/v1/Employees/GetAllEmployees`
+- Headers: `APIKEY` and `ClientSecretKey` (case-sensitive)
+- Response parsing handles array, `Data` wrapper, and `data` wrapper formats
+- Data cleaning: trims whitespace, filters empty phone placeholders (`"()-"`), normalizes status codes
+- Status detection: `"A"` = active, `"T"` or `"TERMINATED"` or has termination date = terminated
+- Validation: `isValidEmployee()` skips records missing required fields
+
+#### 3. Storage Layer - DONE
+- Added to `IStorage` interface in `server/storage.ts`:
+  - `getFingercheckEmployees()` - list all
+  - `getFingercheckEmployee(id)` - get by ID
+  - `getFingercheckEmployeeByEmployeeId(employeeId)` - get by Fingercheck employee ID
+  - `upsertFingercheckEmployee(employee)` - insert or update on conflict
+  - `deleteFingercheckEmployee(id)` - delete by internal ID
+- Upsert pattern: `onConflictDoUpdate` on `employee_id` column, sets `lastSyncedAt` on both insert and update
+
+#### 4. API Routes - DONE
+- `GET /api/employees` - Returns all synced employees
+- `GET /api/employees/:id` - Returns single employee by internal ID
+- `POST /api/employees/sync` - Triggers sync from Fingercheck API, upserts all employees, returns count and results
+- `DELETE /api/employees/:id` - Deletes employee record (admin only)
+- Error handling: Specific messages for 401 (auth failed), 403 (access denied), generic for other errors
+
+#### 5. Frontend UI - DONE
+- Page: `client/src/pages/Employees.tsx`
+- Features:
+  - "Sync from Fingercheck" button with loading state
+  - Searchable employee table (name, email, title)
+  - Status filter buttons: Active (count), Terminated (count), All (count)
+  - Employee detail dialog with full info (contact, employment, address)
+  - Empty state with prompt to sync
+  - Toast notifications for sync success/failure
+  - Responsive: table on desktop, cards on mobile
+- Sidebar: "Employees" nav item with HardHat icon in Layout.tsx
+- Route: `/employees` registered in App.tsx
+
+#### 6. API Credentials - DONE
+- `FINGERCHECK_API_KEY` stored as Replit secret
+- `FINGERCHECK_CLIENT_SECRET` stored as Replit secret
+- Both are 36-character UUID-format keys
+
+#### 7. End-to-End Testing - DONE (Feb 9, 2026)
+- Verified sync pulls 6 employees from Fingercheck
+- Search filtering works (tested with "Oton" → Otoniel Aguilar)
+- Status filter buttons update counts correctly
+- All 6 employee rows visible with correct data
+
+### Key Files
+| File | Purpose |
+|------|---------|
+| `server/services/fingercheck.ts` | Fingercheck API integration, data mapping, cleaning |
+| `server/routes.ts` | Employee API endpoints |
+| `server/storage.ts` | Employee CRUD operations with upsert |
+| `shared/schema.ts` | `fingercheckEmployees` table schema |
+| `client/src/pages/Employees.tsx` | Employee list page with search/filter/detail |
+| `client/src/components/Layout.tsx` | Sidebar navigation (Employees link) |
+
+### Deferred
+- **Time tracking integration**: User requested to hold off on this for now. Fingercheck API has endpoints for time clock data (`GetEmployeeClockInfoByEmployeeNumber`, etc.) that can be integrated in the future.
 
 ---
 
@@ -562,6 +668,17 @@ Integrate Mailgun-based inbound email routing for SiteTech projects. Each projec
 ---
 
 ## Changelog
+
+### February 9, 2026
+- **Fingercheck Employee Sync Integration**: Full integration with Fingercheck payroll/HR platform
+  - Created `fingercheck_employees` database table with unique constraint on employee_id
+  - Built `server/services/fingercheck.ts` API service to fetch from `GetAllEmployees` endpoint
+  - Implemented upsert-based sync with data cleaning (whitespace, empty phones, status normalization)
+  - Added API routes: GET /api/employees, POST /api/employees/sync, DELETE /api/employees/:id
+  - Built Employees page with searchable table, Active/Terminated/All filtering, and employee detail dialog
+  - Added "Employees" sidebar navigation with HardHat icon
+  - Successfully syncs 6 employees from Fingercheck production account
+  - Published to production
 
 ### February 3, 2026 (Evening)
 - **Mobile Document View Optimization**: Comprehensive mobile-first redesign of the project documents page
