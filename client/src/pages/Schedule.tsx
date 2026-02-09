@@ -54,7 +54,7 @@ export default function Schedule() {
 
   return (
     <div className="space-y-6 h-[calc(100vh-8rem)] flex flex-col">
-      <div className="flex items-center justify-between flex-wrap gap-4">
+      <div className="flex items-center justify-between flex-wrap gap-4 pr-[100px] md:pr-0">
         <div>
           <h1 className="text-3xl font-bold">Scheduling</h1>
           <p className="text-muted-foreground mt-1">Weekly calendar view of tasks and allocations</p>

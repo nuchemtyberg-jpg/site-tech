@@ -142,13 +142,13 @@ export default function EquipmentDetails() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-4 pr-[100px] md:pr-0">
         <Button variant="ghost" size="icon" onClick={() => navigate("/equipment")} data-testid="button-back">
           <ArrowLeft className="w-5 h-5" />
         </Button>
-        <div className="flex-1">
-          <h1 className="text-3xl font-bold tracking-tight">{equipment.name}</h1>
-          <p className="text-muted-foreground capitalize">{equipment.type.replace("_", " ")}</p>
+        <div className="flex-1 min-w-0">
+          <h1 className="text-3xl font-bold tracking-tight truncate">{equipment.name}</h1>
+          <p className="text-muted-foreground capitalize truncate">{equipment.type.replace("_", " ")}</p>
         </div>
         <Badge className={statusColors[equipment.status] || ""} variant="outline">
           {equipment.status.replace("_", " ")}

@@ -1311,7 +1311,7 @@ export default function ProjectDetails() {
         <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
           {/* Collapsed View - Always visible */}
           <div 
-            className="flex items-center justify-between gap-2 px-3 py-2 md:px-4 md:py-3 cursor-pointer hover-elevate"
+            className="flex items-center justify-between gap-2 px-3 py-2 md:px-4 md:py-3 pr-[100px] md:pr-4 cursor-pointer hover-elevate"
             onClick={() => setIsProjectDetailsExpanded(!isProjectDetailsExpanded)}
             data-testid="button-toggle-project-details"
           >
@@ -1961,7 +1961,7 @@ export default function ProjectDetails() {
             )}
 
           {/* Sticky Header Section on Mobile */}
-          <div className="sticky top-0 z-20 bg-background pb-3 space-y-3 shrink-0">
+          <div className="sticky top-0 z-20 bg-background pb-3 space-y-3 shrink-0 pr-[100px] md:pr-0">
             {/* Search Bar */}
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
