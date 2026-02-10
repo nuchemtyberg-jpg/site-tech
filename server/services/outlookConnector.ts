@@ -322,10 +322,10 @@ export async function getEmailReplies(conversationId: string, userId?: string): 
     .api('/me/messages')
     .filter(`conversationId eq '${conversationId}'`)
     .select('id,subject,bodyPreview,body,from,receivedDateTime,hasAttachments')
-    .orderby('receivedDateTime asc')
+    .top(50)
     .get();
 
-  return (result.value || []).map((msg: any) => ({
+  const messages = (result.value || []).map((msg: any) => ({
     id: msg.id,
     subject: msg.subject,
     bodyPreview: msg.bodyPreview,
@@ -337,6 +337,9 @@ export async function getEmailReplies(conversationId: string, userId?: string): 
     receivedAt: msg.receivedDateTime,
     hasAttachments: msg.hasAttachments,
   }));
+
+  messages.sort((a: any, b: any) => new Date(a.receivedAt).getTime() - new Date(b.receivedAt).getTime());
+  return messages;
 }
 
 export function isUserOutlookConfigured(): boolean {
