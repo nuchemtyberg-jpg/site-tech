@@ -6,7 +6,7 @@ import { z } from "zod";
 import { setupAuth, registerAuthRoutes, isAuthenticated } from "./replit_integrations/auth";
 import { registerObjectStorageRoutes, ObjectStorageService } from "./replit_integrations/object_storage";
 import type { User } from "@shared/schema";
-import { insertAuthorizedUserSchema } from "@shared/schema";
+import { insertAuthorizedUserSchema, insertRfiSchema } from "@shared/schema";
 import { isAdmin, isAuthorizedUser } from "./middleware/auth";
 import { sendInviteEmail } from "./services/email";
 import { generateUploadSignature, deleteFromCloudinary } from "./services/cloudinary";
@@ -2669,6 +2669,363 @@ export async function registerRoutes(
       res.json({ message: "Mapping deleted" });
     } catch (err) {
       res.status(500).json({ message: "Failed to delete mapping" });
+    }
+  });
+
+  // ============================================================
+  // RFI Routes
+  // ============================================================
+
+  app.get("/api/projects/:projectId/rfis", isAuthenticated, isAuthorizedUser, async (req, res) => {
+    try {
+      const rfis = await storage.getRfis(Number(req.params.projectId));
+      res.json(rfis);
+    } catch (err) {
+      res.status(500).json({ message: "Failed to fetch RFIs" });
+    }
+  });
+
+  app.get("/api/rfis/:id", isAuthenticated, isAuthorizedUser, async (req, res) => {
+    try {
+      const rfi = await storage.getRfi(Number(req.params.id));
+      if (!rfi) return res.status(404).json({ message: "RFI not found" });
+      res.json(rfi);
+    } catch (err) {
+      res.status(500).json({ message: "Failed to fetch RFI" });
+    }
+  });
+
+  app.get("/api/projects/:projectId/rfis/next-number", isAuthenticated, isAuthorizedUser, async (req, res) => {
+    try {
+      const nextNumber = await storage.getNextRfiNumber(Number(req.params.projectId));
+      res.json({ nextNumber });
+    } catch (err) {
+      res.status(500).json({ message: "Failed to get next RFI number" });
+    }
+  });
+
+  const createRfiBodySchema = z.object({
+    subject: z.string().min(1, "Subject is required"),
+    question: z.string().min(1, "Question is required"),
+    directedTo: z.string().min(1, "Directed To is required"),
+    directedToEmail: z.string().email("Valid email is required"),
+    ccEmails: z.array(z.string()).optional().nullable(),
+    priority: z.enum(["low", "normal", "high", "urgent"]).default("normal"),
+    dueDate: z.string().nullable().optional(),
+    additionalBody: z.string().nullable().optional(),
+    status: z.enum(["draft", "open", "responded", "closed"]).default("draft"),
+  });
+
+  app.post("/api/projects/:projectId/rfis", isAuthenticated, isAuthorizedUser, async (req, res) => {
+    try {
+      const projectId = Number(req.params.projectId);
+      const parsed = createRfiBodySchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Validation error", errors: parsed.error.flatten() });
+      }
+      const user = req.user as User;
+      const rfiNumber = await storage.getNextRfiNumber(projectId);
+      const rfi = await storage.createRfi({
+        ...parsed.data,
+        projectId,
+        rfiNumber,
+        createdBy: user.id,
+        createdByName: `${user.firstName || ""} ${user.lastName || ""}`.trim() || user.email || "Unknown",
+      });
+      res.json(rfi);
+    } catch (err: any) {
+      console.error("Failed to create RFI:", err);
+      res.status(500).json({ message: "Failed to create RFI" });
+    }
+  });
+
+  const updateRfiBodySchema = createRfiBodySchema.partial();
+
+  app.patch("/api/rfis/:id", isAuthenticated, isAuthorizedUser, async (req, res) => {
+    try {
+      const parsed = updateRfiBodySchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Validation error", errors: parsed.error.flatten() });
+      }
+      const rfi = await storage.updateRfi(Number(req.params.id), parsed.data);
+      res.json(rfi);
+    } catch (err) {
+      res.status(500).json({ message: "Failed to update RFI" });
+    }
+  });
+
+  app.delete("/api/rfis/:id", isAuthenticated, isAuthorizedUser, async (req, res) => {
+    try {
+      await storage.deleteRfi(Number(req.params.id));
+      res.json({ message: "RFI deleted" });
+    } catch (err) {
+      res.status(500).json({ message: "Failed to delete RFI" });
+    }
+  });
+
+  // RFI: Upload attachment
+  const rfiUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
+  app.post("/api/rfis/:id/attachments", isAuthenticated, isAuthorizedUser, rfiUpload.single("file"), async (req, res) => {
+    try {
+      if (!req.file) return res.status(400).json({ message: "No file provided" });
+
+      const rfi = await storage.getRfi(Number(req.params.id));
+      if (!rfi) return res.status(404).json({ message: "RFI not found" });
+
+      const privateDir = process.env.PRIVATE_OBJECT_DIR || "";
+      const { randomUUID } = await import("crypto");
+      const fileId = randomUUID();
+      const ext = req.file.originalname.split(".").pop() || "";
+      const objectPath = `${privateDir}/rfis/project-${rfi.projectId}/attachments/${fileId}.${ext}`;
+
+      const parseObjectPath = (path: string) => {
+        if (!path.startsWith("/")) path = `/${path}`;
+        const parts = path.split("/");
+        return { bucketName: parts[1], objectName: parts.slice(2).join("/") };
+      };
+
+      const { Storage } = await import("@google-cloud/storage");
+      const { objectStorageClient } = await import("../replit_integrations/object_storage/objectStorage");
+      const { bucketName, objectName } = parseObjectPath(objectPath);
+      const bucket = objectStorageClient.bucket(bucketName);
+      const file = bucket.file(objectName);
+      await file.save(req.file.buffer, { contentType: req.file.mimetype });
+
+      const entityId = objectPath.replace(privateDir + "/", "");
+      const storedPath = `/objects/${entityId}`;
+
+      const existingAttachments = rfi.attachments || [];
+      const attachmentEntry = JSON.stringify({ name: req.file.originalname, path: storedPath, contentType: req.file.mimetype, size: req.file.size });
+      await storage.updateRfi(rfi.id, {
+        attachments: [...existingAttachments, attachmentEntry],
+      });
+
+      res.json({ name: req.file.originalname, path: storedPath, contentType: req.file.mimetype, size: req.file.size });
+    } catch (err: any) {
+      console.error("Failed to upload RFI attachment:", err);
+      res.status(500).json({ message: "Failed to upload attachment" });
+    }
+  });
+
+  // RFI: Remove attachment
+  app.delete("/api/rfis/:id/attachments/:index", isAuthenticated, isAuthorizedUser, async (req, res) => {
+    try {
+      const rfi = await storage.getRfi(Number(req.params.id));
+      if (!rfi) return res.status(404).json({ message: "RFI not found" });
+
+      const index = Number(req.params.index);
+      const existingAttachments = rfi.attachments || [];
+      if (index < 0 || index >= existingAttachments.length) {
+        return res.status(400).json({ message: "Invalid attachment index" });
+      }
+
+      const updated = [...existingAttachments];
+      updated.splice(index, 1);
+      await storage.updateRfi(rfi.id, { attachments: updated });
+      res.json({ message: "Attachment removed" });
+    } catch (err) {
+      res.status(500).json({ message: "Failed to remove attachment" });
+    }
+  });
+
+  // RFI: Generate PDF and send via Outlook
+  app.post("/api/rfis/:id/send", isAuthenticated, isAuthorizedUser, async (req, res) => {
+    try {
+      const rfi = await storage.getRfi(Number(req.params.id));
+      if (!rfi) return res.status(404).json({ message: "RFI not found" });
+
+      const project = await storage.getProject(rfi.projectId);
+      if (!project) return res.status(404).json({ message: "Project not found" });
+
+      const user = req.user as User;
+
+      // Parse attachment entries
+      const attachmentFiles = (rfi.attachments || []).map((att: string) => {
+        try {
+          return JSON.parse(att);
+        } catch {
+          return null;
+        }
+      }).filter(Boolean);
+
+      // Generate PDF
+      const { generateRfiPdf, uploadPdfToStorage } = await import("./services/rfiPdfGenerator");
+      const pdfBuffer = await generateRfiPdf({
+        rfi,
+        projectName: project.name,
+        projectNumber: project.projectNumber || undefined,
+        attachmentFiles,
+      });
+
+      const pdfPath = await uploadPdfToStorage(pdfBuffer, rfi.projectId, rfi.rfiNumber);
+
+      // Prepare email attachments
+      const { sendEmail, getConnectedEmail } = await import("./services/outlookConnector");
+      const connectedEmail = await getConnectedEmail();
+
+      const emailAttachments: Array<{ name: string; contentType: string; contentBytes: string }> = [
+        {
+          name: `RFI-${String(rfi.rfiNumber).padStart(3, "0")}_${project.name.replace(/[^a-zA-Z0-9]/g, "_")}.pdf`,
+          contentType: "application/pdf",
+          contentBytes: pdfBuffer.toString("base64"),
+        },
+      ];
+
+      // Also attach the original files
+      for (const att of attachmentFiles) {
+        try {
+          const { objectStorageClient } = await import("./replit_integrations/object_storage/objectStorage");
+          const privateDir = process.env.PRIVATE_OBJECT_DIR || "";
+          let fullPath: string;
+          if (att.path.startsWith("/objects/")) {
+            const entityId = att.path.slice("/objects/".length);
+            fullPath = `${privateDir}/${entityId}`;
+          } else {
+            fullPath = att.path;
+          }
+          const parsePath = (p: string) => {
+            if (!p.startsWith("/")) p = `/${p}`;
+            const parts = p.split("/");
+            return { bucketName: parts[1], objectName: parts.slice(2).join("/") };
+          };
+          const { bucketName, objectName } = parsePath(fullPath);
+          const bucket = objectStorageClient.bucket(bucketName);
+          const file = bucket.file(objectName);
+          const [contents] = await file.download();
+          emailAttachments.push({
+            name: att.name,
+            contentType: att.contentType || "application/octet-stream",
+            contentBytes: contents.toString("base64"),
+          });
+        } catch (attErr) {
+          console.error(`Failed to attach file ${att.name}:`, attErr);
+        }
+      }
+
+      const rfiLabel = `RFI-${String(rfi.rfiNumber).padStart(3, "0")}`;
+      const emailBody = `
+        <div style="font-family: Arial, sans-serif; max-width: 700px;">
+          <h2 style="color: #1a365d;">Request for Information - ${rfiLabel}</h2>
+          <p><strong>Project:</strong> ${project.name}${project.projectNumber ? ` (#${project.projectNumber})` : ""}</p>
+          <p><strong>Subject:</strong> ${rfi.subject}</p>
+          <p><strong>Priority:</strong> ${(rfi.priority || "normal").toUpperCase()}</p>
+          ${rfi.dueDate ? `<p><strong>Response Due:</strong> ${new Date(rfi.dueDate).toLocaleDateString()}</p>` : ""}
+          <hr style="border: 1px solid #e2e8f0;" />
+          <p><strong>Question:</strong></p>
+          <p>${rfi.question.replace(/\n/g, "<br/>")}</p>
+          ${rfi.additionalBody ? `<p>${rfi.additionalBody.replace(/\n/g, "<br/>")}</p>` : ""}
+          <hr style="border: 1px solid #e2e8f0;" />
+          <p style="color: #718096; font-size: 12px;">
+            Please reply to this email with your response. The full RFI document is attached as a PDF.
+            <br/>Sent via SiteTech Construction Management
+          </p>
+        </div>
+      `;
+
+      const result = await sendEmail({
+        to: [rfi.directedToEmail],
+        cc: rfi.ccEmails?.filter(Boolean) || [],
+        subject: `${rfiLabel}: ${rfi.subject} - ${project.name}`,
+        bodyHtml: emailBody,
+        attachments: emailAttachments,
+      });
+
+      await storage.updateRfi(rfi.id, {
+        status: "open",
+        pdfUrl: pdfPath,
+        outlookMessageId: result.messageId,
+        outlookConversationId: result.conversationId,
+        sentAt: new Date(),
+        sentBy: user.id,
+        sentByName: `${user.firstName || ""} ${user.lastName || ""}`.trim() || user.email || "Unknown",
+        sentByEmail: connectedEmail || user.email || "",
+      });
+
+      const updatedRfi = await storage.getRfi(rfi.id);
+      res.json(updatedRfi);
+    } catch (err: any) {
+      console.error("Failed to send RFI:", err);
+      res.status(500).json({ message: err.message || "Failed to send RFI" });
+    }
+  });
+
+  // RFI: Check for replies from Outlook
+  app.post("/api/rfis/:id/check-replies", isAuthenticated, isAuthorizedUser, async (req, res) => {
+    try {
+      const rfi = await storage.getRfi(Number(req.params.id));
+      if (!rfi) return res.status(404).json({ message: "RFI not found" });
+      if (!rfi.outlookConversationId) return res.json({ responses: [], newCount: 0 });
+
+      const { getEmailReplies } = await import("./services/outlookConnector");
+      const replies = await getEmailReplies(rfi.outlookConversationId);
+
+      let newCount = 0;
+      for (const reply of replies) {
+        if (reply.id === rfi.outlookMessageId) continue;
+
+        const existing = await storage.getRfiResponseByOutlookId(reply.id);
+        if (!existing) {
+          await storage.createRfiResponse({
+            rfiId: rfi.id,
+            outlookMessageId: reply.id,
+            fromEmail: reply.from.email,
+            fromName: reply.from.name,
+            bodyPreview: reply.bodyPreview,
+            bodyHtml: reply.bodyHtml,
+            receivedAt: new Date(reply.receivedAt),
+          });
+          newCount++;
+        }
+      }
+
+      if (newCount > 0 && rfi.status === "open") {
+        await storage.updateRfi(rfi.id, { status: "responded" });
+      }
+
+      const responses = await storage.getRfiResponses(rfi.id);
+      res.json({ responses, newCount });
+    } catch (err: any) {
+      console.error("Failed to check RFI replies:", err);
+      res.status(500).json({ message: "Failed to check for replies" });
+    }
+  });
+
+  // RFI: Get responses
+  app.get("/api/rfis/:id/responses", isAuthenticated, isAuthorizedUser, async (req, res) => {
+    try {
+      const responses = await storage.getRfiResponses(Number(req.params.id));
+      res.json(responses);
+    } catch (err) {
+      res.status(500).json({ message: "Failed to fetch responses" });
+    }
+  });
+
+  // RFI: Update status (close/reopen)
+  app.patch("/api/rfis/:id/status", isAuthenticated, isAuthorizedUser, async (req, res) => {
+    try {
+      const { status } = req.body;
+      if (!["draft", "open", "responded", "closed"].includes(status)) {
+        return res.status(400).json({ message: "Invalid status" });
+      }
+      const rfi = await storage.updateRfi(Number(req.params.id), { status });
+      res.json(rfi);
+    } catch (err) {
+      res.status(500).json({ message: "Failed to update status" });
+    }
+  });
+
+  // Outlook connector status
+  app.get("/api/outlook/status", isAuthenticated, isAuthorizedUser, async (req, res) => {
+    try {
+      const { isOutlookConnectorConfigured, getConnectedEmail } = await import("./services/outlookConnector");
+      const connected = await isOutlookConnectorConfigured();
+      let email = null;
+      if (connected) {
+        email = await getConnectedEmail();
+      }
+      res.json({ connected, email });
+    } catch (err) {
+      res.json({ connected: false, email: null });
     }
   });
 

@@ -84,6 +84,29 @@ Key entities defined in `shared/schema.ts` include: Projects, Tasks, TaskStatusH
 - **Frontend**: `client/src/components/CommunicationsTab.tsx` - accessible via FloatingProjectTools "Communications" tab on project details page
 - **Features**: Project email display with copy button, full-text search, internal/external filtering, HTML email rendering, attachment viewing and downloading
 
+### RFI (Request for Information) Tool
+- **Purpose**: Create, send, and track Requests for Information within projects
+- **Access**: Via FloatingProjectTools dropdown ("RFIs" tab) on project detail pages
+- **Email Integration**: Uses Replit Outlook Connector (Microsoft Graph API) to send RFIs directly from the user's Outlook inbox
+- **PDF Generation**: PDFKit generates professional RFI documents with embedded images/attachments
+- **Workflow**: Create draft RFI → Attach files → Send (generates PDF, emails via Outlook) → Track replies
+- **Database Tables**: `rfis` (RFI details, status, attachments, Outlook message/conversation IDs), `rfi_responses` (tracked email replies)
+- **Backend Service**: `server/services/outlookConnector.ts` (Microsoft Graph API client), `server/services/rfiPdfGenerator.ts` (PDF generation)
+- **Frontend**: `client/src/components/RfiTab.tsx` — list view, creation form, detail view with attachment management, reply checking
+- **Routes**: 
+  - `GET /api/projects/:projectId/rfis` — list RFIs for project
+  - `POST /api/projects/:projectId/rfis` — create RFI
+  - `GET/PATCH/DELETE /api/rfis/:id` — single RFI CRUD
+  - `POST /api/rfis/:id/attachments` — upload attachment
+  - `DELETE /api/rfis/:id/attachments/:index` — remove attachment
+  - `POST /api/rfis/:id/send` — generate PDF and send via Outlook
+  - `POST /api/rfis/:id/check-replies` — poll Outlook for new replies
+  - `GET /api/rfis/:id/responses` — get tracked responses
+  - `PATCH /api/rfis/:id/status` — update status (close/reopen)
+  - `GET /api/outlook/status` — check Outlook connector status
+- **Attachments**: Stored in Replit Object Storage under `rfis/project-{id}/attachments/`
+- **PDFs**: Stored in Object Storage under `rfis/project-{id}/rfi-{number}.pdf`
+
 ### Build System
 - **Development**: Vite dev server with HMR.
 - **Production**: esbuild for server, Vite for client.
