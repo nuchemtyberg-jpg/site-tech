@@ -2861,7 +2861,7 @@ export async function registerRoutes(
 
       // Prepare email attachments
       const { sendEmail, getConnectedEmail } = await import("./services/outlookConnector");
-      const connectedEmail = await getConnectedEmail();
+      const connectedEmail = await getConnectedEmail(user.id);
 
       const emailAttachments: Array<{ name: string; contentType: string; contentBytes: string }> = [
         {
@@ -2928,7 +2928,7 @@ export async function registerRoutes(
         subject: `${rfiLabel}: ${rfi.subject} - ${project.name}`,
         bodyHtml: emailBody,
         attachments: emailAttachments,
-      });
+      }, user.id);
 
       await storage.updateRfi(rfi.id, {
         status: "open",
@@ -2956,8 +2956,9 @@ export async function registerRoutes(
       if (!rfi) return res.status(404).json({ message: "RFI not found" });
       if (!rfi.outlookConversationId) return res.json({ responses: [], newCount: 0 });
 
+      const user = req.user as User;
       const { getEmailReplies } = await import("./services/outlookConnector");
-      const replies = await getEmailReplies(rfi.outlookConversationId);
+      const replies = await getEmailReplies(rfi.outlookConversationId, user.id);
 
       let newCount = 0;
       for (const reply of replies) {
@@ -3017,15 +3018,95 @@ export async function registerRoutes(
   // Outlook connector status
   app.get("/api/outlook/status", isAuthenticated, isAuthorizedUser, async (req, res) => {
     try {
-      const { isOutlookConnectorConfigured, getConnectedEmail } = await import("./services/outlookConnector");
-      const connected = await isOutlookConnectorConfigured();
+      const user = req.user as User;
+      const { isOutlookConnectorConfigured, getConnectedEmail, isUserOutlookConfigured } = await import("./services/outlookConnector");
+      const connected = await isOutlookConnectorConfigured(user.id);
       let email = null;
       if (connected) {
-        email = await getConnectedEmail();
+        email = await getConnectedEmail(user.id);
       }
-      res.json({ connected, email });
+      const userConn = await storage.getUserOutlookConnection(user.id);
+      res.json({
+        connected,
+        email,
+        source: userConn ? "user" : connected ? "replit" : null,
+        canConnect: isUserOutlookConfigured(),
+      });
     } catch (err) {
-      res.json({ connected: false, email: null });
+      res.json({ connected: false, email: null, source: null, canConnect: false });
+    }
+  });
+
+  // User-level Outlook OAuth connect
+  app.get("/api/outlook/user-connect", isAuthenticated, isAuthorizedUser, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const { getUserConnectUrl } = await import("./services/outlookConnector");
+      const url = getUserConnectUrl(user.id);
+      res.json({ url });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message || "Failed to generate connect URL" });
+    }
+  });
+
+  // User-level Outlook OAuth callback
+  app.get("/api/outlook/user-callback", async (req, res) => {
+    const sendPage = (success: boolean, message: string) => {
+      res.send(`<!DOCTYPE html><html><head><title>Outlook Connection</title>
+        <style>body{font-family:system-ui,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;background:#0f172a;color:#e2e8f0;}
+        .card{text-align:center;padding:2rem;border-radius:0.75rem;background:#1e293b;max-width:400px;}
+        .icon{font-size:2rem;margin-bottom:1rem;width:48px;height:48px;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 1rem;}
+        .icon.ok{background:#065f46;color:#34d399;}
+        .icon.fail{background:#7f1d1d;color:#f87171;}
+        .icon svg{width:28px;height:28px;}
+        h2{margin:0 0 0.5rem;}
+        p{color:#94a3b8;margin:0 0 1rem;}
+        .btn{display:inline-block;padding:0.5rem 1.5rem;border-radius:0.375rem;background:${success ? '#f97316' : '#ef4444'};color:white;text-decoration:none;cursor:pointer;border:none;font-size:1rem;}
+        </style></head><body><div class="card">
+        <div class="icon ${success ? 'ok' : 'fail'}"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">${success ? '<path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>' : '<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>'}</svg></div>
+        <h2>${success ? 'Connected!' : 'Connection Failed'}</h2>
+        <p>${message}</p>
+        <button class="btn" onclick="window.close()">Close Window</button>
+        </div>
+        <script>if(window.opener){window.opener.postMessage({type:'outlook_user_callback',success:${success}},'*');}</script>
+        </body></html>`);
+    };
+
+    try {
+      const { code, state, error } = req.query;
+      if (error) return sendPage(false, String(error));
+      if (!code || !state) return sendPage(false, "Missing parameters from Microsoft.");
+
+      const { validateUserOAuthState, exchangeUserCode } = await import("./services/outlookConnector");
+      const userId = validateUserOAuthState(String(state));
+      if (!userId) return sendPage(false, "Connection request expired. Please try again.");
+
+      const tokens = await exchangeUserCode(String(code));
+      const expiresAt = new Date(Date.now() + (tokens.expiresIn - 60) * 1000);
+
+      await storage.upsertUserOutlookConnection({
+        userId,
+        email: tokens.email,
+        accessToken: tokens.accessToken,
+        refreshToken: tokens.refreshToken,
+        expiresAt,
+      });
+
+      sendPage(true, `Your Outlook account (${tokens.email}) is now connected. You can close this window.`);
+    } catch (err: any) {
+      console.error("User Outlook callback error:", err);
+      sendPage(false, "Something went wrong. Please try again.");
+    }
+  });
+
+  // User-level Outlook disconnect
+  app.post("/api/outlook/disconnect", isAuthenticated, isAuthorizedUser, async (req, res) => {
+    try {
+      const user = req.user as User;
+      await storage.deleteUserOutlookConnection(user.id);
+      res.json({ success: true });
+    } catch (err) {
+      res.status(500).json({ message: "Failed to disconnect" });
     }
   });
 

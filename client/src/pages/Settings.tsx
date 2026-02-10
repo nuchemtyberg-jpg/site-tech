@@ -1,10 +1,24 @@
 import { useAuth } from "@/hooks/use-auth";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { useToast } from "@/hooks/use-toast";
+import { apiRequest } from "@/lib/queryClient";
+import { useEffect, useCallback } from "react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { 
   User, 
   Mail, 
@@ -13,16 +27,89 @@ import {
   XCircle, 
   Settings as SettingsIcon,
   Loader2,
-  RefreshCw
+  Link as LinkIcon,
+  Unlink
 } from "lucide-react";
+
+interface OutlookStatus {
+  connected: boolean;
+  email: string | null;
+  source: "user" | "replit" | null;
+  canConnect: boolean;
+}
 
 export default function Settings() {
   const { user, isAdmin } = useAuth();
   const queryClient = useQueryClient();
+  const { toast } = useToast();
 
-  const { data: outlookStatus, isLoading: outlookLoading } = useQuery<{ connected: boolean; email: string | null }>({
+  const { data: outlookStatus, isLoading: outlookLoading } = useQuery<OutlookStatus>({
     queryKey: ["/api/outlook/status"],
   });
+
+  const connectMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("GET", "/api/outlook/user-connect");
+      const data = await res.json();
+      return data.url as string;
+    },
+    onSuccess: (url) => {
+      const popup = window.open(url, "outlook_connect", "width=600,height=700,scrollbars=yes");
+      if (!popup) {
+        window.location.href = url;
+      }
+    },
+    onError: (err: any) => {
+      toast({
+        title: "Connection Failed",
+        description: err.message || "Could not start Outlook connection. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const disconnectMutation = useMutation({
+    mutationFn: async () => {
+      await apiRequest("POST", "/api/outlook/disconnect");
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/outlook/status"] });
+      toast({
+        title: "Disconnected",
+        description: "Your Outlook account has been disconnected.",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to disconnect. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleOAuthCallback = useCallback((event: MessageEvent) => {
+    if (event.data?.type === "outlook_user_callback") {
+      queryClient.invalidateQueries({ queryKey: ["/api/outlook/status"] });
+      if (event.data.success) {
+        toast({
+          title: "Connected",
+          description: "Your Outlook account has been connected successfully.",
+        });
+      } else {
+        toast({
+          title: "Connection Failed",
+          description: "Could not connect your Outlook account. Please try again.",
+          variant: "destructive",
+        });
+      }
+    }
+  }, [queryClient, toast]);
+
+  useEffect(() => {
+    window.addEventListener("message", handleOAuthCallback);
+    return () => window.removeEventListener("message", handleOAuthCallback);
+  }, [handleOAuthCallback]);
 
   const initials = [user?.firstName, user?.lastName]
     .filter(Boolean)
@@ -124,10 +211,84 @@ export default function Settings() {
                     <li>Tracking RFI email replies</li>
                   </ul>
                 </div>
-                <Separator />
-                <p className="text-xs text-muted-foreground">
-                  To disconnect or change the connected account, use the Outlook integration panel in the workspace tools.
-                </p>
+
+                {outlookStatus.source === "user" && (
+                  <>
+                    <Separator />
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button
+                            variant="outline"
+                            className="flex-1 gap-2"
+                            data-testid="button-disconnect-outlook"
+                          >
+                            <Unlink className="w-4 h-4" />
+                            Disconnect
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Disconnect Outlook?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              This will remove your Outlook connection. You won't be able to send RFIs via email until you reconnect.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                            <AlertDialogAction
+                              onClick={() => disconnectMutation.mutate()}
+                              data-testid="button-confirm-disconnect"
+                            >
+                              Disconnect
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                      {outlookStatus.canConnect && (
+                        <Button
+                          variant="outline"
+                          className="flex-1 gap-2"
+                          onClick={() => connectMutation.mutate()}
+                          disabled={connectMutation.isPending}
+                          data-testid="button-reconnect-outlook"
+                        >
+                          {connectMutation.isPending ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <LinkIcon className="w-4 h-4" />
+                          )}
+                          Switch Account
+                        </Button>
+                      )}
+                    </div>
+                  </>
+                )}
+
+                {outlookStatus.source === "replit" && (
+                  <>
+                    <Separator />
+                    <p className="text-xs text-muted-foreground">
+                      Connected via workspace integration. To switch accounts, use the Connect button below.
+                    </p>
+                    {outlookStatus.canConnect && (
+                      <Button
+                        variant="outline"
+                        className="w-full gap-2"
+                        onClick={() => connectMutation.mutate()}
+                        disabled={connectMutation.isPending}
+                        data-testid="button-connect-outlook-override"
+                      >
+                        {connectMutation.isPending ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <LinkIcon className="w-4 h-4" />
+                        )}
+                        Connect Different Account
+                      </Button>
+                    )}
+                  </>
+                )}
               </>
             ) : (
               <>
@@ -142,24 +303,26 @@ export default function Settings() {
                     </p>
                   </div>
                 </div>
-                <div className="text-sm text-muted-foreground space-y-2">
-                  <p>To connect your Outlook account:</p>
-                  <ol className="list-decimal list-inside space-y-1 text-xs ml-2">
-                    <li>Open the <strong>Outlook</strong> integration in the workspace tools panel (left side)</li>
-                    <li>Click <strong>Connect</strong> and sign in with your Microsoft account</li>
-                    <li>Grant the requested permissions</li>
-                    <li>Return here to verify the connection</li>
-                  </ol>
-                </div>
-                <Button 
-                  variant="outline" 
-                  className="w-full gap-2" 
-                  onClick={() => queryClient.invalidateQueries({ queryKey: ["/api/outlook/status"] })}
-                  data-testid="button-refresh-outlook-status"
-                >
-                  <RefreshCw className="w-4 h-4" />
-                  Refresh Connection Status
-                </Button>
+
+                {outlookStatus?.canConnect ? (
+                  <Button
+                    className="w-full gap-2"
+                    onClick={() => connectMutation.mutate()}
+                    disabled={connectMutation.isPending}
+                    data-testid="button-connect-outlook"
+                  >
+                    {connectMutation.isPending ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <LinkIcon className="w-4 h-4" />
+                    )}
+                    Connect Outlook Account
+                  </Button>
+                ) : (
+                  <div className="text-sm text-muted-foreground space-y-2">
+                    <p>Outlook integration is not configured yet. Please contact your administrator to set up the Microsoft OAuth credentials.</p>
+                  </div>
+                )}
               </>
             )}
           </CardContent>

@@ -5,7 +5,7 @@ import {
   authorizedUsers,
   projectEmailConnections, projectEmails, projectEmailAttachments,
   fingercheckEmployees, fingercheckTimePunches, fingercheckProjectMappings,
-  rfis, rfiResponses,
+  rfis, rfiResponses, userOutlookConnections,
   type InsertProject, type InsertTask, type InsertEquipment, type InsertAllocation, type InsertFolder, type InsertFileMetadata, type InsertPhoto,
   type InsertCustomer, type InsertDailyReport, type InsertMaintenanceLog, type InsertCommunication, type InsertTaskStatusHistory, type InsertPhotoAlbum,
   type InsertReportTask, type InsertLaborEntry, type InsertEquipmentEntry, type InsertReportTaskPhoto, type InsertDelivery, type InsertDeliveryPhoto,
@@ -20,7 +20,7 @@ import {
   type DailyReportTaskEntry, type DailyReportLaborLine, type DailyReportEquipmentLine, type DailyReportDeliveryEntry, type DailyReportPhoto,
   type ProjectEmailConnection, type ProjectEmail, type ProjectEmailAttachment,
   type FingercheckEmployee, type FingercheckTimePunch, type FingercheckProjectMapping,
-  type Rfi, type RfiResponse,
+  type Rfi, type RfiResponse, type UserOutlookConnection,
   type User, type UpsertUser, type AuthorizedUser
 } from "@shared/schema";
 import { db } from "./db";
@@ -267,6 +267,11 @@ export interface IStorage {
   getRfiResponses(rfiId: number): Promise<RfiResponse[]>;
   getRfiResponseByOutlookId(outlookMessageId: string): Promise<RfiResponse | undefined>;
   createRfiResponse(response: InsertRfiResponse): Promise<RfiResponse>;
+
+  // User Outlook Connections
+  getUserOutlookConnection(userId: string): Promise<UserOutlookConnection | undefined>;
+  upsertUserOutlookConnection(data: { userId: string; email: string; accessToken: string; refreshToken: string; expiresAt: Date }): Promise<UserOutlookConnection>;
+  deleteUserOutlookConnection(userId: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1292,6 +1297,31 @@ export class DatabaseStorage implements IStorage {
   async createRfiResponse(response: InsertRfiResponse): Promise<RfiResponse> {
     const [result] = await db.insert(rfiResponses).values(response).returning();
     return result;
+  }
+
+  async getUserOutlookConnection(userId: string): Promise<UserOutlookConnection | undefined> {
+    const [result] = await db.select().from(userOutlookConnections).where(eq(userOutlookConnections.userId, userId));
+    return result;
+  }
+
+  async upsertUserOutlookConnection(data: { userId: string; email: string; accessToken: string; refreshToken: string; expiresAt: Date }): Promise<UserOutlookConnection> {
+    const [result] = await db.insert(userOutlookConnections).values(data)
+      .onConflictDoUpdate({
+        target: userOutlookConnections.userId,
+        set: {
+          email: data.email,
+          accessToken: data.accessToken,
+          refreshToken: data.refreshToken,
+          expiresAt: data.expiresAt,
+          updatedAt: new Date(),
+        },
+      })
+      .returning();
+    return result;
+  }
+
+  async deleteUserOutlookConnection(userId: string): Promise<void> {
+    await db.delete(userOutlookConnections).where(eq(userOutlookConnections.userId, userId));
   }
 }
 

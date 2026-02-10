@@ -633,3 +633,17 @@ export const files = pgTable("files", {
 export const insertFileSchema = createInsertSchema(files).omit({ id: true, createdAt: true, deletedAt: true });
 export type FileMetadata = typeof files.$inferSelect;
 export type InsertFileMetadata = z.infer<typeof insertFileSchema>;
+
+export const userOutlookConnections = pgTable("user_outlook_connections", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull().unique(),
+  email: text("email").notNull(),
+  accessToken: text("access_token").notNull(),
+  refreshToken: text("refresh_token").notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export type UserOutlookConnection = typeof userOutlookConnections.$inferSelect;
+export type InsertUserOutlookConnection = typeof userOutlookConnections.$inferInsert;
