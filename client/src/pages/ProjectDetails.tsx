@@ -108,6 +108,19 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { AddressAutocomplete } from "@/components/AddressAutocomplete";
 import { DailyReportsTab } from "@/components/DailyReportsTab";
 import { logRouteMount, logRouteUnmount } from "@/lib/debugPerf";
+import { HardHat } from "lucide-react";
+
+interface FingercheckJob {
+  code: string;
+  description: string;
+}
+
+interface ProjectMapping {
+  id: number;
+  projectId: number;
+  fingercheckJobCode: string;
+  fingercheckJobDescription: string | null;
+}
 
 const US_STATES = [
   "AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "FL", "GA",
@@ -223,9 +236,31 @@ export default function ProjectDetails() {
   const [editTaskStatus, setEditTaskStatus] = useState("pending");
   const [editTaskPriority, setEditTaskPriority] = useState("medium");
   const [editTaskPercentComplete, setEditTaskPercentComplete] = useState(0);
+  const [selectedFingercheckJob, setSelectedFingercheckJob] = useState<string>("none");
   
   // Task status history
   const { data: taskStatusHistory = [], isLoading: isHistoryLoading } = useTaskStatusHistory(editingTask?.id || null);
+
+  const { data: fingercheckJobs = [] } = useQuery<FingercheckJob[]>({
+    queryKey: ["/api/fingercheck-jobs"],
+  });
+
+  const { data: projectMappings = [] } = useQuery<ProjectMapping[]>({
+    queryKey: ["/api/project-mappings/project", projectId],
+    queryFn: async () => {
+      const res = await fetch(`/api/project-mappings/project/${projectId}`, { credentials: "include" });
+      if (!res.ok) return [];
+      return res.json();
+    },
+  });
+
+  const currentMapping = projectMappings.length > 0 ? projectMappings[0] : null;
+
+  useEffect(() => {
+    if (isEditOpen) {
+      setSelectedFingercheckJob(currentMapping?.fingercheckJobCode || "none");
+    }
+  }, [isEditOpen, currentMapping]);
 
   const getStatusColor = (status: string) => {
     const statusObj = PROJECT_STATUSES.find(s => s.value === status);
@@ -266,9 +301,30 @@ export default function ProjectDetails() {
     }
   }, [project, isEditOpen]);
 
-  const handleEditSubmit = (data: EditProjectFormData) => {
+  const handleEditSubmit = async (data: EditProjectFormData) => {
     const location = [data.streetAddress, data.city, data.state, data.zip].filter(Boolean).join(", ");
     const color = getStatusColor(data.status);
+
+    try {
+      if (selectedFingercheckJob !== (currentMapping?.fingercheckJobCode || "none")) {
+        if (currentMapping) {
+          await apiRequest("DELETE", `/api/project-mappings/${currentMapping.id}`);
+        }
+        if (selectedFingercheckJob !== "none") {
+          const selectedJob = fingercheckJobs.find(j => j.code === selectedFingercheckJob);
+          await apiRequest("POST", "/api/project-mappings", {
+            projectId,
+            fingercheckJobCode: selectedFingercheckJob,
+            fingercheckJobDescription: selectedJob?.description || null,
+          });
+        }
+        queryClient.invalidateQueries({ queryKey: ["/api/project-mappings/project", projectId] });
+        queryClient.invalidateQueries({ queryKey: ["/api/project-mappings"] });
+      }
+    } catch {
+      toast({ title: "Failed to update Fingercheck mapping", variant: "destructive" });
+    }
+
     updateProjectMutation.mutate(
       { id: projectId, ...data, location, color },
       {
@@ -1431,6 +1487,16 @@ export default function ProjectDetails() {
                   </div>
                 </div>
               )}
+
+              {currentMapping && (
+                <div className="flex items-start gap-3 text-sm border-t border-border pt-4 mt-2">
+                  <HardHat className="w-4 h-4 text-primary mt-0.5 shrink-0" />
+                  <div>
+                    <span className="text-muted-foreground block text-xs uppercase tracking-wide mb-1">Fingercheck Job</span>
+                    <span className="text-foreground" data-testid="text-fingercheck-mapping">{currentMapping.fingercheckJobDescription || currentMapping.fingercheckJobCode}</span>
+                  </div>
+                </div>
+              )}
               
               {/* Action buttons */}
               <div className="flex items-center gap-2 mt-4 pt-4 border-t border-border">
@@ -1667,6 +1733,29 @@ export default function ProjectDetails() {
                     </FormItem>
                   )}
                 />
+
+                {fingercheckJobs.length > 0 && (
+                  <div className="space-y-2 border-t pt-4">
+                    <div className="flex items-center gap-2">
+                      <HardHat className="w-4 h-4 text-muted-foreground" />
+                      <Label className="text-sm font-medium">Fingercheck Job Mapping</Label>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Link this project to a Fingercheck job to track employee hours against it.
+                    </p>
+                    <Select value={selectedFingercheckJob} onValueChange={setSelectedFingercheckJob}>
+                      <SelectTrigger className="bg-white dark:bg-zinc-900 text-black dark:text-white" data-testid="select-fingercheck-job">
+                        <SelectValue placeholder="Select a Fingercheck job..." />
+                      </SelectTrigger>
+                      <SelectContent className="bg-white dark:bg-zinc-900 text-black dark:text-white">
+                        <SelectItem value="none">No mapping</SelectItem>
+                        {fingercheckJobs.map((job) => (
+                          <SelectItem key={job.code} value={job.code}>{job.description}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
 
                 <DialogFooter>
                   <Button type="button" variant="outline" onClick={() => setIsEditOpen(false)}>

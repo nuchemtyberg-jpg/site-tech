@@ -3,7 +3,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { useSearch, useLocation } from "wouter";
 import {
   RefreshCw, Search, Users, Phone, Mail, MapPin, Briefcase,
-  ChevronRight, Clock, BarChart3
+  ChevronRight, Clock, BarChart3, HardHat, ArrowRight
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -966,6 +966,77 @@ function HoursDashboardTab() {
           </div>
         </>
       )}
+
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
+          <CardTitle className="text-base flex items-center gap-2">
+            <HardHat className="w-4 h-4" />
+            Project Mappings
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          {jobs.length === 0 ? (
+            <div className="p-6 text-center text-sm text-muted-foreground">
+              Sync time data first to see available Fingercheck jobs.
+            </div>
+          ) : (
+            <>
+              <div className="hidden sm:block">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Fingercheck Job</TableHead>
+                      <TableHead>SiteTech Project</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {jobs.map((job) => {
+                      const mapping = mappings.find(m => m.fingercheckJobCode === job.code);
+                      const project = mapping ? projects.find(p => p.id === mapping.projectId) : null;
+                      return (
+                        <TableRow key={job.code} data-testid={`row-mapping-${job.code}`}>
+                          <TableCell className="font-medium">{job.description}</TableCell>
+                          <TableCell>
+                            {project ? (
+                              <span className="text-foreground" data-testid={`text-mapped-project-${job.code}`}>{project.name}</span>
+                            ) : (
+                              <span className="text-muted-foreground text-sm">Not mapped</span>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+              <div className="sm:hidden divide-y">
+                {jobs.map((job) => {
+                  const mapping = mappings.find(m => m.fingercheckJobCode === job.code);
+                  const project = mapping ? projects.find(p => p.id === mapping.projectId) : null;
+                  return (
+                    <div key={job.code} className="px-4 py-3" data-testid={`card-mapping-${job.code}`}>
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium flex-1 min-w-0 truncate">{job.description}</span>
+                        <ArrowRight className="w-3 h-3 text-muted-foreground flex-shrink-0" />
+                        {project ? (
+                          <span className="text-sm flex-1 min-w-0 truncate text-right">{project.name}</span>
+                        ) : (
+                          <span className="text-sm text-muted-foreground flex-1 min-w-0 truncate text-right">Not mapped</span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          )}
+          <div className="p-4 border-t">
+            <p className="text-xs text-muted-foreground">
+              To link a Fingercheck job to a SiteTech project, edit the project and select the job under "Fingercheck Job Mapping".
+            </p>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }
