@@ -12,7 +12,9 @@ import {
   X,
   User,
   Shield,
-  Mail
+  Mail,
+  Settings,
+  ChevronRight
 } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -116,32 +118,45 @@ export function Layout({ children }: { children: React.ReactNode }) {
             )}
           </nav>
 
-          <div className="p-4 border-t border-border mt-auto">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-3 px-2 min-w-0 flex-1">
-                <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center border border-border flex-shrink-0">
-                  {user?.profileImageUrl ? (
-                    <img src={user.profileImageUrl} alt="User" className="w-full h-full rounded-full object-cover" />
-                  ) : (
-                    <User className="w-4 h-4 text-muted-foreground" />
-                  )}
+          <div className="p-4 border-t border-border mt-auto space-y-2">
+            <Link href="/settings">
+              <div 
+                className={cn(
+                  "flex items-center justify-between gap-2 px-2 py-2 rounded-lg cursor-pointer transition-all duration-200 min-h-[44px]",
+                  location === "/settings"
+                    ? "bg-primary text-primary-foreground shadow-lg shadow-primary/25"
+                    : "hover:bg-muted"
+                )}
+                data-testid="link-user-settings"
+              >
+                <div className="flex items-center gap-3 min-w-0 flex-1">
+                  <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center border border-border flex-shrink-0">
+                    {user?.profileImageUrl ? (
+                      <img src={user.profileImageUrl} alt="User" className="w-full h-full rounded-full object-cover" />
+                    ) : (
+                      <User className="w-4 h-4 text-muted-foreground" />
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium truncate">{user?.firstName || 'User'}</p>
+                    <p className="text-xs text-muted-foreground truncate">{user?.email}</p>
+                  </div>
                 </div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium truncate">{user?.firstName || 'User'}</p>
-                  <p className="text-xs text-muted-foreground truncate">{user?.email}</p>
-                </div>
+                <Settings className={cn("w-4 h-4 flex-shrink-0", location === "/settings" ? "text-primary-foreground" : "text-muted-foreground")} />
               </div>
+            </Link>
+            <div className="flex items-center justify-between gap-2">
+              <Button 
+                variant="outline" 
+                className="flex-1 justify-start gap-2 hover:bg-destructive/10 hover:text-destructive hover:border-destructive/50 min-h-[44px]"
+                onClick={() => logout()}
+                data-testid="button-logout"
+              >
+                <LogOut className="w-4 h-4" />
+                Log Out
+              </Button>
               <ThemeToggle />
             </div>
-            <Button 
-              variant="outline" 
-              className="w-full justify-start gap-2 hover:bg-destructive/10 hover:text-destructive hover:border-destructive/50 min-h-[44px]"
-              onClick={() => logout()}
-              data-testid="button-logout"
-            >
-              <LogOut className="w-4 h-4" />
-              Log Out
-            </Button>
           </div>
         </aside>
 
@@ -229,20 +244,32 @@ export function Layout({ children }: { children: React.ReactNode }) {
               )}
             </nav>
 
-            <div className="p-4 border-t border-border">
-              <div className="flex items-center gap-3 mb-4 p-2 bg-muted rounded-lg">
-                <div className="w-10 h-10 rounded-full bg-card flex items-center justify-center border border-border flex-shrink-0">
-                  {user?.profileImageUrl ? (
-                    <img src={user.profileImageUrl} alt="User" className="w-full h-full rounded-full object-cover" />
-                  ) : (
-                    <User className="w-5 h-5 text-muted-foreground" />
+            <div className="p-4 border-t border-border space-y-2">
+              <Link href="/settings">
+                <div 
+                  className={cn(
+                    "flex items-center gap-3 p-2 rounded-lg cursor-pointer transition-all duration-200",
+                    location === "/settings"
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-muted hover:bg-muted/80"
                   )}
+                  onClick={() => setMobileMenuOpen(false)}
+                  data-testid="link-user-settings-mobile"
+                >
+                  <div className="w-10 h-10 rounded-full bg-card flex items-center justify-center border border-border flex-shrink-0">
+                    {user?.profileImageUrl ? (
+                      <img src={user.profileImageUrl} alt="User" className="w-full h-full rounded-full object-cover" />
+                    ) : (
+                      <User className="w-5 h-5 text-muted-foreground" />
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium truncate">{user?.firstName || 'User'}</p>
+                    <p className="text-xs text-muted-foreground truncate">{user?.email}</p>
+                  </div>
+                  <Settings className="w-4 h-4 text-muted-foreground flex-shrink-0" />
                 </div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium truncate">{user?.firstName || 'User'}</p>
-                  <p className="text-xs text-muted-foreground truncate">{user?.email}</p>
-                </div>
-              </div>
+              </Link>
               <Button 
                 variant="outline" 
                 className="w-full justify-start gap-2 hover:bg-destructive/10 hover:text-destructive hover:border-destructive/50 min-h-[44px]"
