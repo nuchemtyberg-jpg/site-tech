@@ -267,6 +267,47 @@ export function buildDailyTimeSummaries(punches: Array<{
   return summaries.sort((a, b) => b.date.localeCompare(a.date) || a.employeeName.localeCompare(b.employeeName));
 }
 
+interface FingercheckJobResponse {
+  Code: string;
+  Description: string;
+  MapCode?: string;
+}
+
+export async function fetchJobsFromFingercheck(): Promise<{ code: string; description: string }[]> {
+  const response = await fetch(`${FINGERCHECK_BASE_URL}/v1/Sync/GetJobList`, {
+    method: "GET",
+    headers: getHeaders(),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error("Fingercheck jobs API error:", response.status, errorText.substring(0, 500));
+    if (response.status === 401) {
+      throw new Error("Fingercheck API authentication failed. Please verify your API credentials.");
+    }
+    throw new Error(`Fingercheck API error: ${response.status}`);
+  }
+
+  const text = await response.text();
+  let data: any;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    throw new Error("Fingercheck API returned invalid response for jobs");
+  }
+
+  let jobs: FingercheckJobResponse[];
+  if (Array.isArray(data)) jobs = data;
+  else if (data && Array.isArray(data.Data)) jobs = data.Data;
+  else if (data && Array.isArray(data.data)) jobs = data.data;
+  else throw new Error("Unexpected response format from Fingercheck jobs API");
+
+  return jobs.map(j => ({
+    code: j.Code,
+    description: j.Description || j.Code,
+  }));
+}
+
 export function isValidEmployee(emp: FingercheckEmployeeResponse): boolean {
   return !!emp.EmployeeID && !!(emp.FirstName || emp.LastName);
 }

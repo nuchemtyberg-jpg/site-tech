@@ -633,7 +633,7 @@ function HoursDashboardTab() {
   });
 
   const { data: jobs = [] } = useQuery<FingercheckJob[]>({
-    queryKey: ["/api/fingercheck-jobs"],
+    queryKey: ["/api/fingercheck-jobs/all"],
   });
 
   const projectJobCodes = useMemo(() => {

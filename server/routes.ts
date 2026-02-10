@@ -2560,6 +2560,18 @@ export async function registerRoutes(
     res.json(jobs);
   });
 
+  // Fingercheck Jobs (fetched directly from Fingercheck API - shows ALL jobs)
+  app.get("/api/fingercheck-jobs/all", isAuthenticated, isAuthorizedUser, async (req, res) => {
+    try {
+      const { fetchJobsFromFingercheck } = await import("./services/fingercheck");
+      const jobs = await fetchJobsFromFingercheck();
+      res.json(jobs);
+    } catch (error: any) {
+      console.error("Error fetching Fingercheck jobs:", error);
+      res.status(500).json({ message: error.message || "Failed to fetch jobs from Fingercheck" });
+    }
+  });
+
   // Fingercheck Project Mappings
   app.get("/api/project-mappings", isAuthenticated, isAuthorizedUser, async (req, res) => {
     const mappings = await storage.getProjectMappings();

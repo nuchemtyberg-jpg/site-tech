@@ -242,7 +242,7 @@ export default function ProjectDetails() {
   const { data: taskStatusHistory = [], isLoading: isHistoryLoading } = useTaskStatusHistory(editingTask?.id || null);
 
   const { data: fingercheckJobs = [] } = useQuery<FingercheckJob[]>({
-    queryKey: ["/api/fingercheck-jobs"],
+    queryKey: ["/api/fingercheck-jobs/all"],
   });
 
   const { data: projectMappings = [] } = useQuery<ProjectMapping[]>({
