@@ -60,6 +60,11 @@ function formatDate(dateStr: string) {
   return d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric", year: "numeric" });
 }
 
+function formatDateShort(dateStr: string) {
+  const d = new Date(dateStr + "T00:00:00");
+  return d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+}
+
 function formatHours(hours: number | null) {
   if (hours === null) return "—";
   return `${hours.toFixed(2)}h`;
@@ -115,22 +120,21 @@ function RosterTab() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between flex-wrap">
-        <div>
-          <p className="text-sm text-muted-foreground">
-            {employees.length > 0
-              ? `${activeCount} active, ${terminatedCount} terminated`
-              : "Sync employees from Fingercheck to get started"}
-            {lastSynced && lastSynced.getTime() > 0 && (
-              <span className="ml-2">
-                · Last synced {lastSynced.toLocaleDateString()} {lastSynced.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-              </span>
-            )}
-          </p>
-        </div>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between flex-wrap">
+        <p className="text-sm text-muted-foreground">
+          {employees.length > 0
+            ? `${activeCount} active, ${terminatedCount} terminated`
+            : "Sync employees from Fingercheck to get started"}
+          {lastSynced && lastSynced.getTime() > 0 && (
+            <span className="ml-2">
+              · Last synced {lastSynced.toLocaleDateString()} {lastSynced.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+            </span>
+          )}
+        </p>
         <Button
           onClick={() => syncMutation.mutate()}
           disabled={syncMutation.isPending}
+          className="w-full sm:w-auto"
           data-testid="button-sync-employees"
         >
           <RefreshCw className={`w-4 h-4 mr-2 ${syncMutation.isPending ? "animate-spin" : ""}`} />
@@ -139,7 +143,7 @@ function RosterTab() {
       </div>
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center flex-wrap">
-        <div className="relative flex-1 max-w-md">
+        <div className="relative flex-1 min-w-0">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
             placeholder="Search by name, email, title..."
@@ -149,7 +153,7 @@ function RosterTab() {
             data-testid="input-search-employees"
           />
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           <Button
             variant={statusFilter === "active" ? "default" : "outline"}
             size="sm"
@@ -381,6 +385,7 @@ function TimeTrackingTab() {
   const [endDate, setEndDate] = useState(defaults.endDate);
   const [employeeFilter, setEmployeeFilter] = useState<string>("all");
   const [jobFilter, setJobFilter] = useState<string>("all");
+  const [searchQuery, setSearchQuery] = useState("");
 
   const { data: employees = [] } = useQuery<FingercheckEmployee[]>({
     queryKey: ["/api/employees"],
@@ -419,63 +424,85 @@ function TimeTrackingTab() {
 
   const activeEmployees = employees.filter(e => e.status === "active");
 
+  const filteredSummaries = useMemo(() => {
+    if (!searchQuery.trim()) return summaries;
+    const q = searchQuery.toLowerCase();
+    return summaries.filter(s => s.employeeName.toLowerCase().includes(q));
+  }, [summaries, searchQuery]);
+
   return (
     <div className="space-y-4">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between flex-wrap">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-end flex-wrap">
-          <div>
-            <label className="text-xs text-muted-foreground mb-1 block">Start Date</label>
-            <Input
-              type="date"
-              value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
-              data-testid="input-time-start-date"
-            />
-          </div>
-          <div>
-            <label className="text-xs text-muted-foreground mb-1 block">End Date</label>
-            <Input
-              type="date"
-              value={endDate}
-              onChange={(e) => setEndDate(e.target.value)}
-              data-testid="input-time-end-date"
-            />
-          </div>
-          <div>
-            <label className="text-xs text-muted-foreground mb-1 block">Employee</label>
-            <Select value={employeeFilter} onValueChange={setEmployeeFilter}>
-              <SelectTrigger className="w-[180px]" data-testid="select-employee-filter">
-                <SelectValue placeholder="All Employees" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Employees</SelectItem>
-                {activeEmployees.map((emp) => (
-                  <SelectItem key={emp.employeeId} value={String(emp.employeeId)}>
-                    {emp.firstName} {emp.lastName}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div>
-            <label className="text-xs text-muted-foreground mb-1 block">Job</label>
-            <Select value={jobFilter} onValueChange={setJobFilter}>
-              <SelectTrigger className="w-[200px]" data-testid="select-job-filter">
-                <SelectValue placeholder="All Jobs" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Jobs</SelectItem>
-                {jobs.map((job) => (
-                  <SelectItem key={job.code} value={job.code}>{job.description}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:flex lg:items-end gap-3">
+        <div>
+          <label className="text-xs text-muted-foreground mb-1 block">Start Date</label>
+          <Input
+            type="date"
+            value={startDate}
+            onChange={(e) => setStartDate(e.target.value)}
+            data-testid="input-time-start-date"
+          />
         </div>
-        <Button onClick={() => syncMutation.mutate()} disabled={syncMutation.isPending} data-testid="button-sync-time-punches">
-          <RefreshCw className={`w-4 h-4 mr-2 ${syncMutation.isPending ? "animate-spin" : ""}`} />
-          {syncMutation.isPending ? "Syncing..." : "Sync Time Data"}
-        </Button>
+        <div>
+          <label className="text-xs text-muted-foreground mb-1 block">End Date</label>
+          <Input
+            type="date"
+            value={endDate}
+            onChange={(e) => setEndDate(e.target.value)}
+            data-testid="input-time-end-date"
+          />
+        </div>
+        <div>
+          <label className="text-xs text-muted-foreground mb-1 block">Employee</label>
+          <Select value={employeeFilter} onValueChange={setEmployeeFilter}>
+            <SelectTrigger className="w-full lg:w-[180px]" data-testid="select-employee-filter">
+              <SelectValue placeholder="All Employees" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Employees</SelectItem>
+              {activeEmployees.map((emp) => (
+                <SelectItem key={emp.employeeId} value={String(emp.employeeId)}>
+                  {emp.firstName} {emp.lastName}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div>
+          <label className="text-xs text-muted-foreground mb-1 block">Job</label>
+          <Select value={jobFilter} onValueChange={setJobFilter}>
+            <SelectTrigger className="w-full lg:w-[200px]" data-testid="select-job-filter">
+              <SelectValue placeholder="All Jobs" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Jobs</SelectItem>
+              {jobs.map((job) => (
+                <SelectItem key={job.code} value={job.code}>{job.description}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="sm:col-span-2 lg:col-span-1">
+          <Button
+            onClick={() => syncMutation.mutate()}
+            disabled={syncMutation.isPending}
+            className="w-full lg:w-auto"
+            data-testid="button-sync-time-punches"
+          >
+            <RefreshCw className={`w-4 h-4 mr-2 ${syncMutation.isPending ? "animate-spin" : ""}`} />
+            {syncMutation.isPending ? "Syncing..." : "Sync Time Data"}
+          </Button>
+        </div>
+      </div>
+
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+        <Input
+          placeholder="Search employees..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="pl-9"
+          data-testid="input-search-time-employees"
+        />
       </div>
 
       {summaryLoading ? (
@@ -496,48 +523,93 @@ function TimeTrackingTab() {
             </p>
           </CardContent>
         </Card>
-      ) : (
+      ) : filteredSummaries.length === 0 ? (
         <Card>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Date</TableHead>
-                <TableHead>Employee</TableHead>
-                <TableHead>Job</TableHead>
-                <TableHead>Shifts</TableHead>
-                <TableHead className="text-right">Total Hours</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {summaries.map((summary) => (
-                <TableRow key={`${summary.employeeId}-${summary.date}`} data-testid={`row-time-${summary.employeeId}-${summary.date}`}>
-                  <TableCell className="font-medium whitespace-nowrap">{formatDate(summary.date)}</TableCell>
-                  <TableCell data-testid={`text-time-employee-${summary.employeeId}`}>{summary.employeeName}</TableCell>
-                  <TableCell className="text-muted-foreground">{summary.jobDescription || summary.jobCode || "—"}</TableCell>
-                  <TableCell>
-                    <div className="space-y-1">
-                      {summary.shifts.map((shift, idx) => (
-                        <div key={idx} className="text-sm flex items-center gap-2">
-                          <span className="text-green-600 dark:text-green-400">{formatTime(shift.punchIn)}</span>
-                          <span className="text-muted-foreground">→</span>
-                          <span className={shift.punchOut ? "text-red-600 dark:text-red-400" : "text-muted-foreground"}>
-                            {shift.punchOut ? formatTime(shift.punchOut) : "Missing"}
-                          </span>
-                          {shift.hours !== null && (
-                            <span className="text-xs text-muted-foreground">({formatHours(shift.hours)})</span>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-right font-medium" data-testid={`text-total-hours-${summary.employeeId}-${summary.date}`}>
-                    {formatHours(summary.totalHours)}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+          <CardContent className="flex flex-col items-center justify-center py-12 text-center">
+            <Search className="w-10 h-10 text-muted-foreground mb-3" />
+            <h3 className="text-lg font-semibold mb-1">No matching records</h3>
+            <p className="text-sm text-muted-foreground">No time records match "{searchQuery}".</p>
+          </CardContent>
         </Card>
+      ) : (
+        <>
+          <Card className="hidden md:block">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Date</TableHead>
+                  <TableHead>Employee</TableHead>
+                  <TableHead>Job</TableHead>
+                  <TableHead>Shifts</TableHead>
+                  <TableHead className="text-right">Total Hours</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredSummaries.map((summary) => (
+                  <TableRow key={`${summary.employeeId}-${summary.date}`} data-testid={`row-time-${summary.employeeId}-${summary.date}`}>
+                    <TableCell className="font-medium whitespace-nowrap">{formatDate(summary.date)}</TableCell>
+                    <TableCell data-testid={`text-time-employee-${summary.employeeId}`}>{summary.employeeName}</TableCell>
+                    <TableCell className="text-muted-foreground">{summary.jobDescription || summary.jobCode || "—"}</TableCell>
+                    <TableCell>
+                      <div className="space-y-1">
+                        {summary.shifts.map((shift, idx) => (
+                          <div key={idx} className="text-sm flex items-center gap-2">
+                            <span className="text-green-600 dark:text-green-400">{formatTime(shift.punchIn)}</span>
+                            <span className="text-muted-foreground">→</span>
+                            <span className={shift.punchOut ? "text-red-600 dark:text-red-400" : "text-muted-foreground"}>
+                              {shift.punchOut ? formatTime(shift.punchOut) : "Missing"}
+                            </span>
+                            {shift.hours !== null && (
+                              <span className="text-xs text-muted-foreground">({formatHours(shift.hours)})</span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-right font-medium" data-testid={`text-total-hours-${summary.employeeId}-${summary.date}`}>
+                      {formatHours(summary.totalHours)}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </Card>
+
+          <div className="md:hidden space-y-3">
+            {filteredSummaries.map((summary) => (
+              <Card key={`${summary.employeeId}-${summary.date}`} data-testid={`card-time-${summary.employeeId}-${summary.date}`}>
+                <CardContent className="p-4 space-y-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <p className="font-medium" data-testid={`text-time-employee-mobile-${summary.employeeId}`}>{summary.employeeName}</p>
+                      <p className="text-sm text-muted-foreground">{formatDateShort(summary.date)}</p>
+                    </div>
+                    <Badge variant="outline" className="text-xs flex-shrink-0" data-testid={`text-total-hours-mobile-${summary.employeeId}-${summary.date}`}>
+                      {formatHours(summary.totalHours)}
+                    </Badge>
+                  </div>
+                  {summary.jobDescription && (
+                    <p className="text-xs text-muted-foreground">{summary.jobDescription}</p>
+                  )}
+                  <div className="space-y-1.5">
+                    {summary.shifts.map((shift, idx) => (
+                      <div key={idx} className="flex items-center gap-2 text-sm">
+                        <span className="text-green-600 dark:text-green-400">{formatTime(shift.punchIn)}</span>
+                        <span className="text-muted-foreground">→</span>
+                        <span className={shift.punchOut ? "text-red-600 dark:text-red-400" : "text-muted-foreground"}>
+                          {shift.punchOut ? formatTime(shift.punchOut) : "Missing"}
+                        </span>
+                        {shift.hours !== null && (
+                          <span className="text-xs text-muted-foreground">({formatHours(shift.hours)})</span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </>
       )}
     </div>
   );
@@ -661,58 +733,63 @@ function HoursDashboardTab() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between flex-wrap">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-end flex-wrap">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:flex lg:items-end gap-3">
+        <div>
+          <label className="text-xs text-muted-foreground mb-1 block">Start Date</label>
+          <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} data-testid="input-dash-start-date" />
+        </div>
+        <div>
+          <label className="text-xs text-muted-foreground mb-1 block">End Date</label>
+          <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} data-testid="input-dash-end-date" />
+        </div>
+        {mappedProjects.length > 0 && (
           <div>
-            <label className="text-xs text-muted-foreground mb-1 block">Start Date</label>
-            <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} data-testid="input-dash-start-date" />
-          </div>
-          <div>
-            <label className="text-xs text-muted-foreground mb-1 block">End Date</label>
-            <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} data-testid="input-dash-end-date" />
-          </div>
-          {mappedProjects.length > 0 && (
-            <div>
-              <label className="text-xs text-muted-foreground mb-1 block">Project</label>
-              <Select value={projectFilter} onValueChange={(v) => { setProjectFilter(v); if (v !== "all") setJobFilter("all"); }}>
-                <SelectTrigger className="w-[200px]" data-testid="select-dash-project-filter">
-                  <SelectValue placeholder="All Projects" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Projects</SelectItem>
-                  {mappedProjects.map((p) => (
-                    <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
-          <div>
-            <label className="text-xs text-muted-foreground mb-1 block">Job</label>
-            <Select value={jobFilter} onValueChange={setJobFilter}>
-              <SelectTrigger className="w-[200px]" data-testid="select-dash-job-filter">
-                <SelectValue placeholder="All Jobs" />
+            <label className="text-xs text-muted-foreground mb-1 block">Project</label>
+            <Select value={projectFilter} onValueChange={(v) => { setProjectFilter(v); if (v !== "all") setJobFilter("all"); }}>
+              <SelectTrigger className="w-full lg:w-[200px]" data-testid="select-dash-project-filter">
+                <SelectValue placeholder="All Projects" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All Jobs</SelectItem>
-                {jobs.map((job) => (
-                  <SelectItem key={job.code} value={job.code}>
-                    {job.description}
-                    {projectMap.get(job.code) ? ` → ${projectMap.get(job.code)}` : ""}
-                  </SelectItem>
+                <SelectItem value="all">All Projects</SelectItem>
+                {mappedProjects.map((p) => (
+                  <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
+        )}
+        <div>
+          <label className="text-xs text-muted-foreground mb-1 block">Job</label>
+          <Select value={jobFilter} onValueChange={setJobFilter}>
+            <SelectTrigger className="w-full lg:w-[200px]" data-testid="select-dash-job-filter">
+              <SelectValue placeholder="All Jobs" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Jobs</SelectItem>
+              {jobs.map((job) => (
+                <SelectItem key={job.code} value={job.code}>
+                  {job.description}
+                  {projectMap.get(job.code) ? ` → ${projectMap.get(job.code)}` : ""}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
-        <Button onClick={() => syncMutation.mutate()} disabled={syncMutation.isPending} data-testid="button-sync-dashboard">
-          <RefreshCw className={`w-4 h-4 mr-2 ${syncMutation.isPending ? "animate-spin" : ""}`} />
-          {syncMutation.isPending ? "Syncing..." : "Sync Time Data"}
-        </Button>
+        <div className="sm:col-span-2 lg:col-span-1">
+          <Button
+            onClick={() => syncMutation.mutate()}
+            disabled={syncMutation.isPending}
+            className="w-full lg:w-auto"
+            data-testid="button-sync-dashboard"
+          >
+            <RefreshCw className={`w-4 h-4 mr-2 ${syncMutation.isPending ? "animate-spin" : ""}`} />
+            {syncMutation.isPending ? "Syncing..." : "Sync Time Data"}
+          </Button>
+        </div>
       </div>
 
       {isLoading ? (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           {[...Array(3)].map((_, i) => (
             <Card key={i}>
               <CardContent className="p-6"><Skeleton className="h-16 w-full" /></CardContent>
@@ -733,7 +810,7 @@ function HoursDashboardTab() {
         </Card>
       ) : (
         <>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">Total Hours</CardTitle>
@@ -777,31 +854,53 @@ function HoursDashboardTab() {
                 {employeeStats.length === 0 ? (
                   <div className="p-6 text-center text-sm text-muted-foreground">No data for this period</div>
                 ) : (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Employee</TableHead>
-                        <TableHead className="text-right">Days</TableHead>
-                        <TableHead className="text-right">Hours</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
+                  <>
+                    <div className="hidden sm:block">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Employee</TableHead>
+                            <TableHead className="text-right">Days</TableHead>
+                            <TableHead className="text-right">Hours</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {employeeStats.map((emp) => (
+                            <TableRow key={emp.employeeId} data-testid={`row-dash-employee-${emp.employeeId}`}>
+                              <TableCell>
+                                <div>
+                                  <span className="font-medium">{emp.name}</span>
+                                  {emp.jobs.length > 0 && (
+                                    <p className="text-xs text-muted-foreground mt-0.5">{emp.jobs.join(", ")}</p>
+                                  )}
+                                </div>
+                              </TableCell>
+                              <TableCell className="text-right">{emp.daysWorked}</TableCell>
+                              <TableCell className="text-right font-medium">{emp.totalHours.toFixed(1)}h</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                    <div className="sm:hidden divide-y">
                       {employeeStats.map((emp) => (
-                        <TableRow key={emp.employeeId} data-testid={`row-dash-employee-${emp.employeeId}`}>
-                          <TableCell>
-                            <div>
-                              <span className="font-medium">{emp.name}</span>
+                        <div key={emp.employeeId} className="px-4 py-3" data-testid={`card-dash-employee-${emp.employeeId}`}>
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0 flex-1">
+                              <p className="font-medium">{emp.name}</p>
                               {emp.jobs.length > 0 && (
                                 <p className="text-xs text-muted-foreground mt-0.5">{emp.jobs.join(", ")}</p>
                               )}
                             </div>
-                          </TableCell>
-                          <TableCell className="text-right">{emp.daysWorked}</TableCell>
-                          <TableCell className="text-right font-medium">{emp.totalHours.toFixed(1)}h</TableCell>
-                        </TableRow>
+                            <div className="text-right flex-shrink-0">
+                              <p className="font-medium">{emp.totalHours.toFixed(1)}h</p>
+                              <p className="text-xs text-muted-foreground">{emp.daysWorked} days</p>
+                            </div>
+                          </div>
+                        </div>
                       ))}
-                    </TableBody>
-                  </Table>
+                    </div>
+                  </>
                 )}
               </CardContent>
             </Card>
@@ -814,31 +913,53 @@ function HoursDashboardTab() {
                 {jobStats.length === 0 ? (
                   <div className="p-6 text-center text-sm text-muted-foreground">No data for this period</div>
                 ) : (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Job</TableHead>
-                        <TableHead className="text-right">Workers</TableHead>
-                        <TableHead className="text-right">Hours</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
+                  <>
+                    <div className="hidden sm:block">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Job</TableHead>
+                            <TableHead className="text-right">Workers</TableHead>
+                            <TableHead className="text-right">Hours</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {jobStats.map((job) => (
+                            <TableRow key={job.jobCode} data-testid={`row-dash-job-${job.jobCode}`}>
+                              <TableCell>
+                                <div>
+                                  <span className="font-medium">{job.description}</span>
+                                  {job.projectName && (
+                                    <p className="text-xs text-muted-foreground mt-0.5">Project: {job.projectName}</p>
+                                  )}
+                                </div>
+                              </TableCell>
+                              <TableCell className="text-right">{job.employeeCount}</TableCell>
+                              <TableCell className="text-right font-medium">{job.totalHours.toFixed(1)}h</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                    <div className="sm:hidden divide-y">
                       {jobStats.map((job) => (
-                        <TableRow key={job.jobCode} data-testid={`row-dash-job-${job.jobCode}`}>
-                          <TableCell>
-                            <div>
-                              <span className="font-medium">{job.description}</span>
+                        <div key={job.jobCode} className="px-4 py-3" data-testid={`card-dash-job-${job.jobCode}`}>
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0 flex-1">
+                              <p className="font-medium">{job.description}</p>
                               {job.projectName && (
                                 <p className="text-xs text-muted-foreground mt-0.5">Project: {job.projectName}</p>
                               )}
                             </div>
-                          </TableCell>
-                          <TableCell className="text-right">{job.employeeCount}</TableCell>
-                          <TableCell className="text-right font-medium">{job.totalHours.toFixed(1)}h</TableCell>
-                        </TableRow>
+                            <div className="text-right flex-shrink-0">
+                              <p className="font-medium">{job.totalHours.toFixed(1)}h</p>
+                              <p className="text-xs text-muted-foreground">{job.employeeCount} workers</p>
+                            </div>
+                          </div>
+                        </div>
                       ))}
-                    </TableBody>
-                  </Table>
+                    </div>
+                  </>
                 )}
               </CardContent>
             </Card>
@@ -861,25 +982,28 @@ export default function EmployeesPage() {
   };
 
   return (
-    <div className="space-y-6 pb-8">
+    <div className="space-y-4 sm:space-y-6 pb-8">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight" data-testid="text-page-title">Employees</h1>
-        <p className="text-sm text-muted-foreground mt-1">Manage employee roster, time tracking, and hours from Fingercheck</p>
+        <h1 className="text-xl sm:text-2xl font-bold tracking-tight" data-testid="text-page-title">Employees</h1>
+        <p className="text-xs sm:text-sm text-muted-foreground mt-1">Manage employee roster, time tracking, and hours from Fingercheck</p>
       </div>
 
       <Tabs value={activeTab} onValueChange={handleTabChange}>
-        <TabsList>
-          <TabsTrigger value="roster" data-testid="tab-roster">
-            <Users className="w-4 h-4 mr-2" />
-            Roster
+        <TabsList className="w-full sm:w-auto grid grid-cols-3 sm:inline-flex">
+          <TabsTrigger value="roster" data-testid="tab-roster" className="text-xs sm:text-sm">
+            <Users className="w-4 h-4 mr-1 sm:mr-2" />
+            <span className="hidden sm:inline">Roster</span>
+            <span className="sm:hidden">Roster</span>
           </TabsTrigger>
-          <TabsTrigger value="time-tracking" data-testid="tab-time-tracking">
-            <Clock className="w-4 h-4 mr-2" />
-            Time Tracking
+          <TabsTrigger value="time-tracking" data-testid="tab-time-tracking" className="text-xs sm:text-sm">
+            <Clock className="w-4 h-4 mr-1 sm:mr-2" />
+            <span className="hidden sm:inline">Time Tracking</span>
+            <span className="sm:hidden">Time</span>
           </TabsTrigger>
-          <TabsTrigger value="hours-dashboard" data-testid="tab-hours-dashboard">
-            <BarChart3 className="w-4 h-4 mr-2" />
-            Hours Dashboard
+          <TabsTrigger value="hours-dashboard" data-testid="tab-hours-dashboard" className="text-xs sm:text-sm">
+            <BarChart3 className="w-4 h-4 mr-1 sm:mr-2" />
+            <span className="hidden sm:inline">Hours Dashboard</span>
+            <span className="sm:hidden">Hours</span>
           </TabsTrigger>
         </TabsList>
 
