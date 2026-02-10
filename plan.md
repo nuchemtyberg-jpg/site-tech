@@ -621,24 +621,24 @@ Replace generic labor entries in daily reports with employee-specific entries li
 ## Mailgun Inbound Email Integration - Progress Log
 
 ### Goal
-Integrate Mailgun-based inbound email routing for SiteTech projects. Each project gets an auto-generated email address at `{slug}-{id}@email.sitetechnj.com`. Team members CC these addresses on project correspondence, which are automatically captured via Mailgun's inbound routing webhook and displayed in the project's Communications tab.
+Integrate Mailgun-based inbound email routing for SiteTech projects. Each project gets an auto-generated email address at `{slug}-{id}@updates.sitetechnj.com`. Team members CC these addresses on project correspondence, which are automatically captured via Mailgun's inbound routing webhook and displayed in the project's Communications tab.
 
 ### Completed Steps
 
 #### 1. Email Domain Configuration - DONE
-- Changed email domain from `projects.sitetechnj.com` to `email.sitetechnj.com` throughout codebase
+- Changed email domain from `projects.sitetechnj.com` to `updates.sitetechnj.com` throughout codebase
 - Updated `PROJECT_EMAIL_DOMAIN` constant in `server/storage.ts`
 - Updated admin setup page (`client/src/pages/EmailSetup.tsx`) instructions
 
 #### 2. DNS Records - DONE (Verified in Mailgun)
-- MX records for `email.sitetechnj.com` pointing to:
+- MX records for `updates.sitetechnj.com` pointing to:
   - `mxa.mailgun.org` (priority 10)
   - `mxb.mailgun.org` (priority 10)
 - SPF and DKIM records in place
 - Domain verified in Mailgun US region (`app.mailgun.com`)
 
 #### 3. Mailgun Inbound Route - DONE
-- Route pattern: `match_recipient(".*@email.sitetechnj.com")`
+- Route pattern: `match_recipient(".*@updates.sitetechnj.com")`
 - Action: Forward to `https://sitetech-app.replit.app/api/webhooks/inbound-email`
 - Route configured in Mailgun dashboard under Receiving > Inbound Routes
 
@@ -655,7 +655,7 @@ Integrate Mailgun-based inbound email routing for SiteTech projects. Each projec
   - Classifies emails as internal/external based on customer email
 
 #### 5. Project Email Address Generation - DONE
-- Format: `{slug}-{id}@email.sitetechnj.com`
+- Format: `{slug}-{id}@updates.sitetechnj.com`
 - Slug: project name lowercased, non-alphanumeric replaced with hyphens, trimmed, max 30 chars
 - Auto-generated on project creation (`storage.createProject()`)
 - Backfill endpoint: `POST /api/admin/backfill-project-emails` (admin-only)
@@ -665,10 +665,10 @@ Integrate Mailgun-based inbound email routing for SiteTech projects. Each projec
 
 | ID | Project Name | Email Address |
 |----|-------------|---------------|
-| 1 | 215 forest Ave. | 215-forest-ave-1@email.sitetechnj.com |
-| 2 | Massachusetts project | massachusetts-project-2@email.sitetechnj.com |
-| 3 | TEST PROJECT | test-project-3@email.sitetechnj.com |
-| 4 | 319 Albert | 319-albert-4@email.sitetechnj.com |
+| 1 | 215 forest Ave. | 215-forest-ave-1@updates.sitetechnj.com |
+| 2 | Massachusetts project | massachusetts-project-2@updates.sitetechnj.com |
+| 3 | TEST PROJECT | test-project-3@updates.sitetechnj.com |
+| 4 | 319 Albert | 319-albert-4@updates.sitetechnj.com |
 
 #### 7. Development Database - Email Address Backfill - DONE (previously completed)
 - All 8 dev projects have email addresses
@@ -685,7 +685,7 @@ Integrate Mailgun-based inbound email routing for SiteTech projects. Each projec
 - The signing key is found in Mailgun under: Settings > API Keys > HTTP webhook signing key
 
 #### 10. End-to-End Test - PENDING
-- Once MAILGUN_API_KEY is confirmed correct, send a test email to one of the project addresses (e.g., `319-albert-4@email.sitetechnj.com`)
+- Once MAILGUN_API_KEY is confirmed correct, send a test email to one of the project addresses (e.g., `319-albert-4@updates.sitetechnj.com`)
 - Verify it appears in the project's Communications tab
 - Check Mailgun Logs for delivery/webhook activity
 
@@ -705,7 +705,7 @@ Integrate Mailgun-based inbound email routing for SiteTech projects. Each projec
 | `client/src/pages/EmailSetup.tsx` | Admin setup instructions page |
 
 ### Email Flow
-1. External user sends email, CC'ing `{slug}-{id}@email.sitetechnj.com`
+1. External user sends email, CC'ing `{slug}-{id}@updates.sitetechnj.com`
 2. Email arrives at Mailgun (MX records route to Mailgun servers)
 3. Mailgun matches inbound route, forwards POST to webhook URL
 4. Webhook verifies Mailgun HMAC signature

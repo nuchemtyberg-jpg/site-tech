@@ -23,7 +23,7 @@ import {
 import { db } from "./db";
 import { eq, desc, and, or, isNull, sql, lt, ilike } from "drizzle-orm";
 
-const PROJECT_EMAIL_DOMAIN = "email.sitetechnj.com";
+const PROJECT_EMAIL_DOMAIN = "updates.sitetechnj.com";
 
 function generateProjectEmailSlug(name: string, id: number): string {
   const slug = name
@@ -440,7 +440,11 @@ export class DatabaseStorage implements IStorage {
     const allProjects = await db.select().from(projects)
       .where(and(
         isNull(projects.deletedAt),
-        or(isNull(projects.projectEmail), sql`${projects.projectEmail} = ''`)
+        or(
+          isNull(projects.projectEmail),
+          sql`${projects.projectEmail} = ''`,
+          sql`${projects.projectEmail} NOT LIKE '%@${sql.raw(PROJECT_EMAIL_DOMAIN)}'`
+        )
       ));
 
     const updated: { id: number; name: string; projectEmail: string }[] = [];

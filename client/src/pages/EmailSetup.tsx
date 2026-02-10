@@ -115,7 +115,7 @@ export default function EmailSetup() {
           <ol className="list-decimal list-inside space-y-1 ml-2">
             <li>Go to your domain's DNS settings</li>
             <li>Add two new MX records</li>
-            <li>For both, set the <strong>Host</strong> to <strong>email</strong></li>
+            <li>For both, set the <strong>Host</strong> to <strong>updates</strong></li>
             <li>Set first record's <strong>Points to</strong> to <strong>{data?.mxRecord}</strong></li>
             <li>Set second record's <strong>Points to</strong> to <strong>{data?.mxRecord2}</strong></li>
             <li>Set <strong>Priority</strong> to <strong>{data?.mxPriority}</strong> for both</li>
