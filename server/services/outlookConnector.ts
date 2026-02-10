@@ -68,7 +68,7 @@ async function refreshUserToken(userId: string, refreshToken: string): Promise<s
       client_secret: clientSecret,
       refresh_token: refreshToken,
       grant_type: "refresh_token",
-      scope: "openid profile email offline_access Mail.Read Mail.ReadWrite Mail.Send User.Read",
+      scope: "openid profile email offline_access Mail.Read Mail.Send User.Read",
     });
 
     const res = await fetch(`${AUTH_BASE}/${tenantId}/oauth2/v2.0/token`, {
@@ -153,7 +153,7 @@ export function getUserConnectUrl(userId: string): string {
   if (!clientId) throw new Error("OUTLOOK_CLIENT_ID not configured");
 
   const redirectUri = getRedirectUri();
-  const scope = "openid profile email offline_access Mail.Read Mail.ReadWrite Mail.Send User.Read";
+  const scope = "openid profile email offline_access Mail.Read Mail.Send User.Read";
   const state = `user:${userId}:${Date.now()}`;
 
   userOAuthStates.set(state, { userId, expiresAt: Date.now() + 10 * 60 * 1000 });
@@ -168,8 +168,7 @@ export function getUserConnectUrl(userId: string): string {
     `&redirect_uri=${encodeURIComponent(redirectUri)}` +
     `&scope=${encodeURIComponent(scope)}` +
     `&state=${encodeURIComponent(state)}` +
-    `&response_mode=query` +
-    `&prompt=consent`;
+    `&response_mode=query`;
 }
 
 function getRedirectUri(): string {
@@ -209,7 +208,7 @@ export async function exchangeUserCode(code: string): Promise<{ accessToken: str
     code,
     redirect_uri: getRedirectUri(),
     grant_type: "authorization_code",
-    scope: "openid profile email offline_access Mail.Read Mail.ReadWrite Mail.Send User.Read",
+    scope: "openid profile email offline_access Mail.Read Mail.Send User.Read",
   });
 
   const res = await fetch(`${AUTH_BASE}/${tenantId}/oauth2/v2.0/token`, {
