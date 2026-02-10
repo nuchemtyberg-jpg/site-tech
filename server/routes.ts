@@ -2837,7 +2837,9 @@ export async function registerRoutes(
       const project = await storage.getProject(rfi.projectId);
       if (!project) return res.status(404).json({ message: "Project not found" });
 
-      const user = req.user as User;
+      const userId = (req.user as any).claims.sub;
+      const dbUser = await storage.getUser(userId);
+      if (!dbUser) return res.status(401).json({ message: "User not found" });
 
       // Parse attachment entries
       const attachmentFiles = (rfi.attachments || []).map((att: string) => {
@@ -2861,7 +2863,7 @@ export async function registerRoutes(
 
       // Prepare email attachments
       const { sendEmail, getConnectedEmail } = await import("./services/outlookConnector");
-      const connectedEmail = await getConnectedEmail(user.id);
+      const connectedEmail = await getConnectedEmail(userId);
 
       const emailAttachments: Array<{ name: string; contentType: string; contentBytes: string }> = [
         {
@@ -2928,7 +2930,7 @@ export async function registerRoutes(
         subject: `${rfiLabel}: ${rfi.subject} - ${project.name}`,
         bodyHtml: emailBody,
         attachments: emailAttachments,
-      }, user.id);
+      }, userId);
 
       await storage.updateRfi(rfi.id, {
         status: "open",
@@ -2936,9 +2938,9 @@ export async function registerRoutes(
         outlookMessageId: result.messageId,
         outlookConversationId: result.conversationId,
         sentAt: new Date(),
-        sentBy: user.id,
-        sentByName: `${user.firstName || ""} ${user.lastName || ""}`.trim() || user.email || "Unknown",
-        sentByEmail: connectedEmail || user.email || "",
+        sentBy: userId,
+        sentByName: `${dbUser.firstName || ""} ${dbUser.lastName || ""}`.trim() || dbUser.email || "Unknown",
+        sentByEmail: connectedEmail || dbUser.email || "",
       });
 
       const updatedRfi = await storage.getRfi(rfi.id);
@@ -2956,9 +2958,9 @@ export async function registerRoutes(
       if (!rfi) return res.status(404).json({ message: "RFI not found" });
       if (!rfi.outlookConversationId) return res.json({ responses: [], newCount: 0 });
 
-      const user = req.user as User;
+      const userId = (req.user as any).claims.sub;
       const { getEmailReplies } = await import("./services/outlookConnector");
-      const replies = await getEmailReplies(rfi.outlookConversationId, user.id);
+      const replies = await getEmailReplies(rfi.outlookConversationId, userId);
 
       let newCount = 0;
       for (const reply of replies) {
@@ -3018,14 +3020,14 @@ export async function registerRoutes(
   // Outlook connector status
   app.get("/api/outlook/status", isAuthenticated, isAuthorizedUser, async (req, res) => {
     try {
-      const user = req.user as User;
+      const userId = (req.user as any).claims.sub;
       const { isOutlookConnectorConfigured, getConnectedEmail, isUserOutlookConfigured } = await import("./services/outlookConnector");
-      const connected = await isOutlookConnectorConfigured(user.id);
+      const connected = await isOutlookConnectorConfigured(userId);
       let email = null;
       if (connected) {
-        email = await getConnectedEmail(user.id);
+        email = await getConnectedEmail(userId);
       }
-      const userConn = await storage.getUserOutlookConnection(user.id);
+      const userConn = await storage.getUserOutlookConnection(userId);
       res.json({
         connected,
         email,
@@ -3040,9 +3042,9 @@ export async function registerRoutes(
   // User-level Outlook OAuth connect
   app.get("/api/outlook/user-connect", isAuthenticated, isAuthorizedUser, async (req, res) => {
     try {
-      const user = req.user as User;
+      const userId = (req.user as any).claims.sub;
       const { getUserConnectUrl } = await import("./services/outlookConnector");
-      const url = getUserConnectUrl(user.id);
+      const url = getUserConnectUrl(userId);
       res.json({ url });
     } catch (err: any) {
       res.status(500).json({ message: err.message || "Failed to generate connect URL" });
@@ -3102,8 +3104,8 @@ export async function registerRoutes(
   // User-level Outlook disconnect
   app.post("/api/outlook/disconnect", isAuthenticated, isAuthorizedUser, async (req, res) => {
     try {
-      const user = req.user as User;
-      await storage.deleteUserOutlookConnection(user.id);
+      const userId = (req.user as any).claims.sub;
+      await storage.deleteUserOutlookConnection(userId);
       res.json({ success: true });
     } catch (err) {
       res.status(500).json({ message: "Failed to disconnect" });
