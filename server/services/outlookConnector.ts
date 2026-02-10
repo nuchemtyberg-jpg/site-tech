@@ -282,20 +282,29 @@ export async function sendEmail(options: SendEmailOptions, userId?: string): Pro
     saveToSentItems: true,
   });
 
-  const sentItems = await client
-    .api('/me/mailFolders/SentItems/messages')
-    .filter(`subject eq '${options.subject.replace(/'/g, "''")}'`)
-    .top(1)
-    .orderby('sentDateTime desc')
-    .select('id,conversationId')
-    .get();
+  let messageId = "";
+  let conversationId = "";
+  try {
+    await new Promise(resolve => setTimeout(resolve, 1500));
+    const sentItems = await client
+      .api('/me/mailFolders/SentItems/messages')
+      .top(5)
+      .orderby('sentDateTime desc')
+      .select('id,conversationId,subject')
+      .get();
 
-  const sentMessage = sentItems?.value?.[0];
+    const sentMessage = (sentItems?.value || []).find(
+      (msg: any) => msg.subject === options.subject
+    );
+    if (sentMessage) {
+      messageId = sentMessage.id;
+      conversationId = sentMessage.conversationId;
+    }
+  } catch (lookupErr) {
+    console.error("Could not retrieve sent message details:", lookupErr);
+  }
 
-  return {
-    messageId: sentMessage?.id || "",
-    conversationId: sentMessage?.conversationId || "",
-  };
+  return { messageId, conversationId };
 }
 
 export async function getEmailReplies(conversationId: string, userId?: string): Promise<Array<{
