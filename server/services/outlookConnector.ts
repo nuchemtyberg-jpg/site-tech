@@ -277,12 +277,24 @@ export async function sendEmail(options: SendEmailOptions, userId?: string): Pro
     })),
   };
 
-  const draft = await client.api('/me/messages').post(message);
-  await client.api(`/me/messages/${draft.id}/send`).post({});
+  await client.api('/me/sendMail').post({
+    message,
+    saveToSentItems: true,
+  });
+
+  const sentItems = await client
+    .api('/me/mailFolders/SentItems/messages')
+    .filter(`subject eq '${options.subject.replace(/'/g, "''")}'`)
+    .top(1)
+    .orderby('sentDateTime desc')
+    .select('id,conversationId')
+    .get();
+
+  const sentMessage = sentItems?.value?.[0];
 
   return {
-    messageId: draft.id,
-    conversationId: draft.conversationId,
+    messageId: sentMessage?.id || "",
+    conversationId: sentMessage?.conversationId || "",
   };
 }
 
