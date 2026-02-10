@@ -482,7 +482,7 @@ Protected Routes:
 - [ ] Mobile app (React Native)
 - [ ] Offline mode for field workers
 - [x] Fingercheck employee sync (completed Feb 9, 2026)
-- [ ] Fingercheck time tracking integration (deferred)
+- [x] Fingercheck time tracking integration in daily reports (completed Feb 10, 2026)
 - [ ] Invoice generation
 - [ ] Subcontractor portal
 - [ ] Equipment GPS tracking
@@ -564,8 +564,57 @@ Integrate with Fingercheck payroll/HR platform to pull employee data into SiteTe
 | `client/src/pages/Employees.tsx` | Employee list page with search/filter/detail |
 | `client/src/components/Layout.tsx` | Sidebar navigation (Employees link) |
 
-### Deferred
-- **Time tracking integration**: User requested to hold off on this for now. Fingercheck API has endpoints for time clock data (`GetEmployeeClockInfoByEmployeeNumber`, etc.) that can be integrated in the future.
+### Phase 2: Time Tracking & Daily Report Labor Integration - DONE (Feb 10, 2026)
+
+#### Goal
+Replace generic labor entries in daily reports with employee-specific entries linked to Fingercheck time tracking data. Auto-populate employees who punched in to a project on the report date, track hours per employee per task, and validate against actual tracked hours.
+
+#### Completed Steps
+
+##### 1. Time Punch Sync & Storage - DONE (previously built)
+- `fingercheck_time_punches` table stores raw punch-in/out records (unique on `guid`)
+- `fingercheck_project_mappings` table maps SiteTech projects to Fingercheck job codes
+- `POST /api/time-punches/sync` syncs punch data from Fingercheck for a date range
+- `GET /api/time-punches/summary` returns aggregated daily time summaries with shifts
+
+##### 2. Schema Updates - DONE
+- Added `employee_id` (nullable integer) and `employee_name` (nullable text) to `daily_report_labor_lines` table
+- Changed `hours` column from `integer` to `real` to support decimal hours (e.g., 2.5)
+
+##### 3. Project Employees API Endpoint - DONE
+- `GET /api/daily-reports/project-employees?projectId=X&date=YYYY-MM-DD`
+- Looks up Fingercheck job code mappings for the project
+- Queries time punch data for those job codes on the given date
+- Pairs punch-in/out records into shifts, calculates total hours per employee
+- For open shifts (punched in but not out): uses current time to calculate available hours
+- Returns: `[{ employeeId, employeeName, totalHours, hasOpenShift, shifts, jobCode, jobDescription }]`
+
+##### 4. Daily Report Labor UI Redesign - DONE
+- Replaced generic "Labor Type / Quantity / Hours" inputs with employee-based system
+- "Add Employee" dropdown button shows available employees with their tracked hours
+- Each labor line shows: employee name, role selector (Foreman/Operator/Laborer), hours input
+- Employees with open shifts display a "Still on site" badge
+- Helpful message shown when no employees have punch data or no job code mappings exist
+
+##### 5. Cross-Task Hour Validation - DONE
+- `getEffectiveHours()`: checks `localLaborHours` state first, then falls back to saved values
+- `employeeAllocatedHours`: useMemo that sums effective hours across all tasks per employee, recalculates when local edits change
+- `getEmployeeRemainingHours(employeeId, excludeLaborLineId)`: total tracked hours minus allocated (excluding the current line being edited)
+- On blur of hours input: validates value doesn't exceed remaining hours, blocks save with toast if exceeded
+- Clamped to minimum 0 to prevent negative display from rounding edge cases
+- Consistent `Math.round(x * 100) / 100` rounding at all calculation points
+
+##### 6. PDF Export Update - DONE
+- Updated daily report PDF to display Employee/Role/Hours columns instead of old Type/Qty/Hours format
+
+#### Key Files
+| File | Purpose |
+|------|---------|
+| `shared/schema.ts` | `dailyReportLaborLines` schema with employeeId/employeeName columns |
+| `server/routes.ts` | `GET /api/daily-reports/project-employees` endpoint |
+| `server/services/fingercheck.ts` | Time punch data fetching and shift pairing |
+| `server/storage.ts` | Project mapping lookups, time punch queries |
+| `client/src/pages/DailyReportPage.tsx` | Employee-based labor UI, validation logic, PDF export |
 
 ---
 
@@ -668,6 +717,16 @@ Integrate Mailgun-based inbound email routing for SiteTech projects. Each projec
 ---
 
 ## Changelog
+
+### February 10, 2026
+- **Daily Report Labor - Fingercheck Time Tracking Integration**: Replaced generic labor tracking with employee-specific entries linked to Fingercheck time tracking
+  - Added `employee_id` and `employee_name` columns to `daily_report_labor_lines`; changed `hours` to `real` for decimal support
+  - Created `GET /api/daily-reports/project-employees` endpoint that fetches employees by project/date from time punch data
+  - Redesigned labor UI: employee dropdown with tracked hours, role selector (Foreman/Operator/Laborer), hours input per employee per task
+  - Implemented cross-task hour validation using `getEffectiveHours()` with local state tracking and `getEmployeeRemainingHours()` with line exclusion
+  - Open shifts (not punched out) use current time for available hours calculation
+  - Updated PDF export to show Employee/Role/Hours columns
+  - Consistent rounding and clamping to prevent float drift and negative display
 
 ### February 9, 2026
 - **Fingercheck Employee Sync Integration**: Full integration with Fingercheck payroll/HR platform
