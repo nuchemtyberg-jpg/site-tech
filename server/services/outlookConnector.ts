@@ -146,17 +146,17 @@ export async function getConnectedEmail(userId?: string): Promise<string | null>
   }
 }
 
-export function getUserConnectUrl(userId: string): string {
+export function getUserConnectUrl(userId: string, requestOrigin?: string): string {
   const clientId = process.env.OUTLOOK_CLIENT_ID;
   const tenantId = process.env.OUTLOOK_TENANT_ID || "common";
 
   if (!clientId) throw new Error("OUTLOOK_CLIENT_ID not configured");
 
-  const redirectUri = getRedirectUri();
+  const redirectUri = getRedirectUri(requestOrigin);
   const scope = "openid profile email offline_access Mail.Read Mail.Send User.Read";
   const state = `user:${userId}:${Date.now()}`;
 
-  userOAuthStates.set(state, { userId, expiresAt: Date.now() + 10 * 60 * 1000 });
+  userOAuthStates.set(state, { userId, redirectUri, expiresAt: Date.now() + 10 * 60 * 1000 });
 
   userOAuthStates.forEach((val, key) => {
     if (val.expiresAt < Date.now()) userOAuthStates.delete(key);
@@ -171,7 +171,7 @@ export function getUserConnectUrl(userId: string): string {
     `&response_mode=query`;
 }
 
-function getRedirectUri(): string {
+function getRedirectUri(requestOrigin?: string): string {
   if (process.env.APP_BASE_URL) {
     return `${process.env.APP_BASE_URL}/api/outlook/user-callback`;
   }
@@ -183,19 +183,19 @@ function getRedirectUri(): string {
   return `${base}/api/outlook/user-callback`;
 }
 
-const userOAuthStates = new Map<string, { userId: string; expiresAt: number }>();
+const userOAuthStates = new Map<string, { userId: string; redirectUri: string; expiresAt: number }>();
 
-export function validateUserOAuthState(state: string): string | null {
+export function validateUserOAuthState(state: string): { userId: string; redirectUri: string } | null {
   const entry = userOAuthStates.get(state);
   if (!entry || entry.expiresAt < Date.now()) {
     if (entry) userOAuthStates.delete(state);
     return null;
   }
   userOAuthStates.delete(state);
-  return entry.userId;
+  return { userId: entry.userId, redirectUri: entry.redirectUri };
 }
 
-export async function exchangeUserCode(code: string): Promise<{ accessToken: string; refreshToken: string; expiresIn: number; email: string }> {
+export async function exchangeUserCode(code: string, redirectUri?: string): Promise<{ accessToken: string; refreshToken: string; expiresIn: number; email: string }> {
   const clientId = process.env.OUTLOOK_CLIENT_ID;
   const clientSecret = process.env.OUTLOOK_CLIENT_SECRET;
   const tenantId = process.env.OUTLOOK_TENANT_ID || "common";
@@ -206,7 +206,7 @@ export async function exchangeUserCode(code: string): Promise<{ accessToken: str
     client_id: clientId,
     client_secret: clientSecret,
     code,
-    redirect_uri: getRedirectUri(),
+    redirect_uri: redirectUri || getRedirectUri(),
     grant_type: "authorization_code",
     scope: "openid profile email offline_access Mail.Read Mail.Send User.Read",
   });

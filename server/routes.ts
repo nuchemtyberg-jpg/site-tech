@@ -3044,7 +3044,9 @@ export async function registerRoutes(
     try {
       const userId = (req.user as any).claims.sub;
       const { getUserConnectUrl } = await import("./services/outlookConnector");
-      const url = getUserConnectUrl(userId);
+      const proto = req.get("x-forwarded-proto") || req.protocol;
+      const origin = `${proto}://${req.get("host")}`;
+      const url = getUserConnectUrl(userId, origin);
       res.json({ url });
     } catch (err: any) {
       res.status(500).json({ message: err.message || "Failed to generate connect URL" });
@@ -3080,10 +3082,11 @@ export async function registerRoutes(
       if (!code || !state) return sendPage(false, "Missing parameters from Microsoft.");
 
       const { validateUserOAuthState, exchangeUserCode } = await import("./services/outlookConnector");
-      const userId = validateUserOAuthState(String(state));
-      if (!userId) return sendPage(false, "Connection request expired. Please try again.");
+      const stateResult = validateUserOAuthState(String(state));
+      if (!stateResult) return sendPage(false, "Connection request expired. Please try again.");
+      const { userId, redirectUri } = stateResult;
 
-      const tokens = await exchangeUserCode(String(code));
+      const tokens = await exchangeUserCode(String(code), redirectUri);
       const expiresAt = new Date(Date.now() + (tokens.expiresIn - 60) * 1000);
 
       await storage.upsertUserOutlookConnection({
