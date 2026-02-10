@@ -5,6 +5,7 @@ import {
   authorizedUsers,
   projectEmailConnections, projectEmails, projectEmailAttachments,
   fingercheckEmployees, fingercheckTimePunches, fingercheckProjectMappings,
+  rfis, rfiResponses,
   type InsertProject, type InsertTask, type InsertEquipment, type InsertAllocation, type InsertFolder, type InsertFileMetadata, type InsertPhoto,
   type InsertCustomer, type InsertDailyReport, type InsertMaintenanceLog, type InsertCommunication, type InsertTaskStatusHistory, type InsertPhotoAlbum,
   type InsertReportTask, type InsertLaborEntry, type InsertEquipmentEntry, type InsertReportTaskPhoto, type InsertDelivery, type InsertDeliveryPhoto,
@@ -12,12 +13,14 @@ import {
   type InsertAuthorizedUser,
   type InsertProjectEmailConnection, type InsertProjectEmail, type InsertProjectEmailAttachment,
   type InsertFingercheckEmployee, type InsertFingercheckTimePunch, type InsertFingercheckProjectMapping,
+  type InsertRfi, type InsertRfiResponse,
   type Project, type Task, type Equipment, type Allocation, type Folder, type FileMetadata, type Photo,
   type Customer, type DailyReport, type MaintenanceLog, type Communication, type TaskStatusHistory, type PhotoAlbum,
   type ReportTask, type LaborEntry, type EquipmentEntry, type ReportTaskPhoto, type Delivery, type DeliveryPhoto,
   type DailyReportTaskEntry, type DailyReportLaborLine, type DailyReportEquipmentLine, type DailyReportDeliveryEntry, type DailyReportPhoto,
   type ProjectEmailConnection, type ProjectEmail, type ProjectEmailAttachment,
   type FingercheckEmployee, type FingercheckTimePunch, type FingercheckProjectMapping,
+  type Rfi, type RfiResponse,
   type User, type UpsertUser, type AuthorizedUser
 } from "@shared/schema";
 import { db } from "./db";
@@ -251,6 +254,19 @@ export interface IStorage {
   getProjectMappingByJobCode(jobCode: string): Promise<FingercheckProjectMapping | undefined>;
   createProjectMapping(mapping: InsertFingercheckProjectMapping): Promise<FingercheckProjectMapping>;
   deleteProjectMapping(id: number): Promise<void>;
+
+  // RFIs
+  getRfis(projectId: number): Promise<Rfi[]>;
+  getRfi(id: number): Promise<Rfi | undefined>;
+  getNextRfiNumber(projectId: number): Promise<number>;
+  createRfi(rfi: InsertRfi): Promise<Rfi>;
+  updateRfi(id: number, rfi: Partial<InsertRfi>): Promise<Rfi>;
+  deleteRfi(id: number): Promise<void>;
+
+  // RFI Responses
+  getRfiResponses(rfiId: number): Promise<RfiResponse[]>;
+  getRfiResponseByOutlookId(outlookMessageId: string): Promise<RfiResponse | undefined>;
+  createRfiResponse(response: InsertRfiResponse): Promise<RfiResponse>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1225,6 +1241,57 @@ export class DatabaseStorage implements IStorage {
 
   async deleteProjectMapping(id: number): Promise<void> {
     await db.delete(fingercheckProjectMappings).where(eq(fingercheckProjectMappings.id, id));
+  }
+
+  // RFIs
+  async getRfis(projectId: number): Promise<Rfi[]> {
+    return db.select().from(rfis)
+      .where(and(eq(rfis.projectId, projectId), isNull(rfis.deletedAt)))
+      .orderBy(desc(rfis.createdAt));
+  }
+
+  async getRfi(id: number): Promise<Rfi | undefined> {
+    const [rfi] = await db.select().from(rfis).where(and(eq(rfis.id, id), isNull(rfis.deletedAt)));
+    return rfi;
+  }
+
+  async getNextRfiNumber(projectId: number): Promise<number> {
+    const [result] = await db
+      .select({ maxNum: sql<number>`COALESCE(MAX(${rfis.rfiNumber}), 0)` })
+      .from(rfis)
+      .where(eq(rfis.projectId, projectId));
+    return (result?.maxNum || 0) + 1;
+  }
+
+  async createRfi(rfi: InsertRfi): Promise<Rfi> {
+    const [result] = await db.insert(rfis).values(rfi).returning();
+    return result;
+  }
+
+  async updateRfi(id: number, updates: Partial<InsertRfi>): Promise<Rfi> {
+    const [result] = await db.update(rfis).set({ ...updates, updatedAt: new Date() }).where(eq(rfis.id, id)).returning();
+    return result;
+  }
+
+  async deleteRfi(id: number): Promise<void> {
+    await db.update(rfis).set({ deletedAt: new Date() }).where(eq(rfis.id, id));
+  }
+
+  // RFI Responses
+  async getRfiResponses(rfiId: number): Promise<RfiResponse[]> {
+    return db.select().from(rfiResponses)
+      .where(eq(rfiResponses.rfiId, rfiId))
+      .orderBy(rfiResponses.receivedAt);
+  }
+
+  async getRfiResponseByOutlookId(outlookMessageId: string): Promise<RfiResponse | undefined> {
+    const [result] = await db.select().from(rfiResponses).where(eq(rfiResponses.outlookMessageId, outlookMessageId));
+    return result;
+  }
+
+  async createRfiResponse(response: InsertRfiResponse): Promise<RfiResponse> {
+    const [result] = await db.insert(rfiResponses).values(response).returning();
+    return result;
   }
 }
 

@@ -466,6 +466,56 @@ export const insertProjectEmailAttachmentSchema = createInsertSchema(projectEmai
 export type ProjectEmailAttachment = typeof projectEmailAttachments.$inferSelect;
 export type InsertProjectEmailAttachment = z.infer<typeof insertProjectEmailAttachmentSchema>;
 
+// RFIs (Request for Information)
+export const rfis = pgTable("rfis", {
+  id: serial("id").primaryKey(),
+  projectId: integer("project_id").notNull(),
+  rfiNumber: integer("rfi_number").notNull(),
+  subject: text("subject").notNull(),
+  question: text("question").notNull(),
+  directedTo: text("directed_to").notNull(),
+  directedToEmail: text("directed_to_email").notNull(),
+  ccEmails: text("cc_emails").array(),
+  priority: text("priority").notNull().default("normal"), // low, normal, high, urgent
+  dueDate: date("due_date"),
+  status: text("status").notNull().default("draft"), // draft, open, responded, closed
+  additionalBody: text("additional_body"),
+  attachments: text("attachments").array(),
+  pdfUrl: text("pdf_url"),
+  outlookMessageId: text("outlook_message_id"),
+  outlookConversationId: text("outlook_conversation_id"),
+  sentAt: timestamp("sent_at"),
+  sentBy: text("sent_by"),
+  sentByName: text("sent_by_name"),
+  sentByEmail: text("sent_by_email"),
+  createdBy: text("created_by"),
+  createdByName: text("created_by_name"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+  deletedAt: timestamp("deleted_at"),
+});
+
+export const insertRfiSchema = createInsertSchema(rfis).omit({ id: true, createdAt: true, updatedAt: true, deletedAt: true });
+export type Rfi = typeof rfis.$inferSelect;
+export type InsertRfi = z.infer<typeof insertRfiSchema>;
+
+// RFI Responses - tracked replies from Outlook conversation
+export const rfiResponses = pgTable("rfi_responses", {
+  id: serial("id").primaryKey(),
+  rfiId: integer("rfi_id").notNull(),
+  outlookMessageId: text("outlook_message_id"),
+  fromEmail: text("from_email").notNull(),
+  fromName: text("from_name"),
+  bodyPreview: text("body_preview"),
+  bodyHtml: text("body_html"),
+  receivedAt: timestamp("received_at").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertRfiResponseSchema = createInsertSchema(rfiResponses).omit({ id: true, createdAt: true });
+export type RfiResponse = typeof rfiResponses.$inferSelect;
+export type InsertRfiResponse = z.infer<typeof insertRfiResponseSchema>;
+
 // Customer Communications
 export const communications = pgTable("communications", {
   id: serial("id").primaryKey(),
