@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useRoute, useLocation } from "wouter";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -35,7 +35,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { ArrowLeft, Save, Plus, Trash2, Cloud, Truck, ChevronDown, ChevronUp, CheckCircle, PenLine, Download, Camera, X, Image } from "lucide-react";
+import { ArrowLeft, Save, Plus, Trash2, Cloud, Truck, ChevronDown, ChevronUp, CheckCircle, PenLine, Download, Camera, X, Image, Clock, Users, AlertTriangle } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
@@ -80,6 +80,18 @@ interface LaborLine {
   laborType: string;
   quantity: number;
   hours: number;
+  employeeId: number | null;
+  employeeName: string | null;
+}
+
+interface ProjectEmployee {
+  employeeId: number;
+  employeeName: string;
+  totalHours: number;
+  hasOpenShift: boolean;
+  shifts: Array<{ punchIn: string; punchOut: string | null; hours: number | null; jobCode: string | null }>;
+  jobCode: string | null;
+  jobDescription: string | null;
 }
 
 interface EquipmentLine {
@@ -197,6 +209,49 @@ export default function DailyReportPage() {
     queryKey: ['/api/projects', projectId, 'tasks'],
     enabled: !!projectId,
   });
+
+  const reportDate = report?.reportDate || newReportDate;
+  const { data: projectEmployees = [], isLoading: employeesLoading } = useQuery<ProjectEmployee[]>({
+    queryKey: ['/api/daily-reports/project-employees', projectId, reportDate],
+    queryFn: async () => {
+      const res = await apiRequest("GET", `/api/daily-reports/project-employees?projectId=${projectId}&date=${reportDate}`);
+      return res.json();
+    },
+    enabled: !!projectId && !!reportDate,
+  });
+
+  const getEffectiveHours = useCallback((laborLine: LaborLine): number => {
+    const localVal = localLaborHours[laborLine.id];
+    const hrs = localVal !== undefined ? Number(localVal) : Number(laborLine.hours || 0);
+    return isNaN(hrs) ? 0 : hrs;
+  }, [localLaborHours]);
+
+  const employeeAllocatedHours = useMemo(() => {
+    if (!report?.taskEntries) return new Map<number, number>();
+    const map = new Map<number, number>();
+    for (const entry of report.taskEntries) {
+      for (const labor of entry.laborLines) {
+        if (labor.employeeId) {
+          const current = map.get(labor.employeeId) || 0;
+          map.set(labor.employeeId, Math.round((current + getEffectiveHours(labor)) * 100) / 100);
+        }
+      }
+    }
+    return map;
+  }, [report?.taskEntries, getEffectiveHours]);
+
+  const getEmployeeRemainingHours = useCallback((employeeId: number, excludeLaborLineId?: number) => {
+    const employee = projectEmployees.find(e => e.employeeId === employeeId);
+    if (!employee) return 0;
+    let totalAllocated = employeeAllocatedHours.get(employeeId) || 0;
+    if (excludeLaborLineId) {
+      const line = report?.taskEntries?.flatMap(te => te.laborLines).find(l => l.id === excludeLaborLineId);
+      if (line) {
+        totalAllocated = Math.round((totalAllocated - getEffectiveHours(line)) * 100) / 100;
+      }
+    }
+    return Math.max(0, Math.round((employee.totalHours - totalAllocated) * 100) / 100);
+  }, [projectEmployees, employeeAllocatedHours, report?.taskEntries, getEffectiveHours]);
 
   useEffect(() => {
     if (report?.notes) {
@@ -1134,88 +1189,155 @@ export default function DailyReportPage() {
                         />
                       </div>
 
-                      {/* Labor Lines */}
+                      {/* Labor - Employee Time Tracking */}
                       <div className="space-y-2">
-                        <div className="flex items-center justify-between">
-                          <Label>Labor</Label>
-                          {!isCompleted && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => createLaborLineMutation.mutate({ taskEntryId: taskEntry.id, data: {} })}
-                            >
-                              <Plus className="h-3 w-3 mr-1" /> Add Labor
-                            </Button>
+                        <div className="flex items-center justify-between flex-wrap gap-1">
+                          <Label className="flex items-center gap-1">
+                            <Users className="h-4 w-4" /> Labor
+                          </Label>
+                          {!isCompleted && projectEmployees.length > 0 && (
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="outline" size="sm" data-testid={`button-add-employee-${taskEntry.id}`}>
+                                  <Plus className="h-3 w-3 mr-1" /> Add Employee
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                {projectEmployees
+                                  .filter(emp => !taskEntry.laborLines.some(l => l.employeeId === emp.employeeId))
+                                  .map(emp => {
+                                    const remaining = getEmployeeRemainingHours(emp.employeeId);
+                                    return (
+                                      <DropdownMenuItem
+                                        key={emp.employeeId}
+                                        disabled={remaining <= 0}
+                                        onClick={() => createLaborLineMutation.mutate({
+                                          taskEntryId: taskEntry.id,
+                                          data: {
+                                            laborType: 'Laborer',
+                                            quantity: 1,
+                                            hours: 0,
+                                            employeeId: emp.employeeId,
+                                            employeeName: emp.employeeName,
+                                          },
+                                        })}
+                                        data-testid={`menu-add-employee-${emp.employeeId}`}
+                                      >
+                                        <span className="flex-1">{emp.employeeName}</span>
+                                        <span className="text-xs text-muted-foreground ml-2">
+                                          {remaining > 0 ? `${remaining}h avail` : 'fully allocated'}
+                                        </span>
+                                      </DropdownMenuItem>
+                                    );
+                                  })}
+                                {projectEmployees.filter(emp => !taskEntry.laborLines.some(l => l.employeeId === emp.employeeId)).length === 0 && (
+                                  <DropdownMenuItem disabled>All employees already added</DropdownMenuItem>
+                                )}
+                              </DropdownMenuContent>
+                            </DropdownMenu>
                           )}
                         </div>
-                        {taskEntry.laborLines.map((labor) => (
-                          <div key={labor.id} className="space-y-2 p-3 bg-muted rounded">
-                            <div className="flex items-center justify-between gap-2">
-                              <Select
-                                value={labor.laborType}
-                                disabled={isCompleted}
-                                onValueChange={(value) => updateLaborLineMutation.mutate({ id: labor.id, data: { laborType: value } })}
-                              >
-                                <SelectTrigger className="flex-1" data-testid={`select-labor-type-${labor.id}`}>
-                                  <SelectValue placeholder="Select type" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {LABOR_TYPES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
-                                </SelectContent>
-                              </Select>
-                              {!isCompleted && (
-                                <Button variant="ghost" size="icon" onClick={() => deleteLaborLineMutation.mutate(labor.id)} data-testid={`button-delete-labor-${labor.id}`}>
-                                  <Trash2 className="h-4 w-4 text-destructive" />
-                                </Button>
-                              )}
-                            </div>
-                            <div className="grid grid-cols-2 gap-2">
-                              <div className="space-y-1">
-                                <Label className="text-xs text-muted-foreground"># of Workers</Label>
-                                <Input
-                                  type="number"
-                                  inputMode="numeric"
-                                  min={1}
-                                  value={localLaborQuantities[labor.id] ?? (labor.quantity === 0 ? '' : String(labor.quantity))}
-                                  disabled={isCompleted}
-                                  onChange={(e) => setLocalLaborQuantities(prev => ({ ...prev, [labor.id]: e.target.value }))}
-                                  onBlur={(e) => {
-                                    const val = Number(e.target.value);
-                                    if (!isNaN(val) && val > 0 && val !== labor.quantity) {
-                                      updateLaborLineMutation.mutate({ id: labor.id, data: { quantity: val } });
-                                    }
-                                  }}
-                                  placeholder="0"
-                                  data-testid={`input-labor-qty-${labor.id}`}
-                                />
+                        {projectEmployees.length === 0 && !employeesLoading && (
+                          <p className="text-xs text-muted-foreground italic">
+                            No employees punched in for this project on this date. Sync time data from the Employees page or map a Fingercheck job to this project.
+                          </p>
+                        )}
+                        {employeesLoading && (
+                          <p className="text-xs text-muted-foreground italic">Loading time tracking data...</p>
+                        )}
+                        {taskEntry.laborLines.map((labor) => {
+                          const employee = projectEmployees.find(e => e.employeeId === labor.employeeId);
+                          const remaining = labor.employeeId ? getEmployeeRemainingHours(labor.employeeId, labor.id) : null;
+                          const localHrs = localLaborHours[labor.id];
+                          const currentHours = localHrs !== undefined ? Number(localHrs) : Number(labor.hours);
+                          const isOverAllocated = remaining !== null && currentHours > remaining;
+
+                          return (
+                            <div key={labor.id} className="space-y-2 p-3 bg-muted rounded" data-testid={`labor-line-${labor.id}`}>
+                              <div className="flex items-center justify-between gap-2">
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <span className="font-medium text-sm truncate" data-testid={`text-employee-name-${labor.id}`}>
+                                      {labor.employeeName || 'Unknown Employee'}
+                                    </span>
+                                    {employee?.hasOpenShift && (
+                                      <Badge variant="outline" className="text-xs border-yellow-500 text-yellow-600">
+                                        <Clock className="h-3 w-3 mr-1" /> Still on site
+                                      </Badge>
+                                    )}
+                                  </div>
+                                  {employee && (
+                                    <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground flex-wrap">
+                                      <span>Tracked: {employee.totalHours}h</span>
+                                      <span>Remaining: {remaining !== null ? `${remaining}h` : 'N/A'}</span>
+                                    </div>
+                                  )}
+                                </div>
+                                {!isCompleted && (
+                                  <Button variant="ghost" size="icon" onClick={() => deleteLaborLineMutation.mutate(labor.id)} data-testid={`button-delete-labor-${labor.id}`}>
+                                    <Trash2 className="h-4 w-4 text-destructive" />
+                                  </Button>
+                                )}
                               </div>
-                              <div className="space-y-1">
-                                <Label className="text-xs text-muted-foreground">Hours</Label>
-                                <Input
-                                  type="number"
-                                  inputMode="decimal"
-                                  min={0}
-                                  step="0.5"
-                                  value={localLaborHours[labor.id] ?? (labor.hours === 0 ? '' : String(labor.hours))}
-                                  disabled={isCompleted}
-                                  onChange={(e) => setLocalLaborHours(prev => ({ ...prev, [labor.id]: e.target.value }))}
-                                  onBlur={(e) => {
-                                    const val = Number(e.target.value);
-                                    if (!isNaN(val) && val >= 0 && val !== labor.hours) {
-                                      updateLaborLineMutation.mutate({ id: labor.id, data: { hours: val } });
-                                    }
-                                  }}
-                                  placeholder="0"
-                                  data-testid={`input-labor-hours-${labor.id}`}
-                                />
+                              <div className="grid grid-cols-2 gap-2">
+                                <div className="space-y-1">
+                                  <Label className="text-xs text-muted-foreground">Role</Label>
+                                  <Select
+                                    value={labor.laborType}
+                                    disabled={isCompleted}
+                                    onValueChange={(value) => updateLaborLineMutation.mutate({ id: labor.id, data: { laborType: value } })}
+                                  >
+                                    <SelectTrigger data-testid={`select-labor-type-${labor.id}`}>
+                                      <SelectValue placeholder="Select role" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {LABOR_TYPES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+                                <div className="space-y-1">
+                                  <Label className="text-xs text-muted-foreground">Hours on Task</Label>
+                                  <Input
+                                    type="number"
+                                    inputMode="decimal"
+                                    min={0}
+                                    max={remaining !== null ? remaining : undefined}
+                                    step="0.25"
+                                    value={localLaborHours[labor.id] ?? (labor.hours === 0 ? '' : String(labor.hours))}
+                                    disabled={isCompleted}
+                                    className={isOverAllocated ? 'border-destructive' : ''}
+                                    onChange={(e) => setLocalLaborHours(prev => ({ ...prev, [labor.id]: e.target.value }))}
+                                    onBlur={(e) => {
+                                      const val = Number(e.target.value);
+                                      if (!isNaN(val) && val >= 0 && val !== labor.hours) {
+                                        if (remaining !== null && val > remaining) {
+                                          toast({
+                                            title: "Hours exceed available time",
+                                            description: `${labor.employeeName} only has ${remaining}h remaining across all tasks.`,
+                                            variant: "destructive",
+                                          });
+                                          return;
+                                        }
+                                        updateLaborLineMutation.mutate({ id: labor.id, data: { hours: val } });
+                                      }
+                                    }}
+                                    placeholder="0"
+                                    data-testid={`input-labor-hours-${labor.id}`}
+                                  />
+                                  {isOverAllocated && (
+                                    <p className="text-xs text-destructive flex items-center gap-1">
+                                      <AlertTriangle className="h-3 w-3" /> Exceeds available {remaining}h
+                                    </p>
+                                  )}
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                         {taskEntry.laborLines.length > 0 && (
                           <div className="flex items-center justify-end gap-4 text-sm text-muted-foreground pt-1 border-t">
-                            <span>Total Workers: <strong className="text-foreground">{taskEntry.laborLines.reduce((sum, l) => sum + (Number(localLaborQuantities[l.id]) || l.quantity), 0)}</strong></span>
-                            <span>Total Hours: <strong className="text-foreground">{taskEntry.laborLines.reduce((sum, l) => sum + (Number(localLaborHours[l.id]) || l.hours), 0)}</strong></span>
+                            <span>Workers: <strong className="text-foreground">{taskEntry.laborLines.length}</strong></span>
+                            <span>Total Hours: <strong className="text-foreground">{taskEntry.laborLines.reduce((sum, l) => sum + (Number(localLaborHours[l.id]) || Number(l.hours)), 0).toFixed(2)}</strong></span>
                           </div>
                         )}
                       </div>

@@ -1085,24 +1085,19 @@ export async function registerRoutes(
             y -= 14;
             
             const laborCols = [
-              { label: "TYPE", x: margin + 20, width: 200 },
-              { label: "WORKERS", x: margin + 250, width: 80 },
-              { label: "HOURS", x: margin + 350, width: 80 },
-              { label: "TOTAL HRS", x: margin + 430, width: 80 },
+              { label: "EMPLOYEE", x: margin + 20, width: 180 },
+              { label: "ROLE", x: margin + 220, width: 120 },
+              { label: "HOURS", x: margin + 370, width: 80 },
             ];
             drawTableHeader(laborCols);
             
-            let totalWorkers = 0;
             let totalHours = 0;
             for (const labor of entry.laborLines) {
               addNewPageIfNeeded();
-              drawText(labor.laborType, margin + 20, y, 9);
-              drawText(String(labor.quantity), margin + 270, y, 9);
-              drawText(String(labor.hours), margin + 365, y, 9);
-              const lineTotal = labor.quantity * labor.hours;
-              drawText(String(lineTotal), margin + 450, y, 9);
-              totalWorkers += labor.quantity;
-              totalHours += lineTotal;
+              drawText(labor.employeeName || 'Unknown', margin + 20, y, 9);
+              drawText(labor.laborType, margin + 220, y, 9);
+              drawText(String(labor.hours), margin + 385, y, 9);
+              totalHours += Number(labor.hours);
               y -= lineHeight;
             }
             page.drawLine({
@@ -1112,8 +1107,8 @@ export async function registerRoutes(
               color: tableBorder,
             });
             drawText("Totals:", margin + 20, y, 9, true, mediumText);
-            drawText(String(totalWorkers), margin + 270, y, 9, true, darkText);
-            drawText(String(totalHours), margin + 450, y, 9, true, darkText);
+            drawText(`${entry.laborLines.length} workers`, margin + 220, y, 9, true, darkText);
+            drawText(String(totalHours.toFixed(2)), margin + 385, y, 9, true, darkText);
             y -= lineHeight + 4;
           }
           
@@ -1525,6 +1520,69 @@ export async function registerRoutes(
     res.status(204).send();
   });
 
+  // Daily Report - Get employees who punched in to a project on a specific date
+  app.get("/api/daily-reports/project-employees", isAuthenticated, isAuthorizedUser, async (req, res) => {
+    try {
+      const { projectId, date } = req.query;
+      if (!projectId || !date) {
+        return res.status(400).json({ message: "projectId and date are required" });
+      }
+
+      const mappings = await storage.getProjectMappingsByProjectId(Number(projectId));
+      if (mappings.length === 0) {
+        return res.json([]);
+      }
+
+      const jobCodes = mappings.map(m => m.fingercheckJobCode);
+
+      const allPunches = await storage.getTimePunches({
+        startDate: date as string,
+        endDate: date as string,
+      });
+
+      const projectPunches = allPunches.filter(p => p.jobCode && jobCodes.includes(p.jobCode));
+
+      if (projectPunches.length === 0) {
+        return res.json([]);
+      }
+
+      const { buildDailyTimeSummaries } = await import("./services/fingercheck");
+      const summaries = buildDailyTimeSummaries(projectPunches);
+
+      const result = summaries.map(s => {
+        let availableHours = s.totalHours;
+        const hasOpenShift = s.shifts.some(shift => shift.punchOut === null);
+        if (hasOpenShift) {
+          const openShift = s.shifts.find(shift => shift.punchOut === null);
+          if (openShift) {
+            const punchInTime = new Date(openShift.punchIn);
+            const now = new Date();
+            const openHours = (now.getTime() - punchInTime.getTime()) / (1000 * 60 * 60);
+            availableHours = s.shifts
+              .filter(shift => shift.punchOut !== null)
+              .reduce((sum, shift) => sum + (shift.hours || 0), 0)
+              + Math.round(openHours * 100) / 100;
+          }
+        }
+
+        return {
+          employeeId: s.employeeId,
+          employeeName: s.employeeName,
+          totalHours: Math.round(availableHours * 100) / 100,
+          hasOpenShift,
+          shifts: s.shifts,
+          jobCode: s.jobCode,
+          jobDescription: s.jobDescription,
+        };
+      });
+
+      res.json(result);
+    } catch (err: any) {
+      console.error("Get project employees error:", err);
+      res.status(500).json({ message: err.message || "Failed to get project employees" });
+    }
+  });
+
   // Daily Report Labor Lines - all routes protected by authorization
   app.post("/api/daily-report-task-entries/:taskEntryId/labor-lines", isAuthenticated, isAuthorizedUser, async (req, res) => {
     try {
@@ -1535,12 +1593,14 @@ export async function registerRoutes(
       const report = await storage.getDailyReport(entry.reportId);
       if (report?.status === 'completed') return res.status(403).json({ message: "Cannot edit a completed report" });
       
-      const { laborType, quantity, hours } = req.body;
+      const { laborType, quantity, hours, employeeId, employeeName } = req.body;
       const line = await storage.createDailyReportLaborLine({
         taskEntryId,
         laborType: laborType || 'Laborer',
         quantity: quantity || 1,
         hours: hours || 0,
+        employeeId: employeeId || null,
+        employeeName: employeeName || null,
       });
       res.status(201).json(line);
     } catch (err) {

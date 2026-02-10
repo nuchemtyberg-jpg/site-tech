@@ -1,4 +1,4 @@
-import { pgTable, text, serial, integer, boolean, timestamp, date, uniqueIndex } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, boolean, timestamp, date, uniqueIndex, real } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 import { users } from "./models/auth";
@@ -191,13 +191,15 @@ export const insertDailyReportTaskEntrySchema = createInsertSchema(dailyReportTa
 export type DailyReportTaskEntry = typeof dailyReportTaskEntries.$inferSelect;
 export type InsertDailyReportTaskEntry = z.infer<typeof insertDailyReportTaskEntrySchema>;
 
-// Daily Report Labor Lines - Labor used for a task entry
+// Daily Report Labor Lines - Labor used for a task entry (linked to Fingercheck employees)
 export const dailyReportLaborLines = pgTable("daily_report_labor_lines", {
   id: serial("id").primaryKey(),
   taskEntryId: integer("task_entry_id").notNull(),
   laborType: text("labor_type").notNull(), // Foreman, Operator, Laborer
   quantity: integer("quantity").notNull().default(1),
-  hours: integer("hours").notNull().default(0),
+  hours: real("hours").notNull().default(0),
+  employeeId: integer("employee_id"),
+  employeeName: text("employee_name"),
   createdAt: timestamp("created_at").defaultNow(),
   deletedAt: timestamp("deleted_at"), // Soft delete support
 });

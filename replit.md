@@ -60,6 +60,7 @@ Key entities defined in `shared/schema.ts` include: Projects, Tasks, TaskStatusH
   - Health HUD overlay (`client/src/components/HealthHUD.tsx`) for dev mode showing render count, items loaded, overlay status, body overflow, and FPS
   - Scroll lock hook (`client/src/hooks/use-scroll-lock.ts`) with ref-counting for multiple overlays, proper cleanup on unmount and route change
 - **Daily Report Weather Integration**: Open-Meteo geocoding and weather APIs for local weather conditions.
+- **Daily Report Labor - Time Tracking Integration**: Labor section in daily reports is linked to Fingercheck time tracking. When creating a report for a date, employees who punched in to the project (via mapped Fingercheck job codes) are automatically available to add under each task. Each employee gets a role selector (Foreman/Operator/Laborer) and hours input per task. Cross-task validation ensures total hours per employee across all tasks cannot exceed their actual tracked hours. If an employee hasn't punched out yet, available hours are calculated from punch-in to current time. Schema: `daily_report_labor_lines` has `employee_id` and `employee_name` columns. API: `GET /api/daily-reports/project-employees?projectId=X&date=YYYY-MM-DD` returns employees with available hours.
 - **Signature Capture**: Freehand or typed signatures for completing daily reports.
 
 ### Project Communications (Email Integration)
