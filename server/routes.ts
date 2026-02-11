@@ -2829,6 +2829,34 @@ export async function registerRoutes(
   });
 
   // RFI: Generate PDF and send via Outlook
+  app.post("/api/rfis/:id/preview-email", isAuthenticated, isAuthorizedUser, async (req, res) => {
+    try {
+      const rfi = await storage.getRfi(Number(req.params.id));
+      if (!rfi) return res.status(404).json({ message: "RFI not found" });
+      const project = await storage.getProject(rfi.projectId);
+      if (!project) return res.status(404).json({ message: "Project not found" });
+
+      const userId = (req.user as any).claims.sub;
+      const { getConnectedEmail } = await import("./services/outlookConnector");
+      const connectedEmail = await getConnectedEmail(userId);
+
+      const rfiLabel = `RFI-${String(rfi.rfiNumber).padStart(3, "0")}`;
+      const subject = `${rfiLabel}: ${rfi.subject} - ${project.name}`;
+      const defaultBody = `Request for Information - ${rfiLabel}\n\nProject: ${project.name}${project.projectNumber ? ` (#${project.projectNumber})` : ""}\nSubject: ${rfi.subject}\nPriority: ${(rfi.priority || "normal").toUpperCase()}${rfi.dueDate ? `\nResponse Due: ${new Date(rfi.dueDate).toLocaleDateString()}` : ""}\n\nQuestion:\n${rfi.question}${rfi.additionalBody ? `\n\n${rfi.additionalBody}` : ""}\n\nPlease reply to this email with your response. The full RFI document is attached as a PDF.\nSent via SiteTech Construction Management`;
+
+      res.json({
+        from: connectedEmail || "Not connected",
+        to: rfi.directedToEmail,
+        cc: rfi.ccEmails?.filter(Boolean) || [],
+        subject,
+        body: defaultBody,
+        rfiLabel,
+      });
+    } catch (err: any) {
+      res.status(500).json({ message: "Failed to generate preview" });
+    }
+  });
+
   app.post("/api/rfis/:id/send", isAuthenticated, isAuthorizedUser, async (req, res) => {
     try {
       const rfi = await storage.getRfi(Number(req.params.id));
@@ -2841,7 +2869,8 @@ export async function registerRoutes(
       const dbUser = await storage.getUser(userId);
       if (!dbUser) return res.status(401).json({ message: "User not found" });
 
-      // Parse attachment entries
+      const customBody = req.body?.customBody;
+
       const attachmentFiles = (rfi.attachments || []).map((att: string) => {
         try {
           return JSON.parse(att);
@@ -2850,7 +2879,6 @@ export async function registerRoutes(
         }
       }).filter(Boolean);
 
-      // Generate PDF
       const { generateRfiPdf, uploadPdfToStorage } = await import("./services/rfiPdfGenerator");
       const pdfBuffer = await generateRfiPdf({
         rfi,
@@ -2861,7 +2889,6 @@ export async function registerRoutes(
 
       const pdfPath = await uploadPdfToStorage(pdfBuffer, rfi.projectId, rfi.rfiNumber);
 
-      // Prepare email attachments
       const { sendEmail, getConnectedEmail } = await import("./services/outlookConnector");
       const connectedEmail = await getConnectedEmail(userId);
 
@@ -2873,7 +2900,6 @@ export async function registerRoutes(
         },
       ];
 
-      // Also attach the original files
       for (const att of attachmentFiles) {
         try {
           const { objectStorageClient } = await import("./replit_integrations/object_storage/objectStorage");
@@ -2905,24 +2931,33 @@ export async function registerRoutes(
       }
 
       const rfiLabel = `RFI-${String(rfi.rfiNumber).padStart(3, "0")}`;
-      const emailBody = `
-        <div style="font-family: Arial, sans-serif; max-width: 700px;">
-          <h2 style="color: #1a365d;">Request for Information - ${rfiLabel}</h2>
-          <p><strong>Project:</strong> ${project.name}${project.projectNumber ? ` (#${project.projectNumber})` : ""}</p>
-          <p><strong>Subject:</strong> ${rfi.subject}</p>
-          <p><strong>Priority:</strong> ${(rfi.priority || "normal").toUpperCase()}</p>
-          ${rfi.dueDate ? `<p><strong>Response Due:</strong> ${new Date(rfi.dueDate).toLocaleDateString()}</p>` : ""}
-          <hr style="border: 1px solid #e2e8f0;" />
-          <p><strong>Question:</strong></p>
-          <p>${rfi.question.replace(/\n/g, "<br/>")}</p>
-          ${rfi.additionalBody ? `<p>${rfi.additionalBody.replace(/\n/g, "<br/>")}</p>` : ""}
-          <hr style="border: 1px solid #e2e8f0;" />
-          <p style="color: #718096; font-size: 12px;">
-            Please reply to this email with your response. The full RFI document is attached as a PDF.
-            <br/>Sent via SiteTech Construction Management
-          </p>
-        </div>
-      `;
+      let emailBody: string;
+      if (customBody) {
+        emailBody = `
+          <div style="font-family: Arial, sans-serif; max-width: 700px;">
+            <p>${customBody.replace(/\n/g, "<br/>")}</p>
+          </div>
+        `;
+      } else {
+        emailBody = `
+          <div style="font-family: Arial, sans-serif; max-width: 700px;">
+            <h2 style="color: #1a365d;">Request for Information - ${rfiLabel}</h2>
+            <p><strong>Project:</strong> ${project.name}${project.projectNumber ? ` (#${project.projectNumber})` : ""}</p>
+            <p><strong>Subject:</strong> ${rfi.subject}</p>
+            <p><strong>Priority:</strong> ${(rfi.priority || "normal").toUpperCase()}</p>
+            ${rfi.dueDate ? `<p><strong>Response Due:</strong> ${new Date(rfi.dueDate).toLocaleDateString()}</p>` : ""}
+            <hr style="border: 1px solid #e2e8f0;" />
+            <p><strong>Question:</strong></p>
+            <p>${rfi.question.replace(/\n/g, "<br/>")}</p>
+            ${rfi.additionalBody ? `<p>${rfi.additionalBody.replace(/\n/g, "<br/>")}</p>` : ""}
+            <hr style="border: 1px solid #e2e8f0;" />
+            <p style="color: #718096; font-size: 12px;">
+              Please reply to this email with your response. The full RFI document is attached as a PDF.
+              <br/>Sent via SiteTech Construction Management
+            </p>
+          </div>
+        `;
+      }
 
       const result = await sendEmail({
         to: [rfi.directedToEmail],
@@ -3000,6 +3035,79 @@ export async function registerRoutes(
       res.json(responses);
     } catch (err) {
       res.status(500).json({ message: "Failed to fetch responses" });
+    }
+  });
+
+  // RFI: Get full conversation (all emails including sent by user)
+  app.get("/api/rfis/:id/conversation", isAuthenticated, isAuthorizedUser, async (req, res) => {
+    try {
+      const rfi = await storage.getRfi(Number(req.params.id));
+      if (!rfi) return res.status(404).json({ message: "RFI not found" });
+      if (!rfi.outlookConversationId) return res.json([]);
+
+      const userId = (req.user as any).claims.sub;
+      const { getEmailReplies } = await import("./services/outlookConnector");
+      const allMessages = await getEmailReplies(rfi.outlookConversationId, userId);
+      res.json(allMessages);
+    } catch (err: any) {
+      console.error("Failed to get conversation:", err);
+      res.status(500).json({ message: "Failed to get conversation" });
+    }
+  });
+
+  // RFI: Get attachments for a specific email message
+  app.get("/api/rfis/:id/message-attachments/:messageId", isAuthenticated, isAuthorizedUser, async (req, res) => {
+    try {
+      const rfi = await storage.getRfi(Number(req.params.id));
+      if (!rfi) return res.status(404).json({ message: "RFI not found" });
+
+      const userId = (req.user as any).claims.sub;
+      const { getOutlookClient } = await import("./services/outlookConnector");
+      const client = await getOutlookClient(userId);
+      const result = await client
+        .api(`/me/messages/${req.params.messageId}/attachments`)
+        .get();
+
+      const attachments = (result.value || [])
+        .filter((att: any) => !att.isInline && att.contentBytes)
+        .map((att: any) => ({
+          id: att.id,
+          name: att.name,
+          contentType: att.contentType,
+          size: att.size,
+        }));
+
+      res.json(attachments);
+    } catch (err: any) {
+      console.error("Failed to get message attachments:", err);
+      res.status(500).json({ message: "Failed to get attachments" });
+    }
+  });
+
+  // RFI: Download a specific email attachment
+  app.get("/api/rfis/:id/message-attachments/:messageId/:attachmentId", isAuthenticated, isAuthorizedUser, async (req, res) => {
+    try {
+      const rfi = await storage.getRfi(Number(req.params.id));
+      if (!rfi) return res.status(404).json({ message: "RFI not found" });
+
+      const userId = (req.user as any).claims.sub;
+      const { getOutlookClient } = await import("./services/outlookConnector");
+      const client = await getOutlookClient(userId);
+      const attachment = await client
+        .api(`/me/messages/${req.params.messageId}/attachments/${req.params.attachmentId}`)
+        .get();
+
+      if (attachment.contentBytes) {
+        const buffer = Buffer.from(attachment.contentBytes, "base64");
+        res.setHeader("Content-Type", attachment.contentType || "application/octet-stream");
+        res.setHeader("Content-Disposition", `attachment; filename="${attachment.name}"`);
+        res.send(buffer);
+      } else {
+        res.status(404).json({ message: "Attachment content not found" });
+      }
+    } catch (err: any) {
+      console.error("Failed to download attachment:", err);
+      res.status(500).json({ message: "Failed to download attachment" });
     }
   });
 

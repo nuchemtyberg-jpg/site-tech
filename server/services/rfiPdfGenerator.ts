@@ -1,4 +1,6 @@
 import PDFDocument from "pdfkit";
+import fs from "fs";
+import path from "path";
 import { Rfi } from "@shared/schema";
 import { objectStorageClient } from "../replit_integrations/object_storage/objectStorage";
 
@@ -56,14 +58,30 @@ export async function generateRfiPdf(options: RfiPdfOptions): Promise<Buffer> {
       doc.on("error", reject);
 
       const pageWidth = doc.page.width - 100;
+      const headerHeight = 100;
 
-      doc.rect(0, 0, doc.page.width, 90).fill("#1a365d");
-      doc.fillColor("#ffffff").fontSize(24).font("Helvetica-Bold");
-      doc.text("REQUEST FOR INFORMATION", 50, 25, { width: pageWidth, align: "center" });
-      doc.fontSize(12).font("Helvetica");
-      doc.text("SiteTech Construction Management", 50, 55, { width: pageWidth, align: "center" });
+      doc.rect(0, 0, doc.page.width, headerHeight).fill("#1a365d");
 
-      let y = 110;
+      let logoLoaded = false;
+      try {
+        const logoPath = path.resolve("attached_assets/Logo_1770600587313.png");
+        if (fs.existsSync(logoPath)) {
+          const logoBuffer = fs.readFileSync(logoPath);
+          doc.image(logoBuffer, 30, 15, { height: 70 });
+          logoLoaded = true;
+        }
+      } catch {}
+
+      const textX = logoLoaded ? 120 : 50;
+      const textWidth = logoLoaded ? pageWidth - 70 : pageWidth;
+      doc.fillColor("#ffffff").fontSize(22).font("Helvetica-Bold");
+      doc.text("REQUEST FOR INFORMATION", textX, 20, { width: textWidth });
+      doc.fontSize(11).font("Helvetica").fillColor("#e2e8f0");
+      doc.text("SiteTech Construction Management", textX, 48, { width: textWidth });
+      doc.fontSize(9).fillColor("#a0aec0");
+      doc.text("sitetechnj.com", textX, 65, { width: textWidth });
+
+      let y = headerHeight + 20;
 
       doc.fillColor("#333333").fontSize(10).font("Helvetica-Bold");
 

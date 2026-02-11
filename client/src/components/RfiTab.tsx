@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,17 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import {
   Plus,
   Send,
@@ -23,6 +34,10 @@ import {
   AlertCircle,
   MessageSquare,
   Loader2,
+  Pencil,
+  Download,
+  Mail,
+  Eye,
 } from "lucide-react";
 import type { Project, Rfi } from "@shared/schema";
 
@@ -30,7 +45,7 @@ interface RfiTabProps {
   project: Project;
 }
 
-type RfiView = "list" | "create" | "detail";
+type RfiView = "list" | "create" | "detail" | "edit" | "preview-send";
 
 function getStatusBadge(status: string) {
   switch (status) {
@@ -70,7 +85,6 @@ function formatDate(date: string | Date | null) {
 export function RfiTab({ project }: RfiTabProps) {
   const [view, setView] = useState<RfiView>("list");
   const [selectedRfiId, setSelectedRfiId] = useState<number | null>(null);
-  const { toast } = useToast();
 
   const handleViewRfi = (rfiId: number) => {
     setSelectedRfiId(rfiId);
@@ -82,12 +96,32 @@ export function RfiTab({ project }: RfiTabProps) {
     setView("list");
   };
 
+  const handleBackToDetail = () => {
+    setView("detail");
+  };
+
   if (view === "create") {
     return <RfiCreateForm project={project} onBack={handleBack} onCreated={(rfi) => { setSelectedRfiId(rfi.id); setView("detail"); }} />;
   }
 
+  if (view === "edit" && selectedRfiId) {
+    return <RfiEditForm rfiId={selectedRfiId} project={project} onBack={handleBackToDetail} onSaved={() => setView("detail")} />;
+  }
+
+  if (view === "preview-send" && selectedRfiId) {
+    return <RfiEmailPreview rfiId={selectedRfiId} project={project} onBack={handleBackToDetail} onSent={() => setView("detail")} />;
+  }
+
   if (view === "detail" && selectedRfiId) {
-    return <RfiDetailView rfiId={selectedRfiId} project={project} onBack={handleBack} />;
+    return (
+      <RfiDetailView
+        rfiId={selectedRfiId}
+        project={project}
+        onBack={handleBack}
+        onEdit={() => setView("edit")}
+        onPreviewSend={() => setView("preview-send")}
+      />
+    );
   }
 
   return <RfiListView project={project} onCreateNew={() => setView("create")} onViewRfi={handleViewRfi} />;
@@ -239,118 +273,379 @@ function RfiCreateForm({ project, onBack, onCreated }: { project: Project; onBac
         <h2 className="text-lg font-semibold">New RFI</h2>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <Label htmlFor="rfi-directed-to">Directed To (Name) *</Label>
-            <Input
-              id="rfi-directed-to"
-              value={directedTo}
-              onChange={(e) => setDirectedTo(e.target.value)}
-              placeholder="e.g. John Smith"
-              data-testid="input-directed-to"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="rfi-directed-email">Directed To (Email) *</Label>
-            <Input
-              id="rfi-directed-email"
-              type="email"
-              value={directedToEmail}
-              onChange={(e) => setDirectedToEmail(e.target.value)}
-              placeholder="e.g. john@company.com"
-              data-testid="input-directed-email"
-            />
-          </div>
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="rfi-subject">Subject *</Label>
-          <Input
-            id="rfi-subject"
-            value={subject}
-            onChange={(e) => setSubject(e.target.value)}
-            placeholder="Brief description of the information needed"
-            data-testid="input-rfi-subject"
-          />
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="rfi-question">Question / Description *</Label>
-          <Textarea
-            id="rfi-question"
-            value={question}
-            onChange={(e) => setQuestion(e.target.value)}
-            placeholder="Describe the information you need in detail..."
-            className="min-h-[120px]"
-            data-testid="input-rfi-question"
-          />
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="rfi-additional">Additional Details</Label>
-          <Textarea
-            id="rfi-additional"
-            value={additionalBody}
-            onChange={(e) => setAdditionalBody(e.target.value)}
-            placeholder="Any additional context or references..."
-            className="min-h-[80px]"
-            data-testid="input-rfi-additional"
-          />
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="space-y-2">
-            <Label htmlFor="rfi-cc">CC Emails</Label>
-            <Input
-              id="rfi-cc"
-              value={ccEmails}
-              onChange={(e) => setCcEmails(e.target.value)}
-              placeholder="email1@co.com, email2@co.com"
-              data-testid="input-cc-emails"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label>Priority</Label>
-            <Select value={priority} onValueChange={setPriority}>
-              <SelectTrigger data-testid="select-priority">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="low">Low</SelectItem>
-                <SelectItem value="normal">Normal</SelectItem>
-                <SelectItem value="high">High</SelectItem>
-                <SelectItem value="urgent">Urgent</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="rfi-due">Due Date</Label>
-            <Input
-              id="rfi-due"
-              type="date"
-              value={dueDate}
-              onChange={(e) => setDueDate(e.target.value)}
-              data-testid="input-due-date"
-            />
-          </div>
-        </div>
-
-        <div className="flex justify-end gap-2">
-          <Button type="button" variant="outline" onClick={onBack} data-testid="button-cancel-rfi">
-            Cancel
-          </Button>
-          <Button type="submit" disabled={createMutation.isPending} data-testid="button-save-rfi-draft">
-            {createMutation.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <FileText className="w-4 h-4 mr-2" />}
-            Save as Draft
-          </Button>
-        </div>
-      </form>
+      <RfiForm
+        subject={subject} setSubject={setSubject}
+        question={question} setQuestion={setQuestion}
+        directedTo={directedTo} setDirectedTo={setDirectedTo}
+        directedToEmail={directedToEmail} setDirectedToEmail={setDirectedToEmail}
+        ccEmails={ccEmails} setCcEmails={setCcEmails}
+        priority={priority} setPriority={setPriority}
+        dueDate={dueDate} setDueDate={setDueDate}
+        additionalBody={additionalBody} setAdditionalBody={setAdditionalBody}
+        onSubmit={handleSubmit}
+        onCancel={onBack}
+        submitLabel="Save as Draft"
+        submitIcon={<FileText className="w-4 h-4 mr-2" />}
+        isPending={createMutation.isPending}
+        testIdPrefix="create"
+      />
     </div>
   );
 }
 
-function RfiDetailView({ rfiId, project, onBack }: { rfiId: number; project: Project; onBack: () => void }) {
+function RfiEditForm({ rfiId, project, onBack, onSaved }: { rfiId: number; project: Project; onBack: () => void; onSaved: () => void }) {
+  const { toast } = useToast();
+
+  const { data: rfi, isLoading } = useQuery<Rfi>({
+    queryKey: ["/api/rfis", rfiId],
+  });
+
+  const [subject, setSubject] = useState("");
+  const [question, setQuestion] = useState("");
+  const [directedTo, setDirectedTo] = useState("");
+  const [directedToEmail, setDirectedToEmail] = useState("");
+  const [ccEmails, setCcEmails] = useState("");
+  const [priority, setPriority] = useState("normal");
+  const [dueDate, setDueDate] = useState("");
+  const [additionalBody, setAdditionalBody] = useState("");
+
+  useEffect(() => {
+    if (rfi) {
+      setSubject(rfi.subject || "");
+      setQuestion(rfi.question || "");
+      setDirectedTo(rfi.directedTo || "");
+      setDirectedToEmail(rfi.directedToEmail || "");
+      setCcEmails(rfi.ccEmails?.join(", ") || "");
+      setPriority(rfi.priority || "normal");
+      setDueDate(rfi.dueDate ? String(rfi.dueDate).split("T")[0] : "");
+      setAdditionalBody(rfi.additionalBody || "");
+    }
+  }, [rfi]);
+
+  const updateMutation = useMutation({
+    mutationFn: async (data: any) => {
+      const res = await apiRequest("PATCH", `/api/rfis/${rfiId}`, data);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/rfis", rfiId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/projects", project.id, "rfis"] });
+      toast({ title: "RFI Updated", description: "Changes saved." });
+      onSaved();
+    },
+    onError: (err: any) => {
+      toast({ title: "Error", description: err.message || "Failed to update RFI", variant: "destructive" });
+    },
+  });
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!subject || !question || !directedTo || !directedToEmail) {
+      toast({ title: "Missing Fields", description: "Please fill in all required fields.", variant: "destructive" });
+      return;
+    }
+
+    updateMutation.mutate({
+      subject,
+      question,
+      directedTo,
+      directedToEmail,
+      ccEmails: ccEmails ? ccEmails.split(",").map((e) => e.trim()).filter(Boolean) : [],
+      priority,
+      dueDate: dueDate || null,
+      additionalBody: additionalBody || null,
+    });
+  };
+
+  if (isLoading || !rfi) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-4 space-y-4">
+      <div className="flex items-center gap-2">
+        <Button variant="ghost" size="icon" onClick={onBack} data-testid="button-back-from-edit">
+          <ArrowLeft className="w-4 h-4" />
+        </Button>
+        <h2 className="text-lg font-semibold">Edit RFI-{String(rfi.rfiNumber).padStart(3, "0")}</h2>
+      </div>
+
+      <RfiForm
+        subject={subject} setSubject={setSubject}
+        question={question} setQuestion={setQuestion}
+        directedTo={directedTo} setDirectedTo={setDirectedTo}
+        directedToEmail={directedToEmail} setDirectedToEmail={setDirectedToEmail}
+        ccEmails={ccEmails} setCcEmails={setCcEmails}
+        priority={priority} setPriority={setPriority}
+        dueDate={dueDate} setDueDate={setDueDate}
+        additionalBody={additionalBody} setAdditionalBody={setAdditionalBody}
+        onSubmit={handleSubmit}
+        onCancel={onBack}
+        submitLabel="Save Changes"
+        submitIcon={<CheckCircle className="w-4 h-4 mr-2" />}
+        isPending={updateMutation.isPending}
+        testIdPrefix="edit"
+      />
+    </div>
+  );
+}
+
+interface RfiFormProps {
+  subject: string; setSubject: (v: string) => void;
+  question: string; setQuestion: (v: string) => void;
+  directedTo: string; setDirectedTo: (v: string) => void;
+  directedToEmail: string; setDirectedToEmail: (v: string) => void;
+  ccEmails: string; setCcEmails: (v: string) => void;
+  priority: string; setPriority: (v: string) => void;
+  dueDate: string; setDueDate: (v: string) => void;
+  additionalBody: string; setAdditionalBody: (v: string) => void;
+  onSubmit: (e: React.FormEvent) => void;
+  onCancel: () => void;
+  submitLabel: string;
+  submitIcon: React.ReactNode;
+  isPending: boolean;
+  testIdPrefix: string;
+}
+
+function RfiForm(props: RfiFormProps) {
+  return (
+    <form onSubmit={props.onSubmit} className="space-y-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label htmlFor={`rfi-directed-to-${props.testIdPrefix}`}><span className="text-red-500">*</span> Directed To (Name)</Label>
+          <Input
+            id={`rfi-directed-to-${props.testIdPrefix}`}
+            value={props.directedTo}
+            onChange={(e) => props.setDirectedTo(e.target.value)}
+            placeholder="e.g. John Smith"
+            data-testid={`input-directed-to-${props.testIdPrefix}`}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor={`rfi-directed-email-${props.testIdPrefix}`}><span className="text-red-500">*</span> Directed To (Email)</Label>
+          <Input
+            id={`rfi-directed-email-${props.testIdPrefix}`}
+            type="email"
+            value={props.directedToEmail}
+            onChange={(e) => props.setDirectedToEmail(e.target.value)}
+            placeholder="e.g. john@company.com"
+            data-testid={`input-directed-email-${props.testIdPrefix}`}
+          />
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor={`rfi-subject-${props.testIdPrefix}`}><span className="text-red-500">*</span> Subject</Label>
+        <Input
+          id={`rfi-subject-${props.testIdPrefix}`}
+          value={props.subject}
+          onChange={(e) => props.setSubject(e.target.value)}
+          placeholder="Brief description of the information needed"
+          data-testid={`input-rfi-subject-${props.testIdPrefix}`}
+        />
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor={`rfi-question-${props.testIdPrefix}`}><span className="text-red-500">*</span> Question / Description</Label>
+        <Textarea
+          id={`rfi-question-${props.testIdPrefix}`}
+          value={props.question}
+          onChange={(e) => props.setQuestion(e.target.value)}
+          placeholder="Describe the information you need in detail..."
+          className="min-h-[120px]"
+          data-testid={`input-rfi-question-${props.testIdPrefix}`}
+        />
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor={`rfi-additional-${props.testIdPrefix}`}>Additional Details</Label>
+        <Textarea
+          id={`rfi-additional-${props.testIdPrefix}`}
+          value={props.additionalBody}
+          onChange={(e) => props.setAdditionalBody(e.target.value)}
+          placeholder="Any additional context or references..."
+          className="min-h-[80px]"
+          data-testid={`input-rfi-additional-${props.testIdPrefix}`}
+        />
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="space-y-2">
+          <Label htmlFor={`rfi-cc-${props.testIdPrefix}`}>CC Emails</Label>
+          <Input
+            id={`rfi-cc-${props.testIdPrefix}`}
+            value={props.ccEmails}
+            onChange={(e) => props.setCcEmails(e.target.value)}
+            placeholder="email1@co.com, email2@co.com"
+            data-testid={`input-cc-emails-${props.testIdPrefix}`}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label>Priority</Label>
+          <Select value={props.priority} onValueChange={props.setPriority}>
+            <SelectTrigger data-testid={`select-priority-${props.testIdPrefix}`}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="low">Low</SelectItem>
+              <SelectItem value="normal">Normal</SelectItem>
+              <SelectItem value="high">High</SelectItem>
+              <SelectItem value="urgent">Urgent</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor={`rfi-due-${props.testIdPrefix}`}>Due Date</Label>
+          <Input
+            id={`rfi-due-${props.testIdPrefix}`}
+            type="date"
+            value={props.dueDate}
+            onChange={(e) => props.setDueDate(e.target.value)}
+            data-testid={`input-due-date-${props.testIdPrefix}`}
+          />
+        </div>
+      </div>
+
+      <div className="flex justify-end gap-2">
+        <Button type="button" variant="outline" onClick={props.onCancel} data-testid={`button-cancel-${props.testIdPrefix}`}>
+          Cancel
+        </Button>
+        <Button type="submit" disabled={props.isPending} data-testid={`button-submit-${props.testIdPrefix}`}>
+          {props.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : props.submitIcon}
+          {props.submitLabel}
+        </Button>
+      </div>
+    </form>
+  );
+}
+
+function RfiEmailPreview({ rfiId, project, onBack, onSent }: { rfiId: number; project: Project; onBack: () => void; onSent: () => void }) {
+  const { toast } = useToast();
+  const [editableBody, setEditableBody] = useState("");
+
+  const { data: preview, isLoading } = useQuery<{
+    from: string;
+    to: string;
+    cc: string[];
+    subject: string;
+    body: string;
+    rfiLabel: string;
+  }>({
+    queryKey: ["/api/rfis", rfiId, "preview-email"],
+    queryFn: async () => {
+      const res = await apiRequest("POST", `/api/rfis/${rfiId}/preview-email`);
+      return res.json();
+    },
+  });
+
+  useEffect(() => {
+    if (preview) {
+      setEditableBody(preview.body);
+    }
+  }, [preview]);
+
+  const sendMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", `/api/rfis/${rfiId}/send`, { customBody: editableBody });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/rfis", rfiId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/projects", project.id, "rfis"] });
+      toast({ title: "RFI Sent", description: "The RFI has been sent via email with the PDF attached." });
+      onSent();
+    },
+    onError: (err: any) => {
+      toast({ title: "Send Failed", description: err.message || "Failed to send RFI.", variant: "destructive" });
+    },
+  });
+
+  if (isLoading || !preview) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-4 space-y-4">
+      <div className="flex items-center gap-2">
+        <Button variant="ghost" size="icon" onClick={onBack} data-testid="button-back-from-preview">
+          <ArrowLeft className="w-4 h-4" />
+        </Button>
+        <h2 className="text-lg font-semibold">Email Preview - {preview.rfiLabel}</h2>
+      </div>
+
+      <Card className="p-4 space-y-3">
+        <div>
+          <p className="text-sm text-muted-foreground">From</p>
+          <p className="text-sm font-medium" data-testid="text-preview-from">{preview.from}</p>
+        </div>
+        <div>
+          <p className="text-sm text-muted-foreground">To</p>
+          <p className="text-sm font-medium" data-testid="text-preview-to">{preview.to}</p>
+        </div>
+        {preview.cc.length > 0 && (
+          <div>
+            <p className="text-sm text-muted-foreground">CC</p>
+            <p className="text-sm font-medium" data-testid="text-preview-cc">{preview.cc.join(", ")}</p>
+          </div>
+        )}
+        <div>
+          <p className="text-sm text-muted-foreground">Subject</p>
+          <p className="text-sm font-medium" data-testid="text-preview-subject">{preview.subject}</p>
+        </div>
+      </Card>
+
+      <Card className="p-4">
+        <div className="flex items-center justify-between gap-2 mb-2">
+          <Label className="font-semibold">Email Body</Label>
+          <p className="text-xs text-muted-foreground">You can edit the body text below before sending</p>
+        </div>
+        <Textarea
+          value={editableBody}
+          onChange={(e) => setEditableBody(e.target.value)}
+          className="min-h-[300px] font-mono text-sm"
+          data-testid="textarea-email-body"
+        />
+      </Card>
+
+      <Card className="p-4">
+        <p className="text-sm text-muted-foreground">
+          <Paperclip className="w-4 h-4 inline mr-1" />
+          The RFI PDF document and any attached files will be included as email attachments.
+        </p>
+      </Card>
+
+      <div className="flex justify-end gap-2">
+        <Button variant="outline" onClick={onBack} data-testid="button-cancel-send">
+          Cancel
+        </Button>
+        <Button
+          onClick={() => sendMutation.mutate()}
+          disabled={sendMutation.isPending}
+          data-testid="button-confirm-send"
+        >
+          {sendMutation.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Send className="w-4 h-4 mr-2" />}
+          Send Email
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function RfiDetailView({ rfiId, project, onBack, onEdit, onPreviewSend }: {
+  rfiId: number;
+  project: Project;
+  onBack: () => void;
+  onEdit: () => void;
+  onPreviewSend: () => void;
+}) {
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -358,24 +653,9 @@ function RfiDetailView({ rfiId, project, onBack }: { rfiId: number; project: Pro
     queryKey: ["/api/rfis", rfiId],
   });
 
-  const { data: responses = [] } = useQuery<any[]>({
-    queryKey: ["/api/rfis", rfiId, "responses"],
-    enabled: !!rfi && rfi.status !== "draft",
-  });
-
-  const sendMutation = useMutation({
-    mutationFn: async () => {
-      const res = await apiRequest("POST", `/api/rfis/${rfiId}/send`);
-      return res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/rfis", rfiId] });
-      queryClient.invalidateQueries({ queryKey: ["/api/projects", project.id, "rfis"] });
-      toast({ title: "RFI Sent", description: "The RFI has been sent via email with the PDF attached." });
-    },
-    onError: (err: any) => {
-      toast({ title: "Send Failed", description: err.message || "Failed to send RFI. Check your Outlook connection.", variant: "destructive" });
-    },
+  const { data: conversation = [], isLoading: conversationLoading } = useQuery<any[]>({
+    queryKey: ["/api/rfis", rfiId, "conversation"],
+    enabled: !!rfi && rfi.status !== "draft" && !!rfi.outlookConversationId,
   });
 
   const checkRepliesMutation = useMutation({
@@ -385,6 +665,7 @@ function RfiDetailView({ rfiId, project, onBack }: { rfiId: number; project: Pro
     },
     onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/rfis", rfiId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/rfis", rfiId, "conversation"] });
       queryClient.invalidateQueries({ queryKey: ["/api/rfis", rfiId, "responses"] });
       if (data.newCount > 0) {
         toast({ title: "New Replies", description: `${data.newCount} new response(s) found.` });
@@ -495,25 +776,53 @@ function RfiDetailView({ rfiId, project, onBack }: { rfiId: number; project: Pro
           {getStatusBadge(rfi.status)}
           {getPriorityBadge(rfi.priority)}
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           {isDraft && (
             <>
               <Button
-                variant="destructive"
+                variant="outline"
                 size="sm"
-                onClick={() => deleteMutation.mutate()}
-                disabled={deleteMutation.isPending}
-                data-testid="button-delete-rfi"
+                onClick={onEdit}
+                data-testid="button-edit-rfi"
               >
-                <Trash2 className="w-4 h-4 mr-1" />
-                Delete
+                <Pencil className="w-4 h-4 mr-1" />
+                Edit
               </Button>
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    data-testid="button-delete-rfi"
+                  >
+                    <Trash2 className="w-4 h-4 mr-1" />
+                    Delete
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Delete RFI?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      Are you sure you want to delete RFI-{String(rfi.rfiNumber).padStart(3, "0")}? This action cannot be undone.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel data-testid="button-cancel-delete">Cancel</AlertDialogCancel>
+                    <AlertDialogAction
+                      onClick={() => deleteMutation.mutate()}
+                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                      data-testid="button-confirm-delete"
+                    >
+                      Delete
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
               <Button
-                onClick={() => sendMutation.mutate()}
-                disabled={sendMutation.isPending}
+                onClick={onPreviewSend}
                 data-testid="button-send-rfi"
               >
-                {sendMutation.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Send className="w-4 h-4 mr-2" />}
+                <Eye className="w-4 h-4 mr-2" />
                 Send RFI
               </Button>
             </>
@@ -681,28 +990,128 @@ function RfiDetailView({ rfiId, project, onBack }: { rfiId: number; project: Pro
       {isSent && (
         <Card className="p-4">
           <h3 className="font-semibold mb-3 flex items-center gap-2">
-            <MessageSquare className="w-4 h-4" />
-            Responses ({responses.length})
+            <Mail className="w-4 h-4" />
+            Email Conversation ({conversation.length})
           </h3>
-          {responses.length === 0 ? (
+          {conversationLoading ? (
+            <div className="flex items-center justify-center py-4">
+              <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+            </div>
+          ) : conversation.length === 0 ? (
             <div className="text-center py-4">
               <Clock className="w-8 h-8 mx-auto text-muted-foreground mb-2" />
-              <p className="text-sm text-muted-foreground">No responses yet. Click "Check Replies" to look for new responses.</p>
+              <p className="text-sm text-muted-foreground">No emails in conversation yet. Click "Check Replies" to look for new responses.</p>
             </div>
           ) : (
             <div className="space-y-3">
-              {responses.map((resp: any) => (
-                <div key={resp.id} className="p-3 rounded-md bg-muted/50 space-y-1" data-testid={`response-${resp.id}`}>
-                  <div className="flex items-center justify-between gap-2 flex-wrap">
-                    <p className="font-medium text-sm">{resp.fromName || resp.fromEmail}</p>
-                    <p className="text-xs text-muted-foreground">{formatDate(resp.receivedAt)}</p>
-                  </div>
-                  <p className="text-sm">{resp.bodyPreview}</p>
-                </div>
-              ))}
+              {conversation.map((msg: any, idx: number) => {
+                const isOriginal = msg.id === rfi.outlookMessageId;
+                const isSentByUser = msg.from?.email?.toLowerCase() === rfi.sentByEmail?.toLowerCase();
+                return (
+                  <ConversationMessage
+                    key={msg.id || idx}
+                    msg={msg}
+                    isOriginal={isOriginal}
+                    isSentByUser={isSentByUser}
+                    rfiId={rfiId}
+                  />
+                );
+              })}
             </div>
           )}
         </Card>
+      )}
+    </div>
+  );
+}
+
+function ConversationMessage({ msg, isOriginal, isSentByUser, rfiId }: {
+  msg: any;
+  isOriginal: boolean;
+  isSentByUser: boolean;
+  rfiId: number;
+}) {
+  const [showAttachments, setShowAttachments] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+
+  const { data: attachments = [], isLoading: attachmentsLoading } = useQuery<any[]>({
+    queryKey: ["/api/rfis", rfiId, "message-attachments", msg.id],
+    enabled: showAttachments && msg.hasAttachments,
+  });
+
+  return (
+    <div
+      className={`p-3 rounded-md space-y-2 ${isSentByUser ? "bg-primary/5 border border-primary/20" : "bg-muted/50"}`}
+      data-testid={`conversation-msg-${msg.id}`}
+    >
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div className="flex items-center gap-2">
+          <p className="font-medium text-sm">{msg.from?.name || msg.from?.email || "Unknown"}</p>
+          {isOriginal && <Badge variant="secondary" className="text-xs">Original</Badge>}
+          {isSentByUser && !isOriginal && <Badge variant="outline" className="text-xs">Sent</Badge>}
+        </div>
+        <p className="text-xs text-muted-foreground">{formatDate(msg.receivedAt)}</p>
+      </div>
+      <div className="text-sm">
+        {expanded ? (
+          <div
+            className="prose prose-sm dark:prose-invert max-w-none"
+            dangerouslySetInnerHTML={{ __html: msg.bodyHtml || msg.bodyPreview }}
+          />
+        ) : (
+          <p className="line-clamp-3">{msg.bodyPreview}</p>
+        )}
+        {(msg.bodyHtml || (msg.bodyPreview && msg.bodyPreview.length > 200)) && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="mt-1 h-auto py-1 px-2 text-xs"
+            onClick={() => setExpanded(!expanded)}
+            data-testid={`button-expand-msg-${msg.id}`}
+          >
+            {expanded ? "Show Less" : "Show More"}
+          </Button>
+        )}
+      </div>
+      {msg.hasAttachments && (
+        <div>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-auto py-1 px-2 text-xs"
+            onClick={() => setShowAttachments(!showAttachments)}
+            data-testid={`button-show-attachments-${msg.id}`}
+          >
+            <Paperclip className="w-3 h-3 mr-1" />
+            {showAttachments ? "Hide Attachments" : "View Attachments"}
+          </Button>
+          {showAttachments && (
+            <div className="mt-2 space-y-1">
+              {attachmentsLoading ? (
+                <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+              ) : attachments.length === 0 ? (
+                <p className="text-xs text-muted-foreground">No downloadable attachments</p>
+              ) : (
+                attachments.map((att: any) => (
+                  <a
+                    key={att.id}
+                    href={`/api/rfis/${rfiId}/message-attachments/${msg.id}/${att.id}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2 p-2 rounded-md bg-background hover-elevate text-sm"
+                    data-testid={`link-attachment-${att.id}`}
+                  >
+                    <Download className="w-3 h-3 text-muted-foreground flex-shrink-0" />
+                    <span className="truncate">{att.name}</span>
+                    <span className="text-xs text-muted-foreground flex-shrink-0">
+                      {att.size ? `${(att.size / 1024).toFixed(1)} KB` : ""}
+                    </span>
+                  </a>
+                ))
+              )}
+            </div>
+          )}
+        </div>
       )}
     </div>
   );

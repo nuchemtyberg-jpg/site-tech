@@ -1261,11 +1261,18 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getNextRfiNumber(projectId: number): Promise<number> {
-    const [result] = await db
-      .select({ maxNum: sql<number>`COALESCE(MAX(${rfis.rfiNumber}), 0)` })
+    const allRfis = await db
+      .select({ rfiNumber: rfis.rfiNumber, status: rfis.status, deletedAt: rfis.deletedAt })
       .from(rfis)
       .where(eq(rfis.projectId, projectId));
-    return (result?.maxNum || 0) + 1;
+    const activeNumbers = new Set(
+      allRfis.filter(r => !r.deletedAt).map(r => r.rfiNumber)
+    );
+    const maxNum = allRfis.length > 0 ? Math.max(...allRfis.map(r => r.rfiNumber)) : 0;
+    for (let i = 1; i <= maxNum + 1; i++) {
+      if (!activeNumbers.has(i)) return i;
+    }
+    return maxNum + 1;
   }
 
   async createRfi(rfi: InsertRfi): Promise<Rfi> {
