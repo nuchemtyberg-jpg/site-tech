@@ -2676,6 +2676,28 @@ export async function registerRoutes(
   // RFI Routes
   // ============================================================
 
+  // Serve RFI files from object storage (PDFs and attachments)
+  const serveRfiObject = async (req: any, res: any) => {
+    try {
+      const { ObjectStorageService } = await import("./replit_integrations/object_storage/objectStorage");
+      const objectStorageService = new ObjectStorageService();
+      const subPath = req.url.replace(/^\/objects\/rfis\//, "");
+      const fullPath = `/objects/rfis/${subPath}`;
+      const objectFile = await objectStorageService.getObjectEntityFile(fullPath);
+      await objectStorageService.downloadObject(objectFile, res);
+    } catch (err: any) {
+      if (err?.name === "ObjectNotFoundError") {
+        res.status(404).json({ message: "File not found" });
+      } else {
+        console.error("Error serving RFI file:", err);
+        res.status(500).json({ message: "Failed to serve file" });
+      }
+    }
+  };
+  app.get("/objects/rfis/:a/:b", isAuthenticated, isAuthorizedUser, serveRfiObject);
+  app.get("/objects/rfis/:a/:b/:c", isAuthenticated, isAuthorizedUser, serveRfiObject);
+  app.get("/objects/rfis/:a/:b/:c/:d", isAuthenticated, isAuthorizedUser, serveRfiObject);
+
   app.get("/api/projects/:projectId/rfis", isAuthenticated, isAuthorizedUser, async (req, res) => {
     try {
       const rfis = await storage.getRfis(Number(req.params.projectId));
@@ -2784,8 +2806,7 @@ export async function registerRoutes(
         return { bucketName: parts[1], objectName: parts.slice(2).join("/") };
       };
 
-      const { Storage } = await import("@google-cloud/storage");
-      const { objectStorageClient } = await import("../replit_integrations/object_storage/objectStorage");
+      const { objectStorageClient } = await import("./replit_integrations/object_storage/objectStorage");
       const { bucketName, objectName } = parseObjectPath(objectPath);
       const bucket = objectStorageClient.bucket(bucketName);
       const file = bucket.file(objectName);

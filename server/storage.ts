@@ -1252,7 +1252,7 @@ export class DatabaseStorage implements IStorage {
   async getRfis(projectId: number): Promise<Rfi[]> {
     return db.select().from(rfis)
       .where(and(eq(rfis.projectId, projectId), isNull(rfis.deletedAt)))
-      .orderBy(desc(rfis.createdAt));
+      .orderBy(rfis.rfiNumber);
   }
 
   async getRfi(id: number): Promise<Rfi | undefined> {
