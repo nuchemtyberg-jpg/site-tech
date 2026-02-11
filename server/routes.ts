@@ -1540,25 +1540,37 @@ export async function registerRoutes(
         endDate: date as string,
       });
 
-      const projectPunches = allPunches.filter(p => p.jobCode && jobCodes.includes(p.jobCode));
+      const projectEmployeeIds = new Set(
+        allPunches
+          .filter(p => p.jobCode && jobCodes.includes(p.jobCode) && p.punchType === 0)
+          .map(p => p.employeeId)
+      );
 
-      if (projectPunches.length === 0) {
+      if (projectEmployeeIds.size === 0) {
         return res.json([]);
       }
 
+      const employeePunches = allPunches.filter(p => projectEmployeeIds.has(p.employeeId));
+
       const { buildDailyTimeSummaries } = await import("./services/fingercheck");
-      const summaries = buildDailyTimeSummaries(projectPunches);
+      const summaries = buildDailyTimeSummaries(employeePunches);
 
       const result = summaries.map(s => {
-        let availableHours = s.totalHours;
-        const hasOpenShift = s.shifts.some(shift => shift.punchOut === null);
+        const projectShifts = s.shifts.filter(shift =>
+          shift.jobCode && jobCodes.includes(shift.jobCode)
+        );
+
+        if (projectShifts.length === 0) return null;
+
+        let availableHours = projectShifts.reduce((sum, shift) => sum + (shift.hours || 0), 0);
+        const hasOpenShift = projectShifts.some(shift => shift.punchOut === null);
         if (hasOpenShift) {
-          const openShift = s.shifts.find(shift => shift.punchOut === null);
+          const openShift = projectShifts.find(shift => shift.punchOut === null);
           if (openShift) {
             const punchInTime = new Date(openShift.punchIn);
             const now = new Date();
             const openHours = (now.getTime() - punchInTime.getTime()) / (1000 * 60 * 60);
-            availableHours = s.shifts
+            availableHours = projectShifts
               .filter(shift => shift.punchOut !== null)
               .reduce((sum, shift) => sum + (shift.hours || 0), 0)
               + Math.round(openHours * 100) / 100;
@@ -1570,11 +1582,11 @@ export async function registerRoutes(
           employeeName: s.employeeName,
           totalHours: Math.round(availableHours * 100) / 100,
           hasOpenShift,
-          shifts: s.shifts,
+          shifts: projectShifts,
           jobCode: s.jobCode,
           jobDescription: s.jobDescription,
         };
-      });
+      }).filter(Boolean);
 
       res.json(result);
     } catch (err: any) {
