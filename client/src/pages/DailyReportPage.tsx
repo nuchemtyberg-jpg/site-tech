@@ -35,7 +35,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { ArrowLeft, Save, Plus, Trash2, Cloud, Truck, ChevronDown, ChevronUp, CheckCircle, PenLine, Download, Camera, X, Image, Clock, Users, AlertTriangle } from "lucide-react";
+import { ArrowLeft, Save, Plus, Trash2, Cloud, Truck, ChevronDown, ChevronUp, CheckCircle, PenLine, Download, Camera, X, Image, Clock, Users, AlertTriangle, ClipboardList, StickyNote, ImagePlus } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
@@ -140,6 +140,7 @@ interface ReportWithDetails {
   updatedAt: Date | null;
   taskEntries: TaskEntryWithDetails[];
   deliveryEntries: DeliveryEntry[];
+  reportPhotos: Photo[];
   isLatestReport?: boolean;
 }
 
@@ -178,6 +179,10 @@ export default function DailyReportPage() {
   const [isDrawing, setIsDrawing] = useState(false);
   const [showAddTaskDialog, setShowAddTaskDialog] = useState(false);
   const [selectedTaskId, setSelectedTaskId] = useState<number | null>(null);
+  const [showAddEntryDialog, setShowAddEntryDialog] = useState(false);
+  const [showNotes, setShowNotes] = useState(false);
+  const [showReportPhotoUploader, setShowReportPhotoUploader] = useState(false);
+  const notesRef = useRef<HTMLTextAreaElement>(null);
   
   // Local state for text fields to improve performance (debounced sync)
   const [localTaskComments, setLocalTaskComments] = useState<Record<number, string>>({});
@@ -256,6 +261,7 @@ export default function DailyReportPage() {
   useEffect(() => {
     if (report?.notes) {
       setNotes(report.notes);
+      setShowNotes(true);
     }
   }, [report?.notes]);
 
@@ -1023,7 +1029,7 @@ export default function DailyReportPage() {
 
       {/* Scrollable Content - with padding for fixed header */}
       <div className="pt-[52px] md:pt-[52px]">
-        <div className="max-w-4xl mx-auto p-4 md:p-6 space-y-6">
+        <div className="max-w-4xl mx-auto p-3 md:p-6 space-y-4">
         {/* Weather Section */}
         {report.weatherSummary && (
           <Card className="bg-blue-50 dark:bg-blue-950 border-blue-200 dark:border-blue-800">
@@ -1069,623 +1075,678 @@ export default function DailyReportPage() {
           </Card>
         )}
 
-        {/* Daily Operations Section */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="text-foreground">Daily Operations</CardTitle>
-            {!isCompleted && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowAddTaskDialog(true)}
-                disabled={availableTasks.length === 0}
-                data-testid="button-add-task"
-              >
-                <Plus className="h-4 w-4 mr-2" /> Add Task
-              </Button>
-            )}
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {(!report.taskEntries || report.taskEntries.length === 0) ? (
-              <p className="text-muted-foreground text-center py-8">No tasks added yet. Click "Add Task" to get started.</p>
-            ) : (
-              report.taskEntries.map((taskEntry) => (
-                <Card key={taskEntry.id} className="border">
-                  <CardHeader 
-                    className="cursor-pointer py-3"
-                    onClick={() => toggleTaskExpanded(taskEntry.id)}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        {expandedTasks.has(taskEntry.id) ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                        <span className="font-medium text-foreground">{taskEntry.taskTitleSnapshot}</span>
-                        <Badge variant="secondary">{taskEntry.percentComplete}%</Badge>
+        {/* Add Entry Button */}
+        {!isCompleted && (
+          <div className="flex justify-center">
+            <Button
+              onClick={() => setShowAddEntryDialog(true)}
+              data-testid="button-add-entry"
+              className="gap-2"
+            >
+              <Plus className="h-4 w-4" /> Add Entry
+            </Button>
+          </div>
+        )}
+
+        {/* Tasks Section - only show header when tasks exist */}
+        {report.taskEntries && report.taskEntries.length > 0 && (
+          <div className="space-y-3">
+            <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide" data-testid="section-header-tasks">Tasks</h3>
+            {report.taskEntries.map((taskEntry) => (
+              <Card key={taskEntry.id}>
+                <div 
+                  className="cursor-pointer px-4 py-3"
+                  onClick={() => toggleTaskExpanded(taskEntry.id)}
+                  data-testid={`task-entry-header-${taskEntry.id}`}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 min-w-0 flex-1">
+                      {expandedTasks.has(taskEntry.id) ? <ChevronUp className="h-4 w-4 shrink-0" /> : <ChevronDown className="h-4 w-4 shrink-0" />}
+                      <span className="font-medium text-foreground truncate">{taskEntry.taskTitleSnapshot}</span>
+                      <Badge variant="secondary">{localTaskPercents[taskEntry.id] ?? taskEntry.percentComplete}%</Badge>
+                    </div>
+                    {!isCompleted && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setDeleteTaskEntryId(taskEntry.id);
+                        }}
+                        data-testid={`button-delete-task-entry-${taskEntry.id}`}
+                      >
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
+                    )}
+                  </div>
+                </div>
+                
+                {expandedTasks.has(taskEntry.id) && (
+                  <div className="px-4 pb-4 space-y-4">
+                    {/* Progress Slider */}
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Label>Progress</Label>
+                          {!report.isLatestReport && (
+                            <Badge variant="secondary" className="text-xs">
+                              Historical snapshot
+                            </Badge>
+                          )}
+                        </div>
+                        <Badge variant="outline" className="text-lg font-bold px-3 py-1">
+                          {localTaskPercents[taskEntry.id] ?? taskEntry.percentComplete}%
+                        </Badge>
                       </div>
-                      {!isCompleted && (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setDeleteTaskEntryId(taskEntry.id);
-                          }}
-                          data-testid={`button-delete-task-entry-${taskEntry.id}`}
-                        >
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                        </Button>
+                      <Slider
+                        value={[localTaskPercents[taskEntry.id] ?? taskEntry.percentComplete]}
+                        min={taskEntry.allowedMin ?? 0}
+                        max={taskEntry.allowedMax ?? 100}
+                        step={5}
+                        disabled={isCompleted}
+                        className="h-6"
+                        onValueChange={(value) => {
+                          setLocalTaskPercents(prev => ({ ...prev, [taskEntry.id]: value[0] }));
+                        }}
+                        onValueCommit={(value) => {
+                          const newPercent = value[0];
+                          if (newPercent !== taskEntry.percentComplete) {
+                            updateTaskEntryMutation.mutate({
+                              id: taskEntry.id,
+                              data: { percentComplete: newPercent },
+                            });
+                          }
+                        }}
+                        data-testid={`slider-percent-${taskEntry.id}`}
+                      />
+                      <div className="flex justify-between text-xs text-muted-foreground">
+                        <span>{taskEntry.allowedMin ?? 0}%</span>
+                        <span>{taskEntry.allowedMax ?? 100}%</span>
+                      </div>
+                      {!report.isLatestReport && (
+                        <p className="text-xs text-muted-foreground italic">
+                          Does not update task progress. Allowed range: {taskEntry.allowedMin ?? 0}% - {taskEntry.allowedMax ?? 100}%
+                        </p>
                       )}
                     </div>
-                  </CardHeader>
-                  
-                  {expandedTasks.has(taskEntry.id) && (
-                    <CardContent className="pt-0 space-y-4">
-                      {/* Progress Slider */}
-                      <div className="space-y-3">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <Label>Progress</Label>
-                            {!report.isLatestReport && (
-                              <Badge variant="secondary" className="text-xs">
-                                Historical snapshot
-                              </Badge>
-                            )}
-                          </div>
-                          <Badge variant="outline" className="text-lg font-bold px-3 py-1">
-                            {localTaskPercents[taskEntry.id] ?? taskEntry.percentComplete}%
-                          </Badge>
-                        </div>
-                        <Slider
-                          value={[localTaskPercents[taskEntry.id] ?? taskEntry.percentComplete]}
-                          min={taskEntry.allowedMin ?? 0}
-                          max={taskEntry.allowedMax ?? 100}
-                          step={5}
-                          disabled={isCompleted}
-                          className="h-6"
-                          onValueChange={(value) => {
-                            setLocalTaskPercents(prev => ({ ...prev, [taskEntry.id]: value[0] }));
-                          }}
-                          onValueCommit={(value) => {
-                            const newPercent = value[0];
-                            if (newPercent !== taskEntry.percentComplete) {
-                              updateTaskEntryMutation.mutate({
-                                id: taskEntry.id,
-                                data: { percentComplete: newPercent },
-                              });
-                            }
-                          }}
-                          data-testid={`slider-percent-${taskEntry.id}`}
-                        />
-                        <div className="flex justify-between text-xs text-muted-foreground">
-                          <span>{taskEntry.allowedMin ?? 0}%</span>
-                          <span>{taskEntry.allowedMax ?? 100}%</span>
-                        </div>
-                        {!report.isLatestReport && (
-                          <p className="text-xs text-muted-foreground italic">
-                            Does not update task progress. Allowed range: {taskEntry.allowedMin ?? 0}% - {taskEntry.allowedMax ?? 100}%
-                          </p>
+
+                    {/* Comments */}
+                    <div className="space-y-2">
+                      <Label>Comments</Label>
+                      <Textarea
+                        value={localTaskComments[taskEntry.id] ?? taskEntry.comments ?? ''}
+                        disabled={isCompleted}
+                        onChange={(e) => {
+                          setLocalTaskComments(prev => ({ ...prev, [taskEntry.id]: e.target.value }));
+                        }}
+                        onBlur={(e) => {
+                          const newValue = e.target.value;
+                          if (newValue !== (taskEntry.comments ?? '')) {
+                            updateTaskEntryMutation.mutate({
+                              id: taskEntry.id,
+                              data: { comments: newValue },
+                            });
+                          }
+                        }}
+                        placeholder="Add comments about this task..."
+                        data-testid={`textarea-comments-${taskEntry.id}`}
+                      />
+                    </div>
+
+                    {/* Labor - Employee Time Tracking */}
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between flex-wrap gap-1">
+                        <Label className="flex items-center gap-1">
+                          <Users className="h-4 w-4" /> Labor
+                        </Label>
+                        {!isCompleted && projectEmployees.length > 0 && (
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="outline" size="sm" data-testid={`button-add-employee-${taskEntry.id}`}>
+                                <Plus className="h-3 w-3 mr-1" /> Add Employee
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              {projectEmployees
+                                .filter(emp => !taskEntry.laborLines.some(l => l.employeeId === emp.employeeId))
+                                .map(emp => {
+                                  const remaining = getEmployeeRemainingHours(emp.employeeId);
+                                  return (
+                                    <DropdownMenuItem
+                                      key={emp.employeeId}
+                                      disabled={remaining <= 0}
+                                      onClick={() => createLaborLineMutation.mutate({
+                                        taskEntryId: taskEntry.id,
+                                        data: {
+                                          laborType: 'Laborer',
+                                          quantity: 1,
+                                          hours: 0,
+                                          employeeId: emp.employeeId,
+                                          employeeName: emp.employeeName,
+                                        },
+                                      })}
+                                      data-testid={`menu-add-employee-${emp.employeeId}`}
+                                    >
+                                      <span className="flex-1">{emp.employeeName}</span>
+                                      <span className="text-xs text-muted-foreground ml-2">
+                                        {remaining > 0 ? `${remaining}h avail` : 'fully allocated'}
+                                      </span>
+                                    </DropdownMenuItem>
+                                  );
+                                })}
+                              {projectEmployees.filter(emp => !taskEntry.laborLines.some(l => l.employeeId === emp.employeeId)).length === 0 && (
+                                <DropdownMenuItem disabled>All employees already added</DropdownMenuItem>
+                              )}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
                         )}
                       </div>
+                      {projectEmployees.length === 0 && !employeesLoading && (
+                        <p className="text-xs text-muted-foreground italic">
+                          No employees punched in for this project on this date. Sync time data from the Employees page or map a Fingercheck job to this project.
+                        </p>
+                      )}
+                      {employeesLoading && (
+                        <p className="text-xs text-muted-foreground italic">Loading time tracking data...</p>
+                      )}
+                      {taskEntry.laborLines.map((labor) => {
+                        const employee = projectEmployees.find(e => e.employeeId === labor.employeeId);
+                        const remaining = labor.employeeId ? getEmployeeRemainingHours(labor.employeeId, labor.id) : null;
+                        const localHrs = localLaborHours[labor.id];
+                        const currentHours = localHrs !== undefined ? Number(localHrs) : Number(labor.hours);
+                        const isOverAllocated = remaining !== null && currentHours > remaining;
 
-                      {/* Comments */}
-                      <div className="space-y-2">
-                        <Label>Comments</Label>
-                        <Textarea
-                          value={localTaskComments[taskEntry.id] ?? taskEntry.comments ?? ''}
-                          disabled={isCompleted}
-                          onChange={(e) => {
-                            setLocalTaskComments(prev => ({ ...prev, [taskEntry.id]: e.target.value }));
-                          }}
-                          onBlur={(e) => {
-                            const newValue = e.target.value;
-                            if (newValue !== (taskEntry.comments ?? '')) {
-                              updateTaskEntryMutation.mutate({
-                                id: taskEntry.id,
-                                data: { comments: newValue },
-                              });
-                            }
-                          }}
-                          placeholder="Add comments about this task..."
-                          data-testid={`textarea-comments-${taskEntry.id}`}
-                        />
-                      </div>
-
-                      {/* Labor - Employee Time Tracking */}
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between flex-wrap gap-1">
-                          <Label className="flex items-center gap-1">
-                            <Users className="h-4 w-4" /> Labor
-                          </Label>
-                          {!isCompleted && projectEmployees.length > 0 && (
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button variant="outline" size="sm" data-testid={`button-add-employee-${taskEntry.id}`}>
-                                  <Plus className="h-3 w-3 mr-1" /> Add Employee
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end">
-                                {projectEmployees
-                                  .filter(emp => !taskEntry.laborLines.some(l => l.employeeId === emp.employeeId))
-                                  .map(emp => {
-                                    const remaining = getEmployeeRemainingHours(emp.employeeId);
-                                    return (
-                                      <DropdownMenuItem
-                                        key={emp.employeeId}
-                                        disabled={remaining <= 0}
-                                        onClick={() => createLaborLineMutation.mutate({
-                                          taskEntryId: taskEntry.id,
-                                          data: {
-                                            laborType: 'Laborer',
-                                            quantity: 1,
-                                            hours: 0,
-                                            employeeId: emp.employeeId,
-                                            employeeName: emp.employeeName,
-                                          },
-                                        })}
-                                        data-testid={`menu-add-employee-${emp.employeeId}`}
-                                      >
-                                        <span className="flex-1">{emp.employeeName}</span>
-                                        <span className="text-xs text-muted-foreground ml-2">
-                                          {remaining > 0 ? `${remaining}h avail` : 'fully allocated'}
-                                        </span>
-                                      </DropdownMenuItem>
-                                    );
-                                  })}
-                                {projectEmployees.filter(emp => !taskEntry.laborLines.some(l => l.employeeId === emp.employeeId)).length === 0 && (
-                                  <DropdownMenuItem disabled>All employees already added</DropdownMenuItem>
-                                )}
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          )}
-                        </div>
-                        {projectEmployees.length === 0 && !employeesLoading && (
-                          <p className="text-xs text-muted-foreground italic">
-                            No employees punched in for this project on this date. Sync time data from the Employees page or map a Fingercheck job to this project.
-                          </p>
-                        )}
-                        {employeesLoading && (
-                          <p className="text-xs text-muted-foreground italic">Loading time tracking data...</p>
-                        )}
-                        {taskEntry.laborLines.map((labor) => {
-                          const employee = projectEmployees.find(e => e.employeeId === labor.employeeId);
-                          const remaining = labor.employeeId ? getEmployeeRemainingHours(labor.employeeId, labor.id) : null;
-                          const localHrs = localLaborHours[labor.id];
-                          const currentHours = localHrs !== undefined ? Number(localHrs) : Number(labor.hours);
-                          const isOverAllocated = remaining !== null && currentHours > remaining;
-
-                          return (
-                            <div key={labor.id} className="space-y-2 p-3 bg-muted rounded" data-testid={`labor-line-${labor.id}`}>
-                              <div className="flex items-center justify-between gap-2">
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex items-center gap-2 flex-wrap">
-                                    <span className="font-medium text-sm truncate" data-testid={`text-employee-name-${labor.id}`}>
-                                      {labor.employeeName || 'Unknown Employee'}
-                                    </span>
-                                    {employee?.hasOpenShift && (
-                                      <Badge variant="outline" className="text-xs border-yellow-500 text-yellow-600">
-                                        <Clock className="h-3 w-3 mr-1" /> Still on site
-                                      </Badge>
-                                    )}
-                                  </div>
-                                  {employee && (
-                                    <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground flex-wrap">
-                                      <span>Tracked: {employee.totalHours}h</span>
-                                      <span>Remaining: {remaining !== null ? `${remaining}h` : 'N/A'}</span>
-                                    </div>
-                                  )}
-                                </div>
-                                {!isCompleted && (
-                                  <Button variant="ghost" size="icon" onClick={() => deleteLaborLineMutation.mutate(labor.id)} data-testid={`button-delete-labor-${labor.id}`}>
-                                    <Trash2 className="h-4 w-4 text-destructive" />
-                                  </Button>
-                                )}
-                              </div>
-                              <div className="grid grid-cols-2 gap-2">
-                                <div className="space-y-1">
-                                  <Label className="text-xs text-muted-foreground">Role</Label>
-                                  <Select
-                                    value={labor.laborType}
-                                    disabled={isCompleted}
-                                    onValueChange={(value) => updateLaborLineMutation.mutate({ id: labor.id, data: { laborType: value } })}
-                                  >
-                                    <SelectTrigger data-testid={`select-labor-type-${labor.id}`}>
-                                      <SelectValue placeholder="Select role" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      {LABOR_TYPES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
-                                    </SelectContent>
-                                  </Select>
-                                </div>
-                                <div className="space-y-1">
-                                  <Label className="text-xs text-muted-foreground">Hours on Task</Label>
-                                  <Input
-                                    type="number"
-                                    inputMode="decimal"
-                                    min={0}
-                                    max={remaining !== null ? remaining : undefined}
-                                    step="0.25"
-                                    value={localLaborHours[labor.id] ?? (labor.hours === 0 ? '' : String(labor.hours))}
-                                    disabled={isCompleted}
-                                    className={isOverAllocated ? 'border-destructive' : ''}
-                                    onChange={(e) => setLocalLaborHours(prev => ({ ...prev, [labor.id]: e.target.value }))}
-                                    onBlur={(e) => {
-                                      const val = Number(e.target.value);
-                                      if (!isNaN(val) && val >= 0 && val !== labor.hours) {
-                                        if (remaining !== null && val > remaining) {
-                                          toast({
-                                            title: "Hours exceed available time",
-                                            description: `${labor.employeeName} only has ${remaining}h remaining across all tasks.`,
-                                            variant: "destructive",
-                                          });
-                                          return;
-                                        }
-                                        updateLaborLineMutation.mutate({ id: labor.id, data: { hours: val } });
-                                      }
-                                    }}
-                                    placeholder="0"
-                                    data-testid={`input-labor-hours-${labor.id}`}
-                                  />
-                                  {isOverAllocated && (
-                                    <p className="text-xs text-destructive flex items-center gap-1">
-                                      <AlertTriangle className="h-3 w-3" /> Exceeds available {remaining}h
-                                    </p>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        })}
-                        {taskEntry.laborLines.length > 0 && (
-                          <div className="flex items-center justify-end gap-4 text-sm text-muted-foreground pt-1 border-t">
-                            <span>Workers: <strong className="text-foreground">{taskEntry.laborLines.length}</strong></span>
-                            <span>Total Hours: <strong className="text-foreground">{taskEntry.laborLines.reduce((sum, l) => sum + (Number(localLaborHours[l.id]) || Number(l.hours)), 0).toFixed(2)}</strong></span>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Equipment Lines */}
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between">
-                          <Label>Equipment</Label>
-                          {!isCompleted && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => createEquipmentLineMutation.mutate({ taskEntryId: taskEntry.id, data: {} })}
-                            >
-                              <Plus className="h-3 w-3 mr-1" /> Add Equipment
-                            </Button>
-                          )}
-                        </div>
-                        {taskEntry.equipmentLines.map((equip) => (
-                          <div key={equip.id} className="space-y-2 p-3 bg-muted rounded">
+                        return (
+                          <div key={labor.id} className="space-y-2 p-3 bg-muted rounded" data-testid={`labor-line-${labor.id}`}>
                             <div className="flex items-center justify-between gap-2">
-                              <Select
-                                value={equip.equipmentType}
-                                disabled={isCompleted}
-                                onValueChange={(value) => updateEquipmentLineMutation.mutate({ id: equip.id, data: { equipmentType: value } })}
-                              >
-                                <SelectTrigger className="flex-1" data-testid={`select-equipment-type-${equip.id}`}>
-                                  <SelectValue placeholder="Select type" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {EQUIPMENT_TYPES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
-                                </SelectContent>
-                              </Select>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="font-medium text-sm truncate" data-testid={`text-employee-name-${labor.id}`}>
+                                    {labor.employeeName || 'Unknown Employee'}
+                                  </span>
+                                  {employee?.hasOpenShift && (
+                                    <Badge variant="outline" className="text-xs border-yellow-500 text-yellow-600">
+                                      <Clock className="h-3 w-3 mr-1" /> Still on site
+                                    </Badge>
+                                  )}
+                                </div>
+                                {employee && (
+                                  <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground flex-wrap">
+                                    <span>Tracked: {employee.totalHours}h</span>
+                                    <span>Remaining: {remaining !== null ? `${remaining}h` : 'N/A'}</span>
+                                  </div>
+                                )}
+                              </div>
                               {!isCompleted && (
-                                <Button variant="ghost" size="icon" onClick={() => deleteEquipmentLineMutation.mutate(equip.id)} data-testid={`button-delete-equipment-${equip.id}`}>
+                                <Button variant="ghost" size="icon" onClick={() => deleteLaborLineMutation.mutate(labor.id)} data-testid={`button-delete-labor-${labor.id}`}>
                                   <Trash2 className="h-4 w-4 text-destructive" />
                                 </Button>
                               )}
                             </div>
                             <div className="grid grid-cols-2 gap-2">
                               <div className="space-y-1">
-                                <Label className="text-xs text-muted-foreground"># of Units</Label>
-                                <Input
-                                  type="number"
-                                  inputMode="numeric"
-                                  min={1}
-                                  value={localEquipmentQuantities[equip.id] ?? (equip.quantity === 0 ? '' : String(equip.quantity))}
+                                <Label className="text-xs text-muted-foreground">Role</Label>
+                                <Select
+                                  value={labor.laborType}
                                   disabled={isCompleted}
-                                  onChange={(e) => setLocalEquipmentQuantities(prev => ({ ...prev, [equip.id]: e.target.value }))}
-                                  onBlur={(e) => {
-                                    const val = Number(e.target.value);
-                                    if (!isNaN(val) && val > 0 && val !== equip.quantity) {
-                                      updateEquipmentLineMutation.mutate({ id: equip.id, data: { quantity: val } });
-                                    }
-                                  }}
-                                  placeholder="0"
-                                  data-testid={`input-equipment-qty-${equip.id}`}
-                                />
+                                  onValueChange={(value) => updateLaborLineMutation.mutate({ id: labor.id, data: { laborType: value } })}
+                                >
+                                  <SelectTrigger data-testid={`select-labor-type-${labor.id}`}>
+                                    <SelectValue placeholder="Select role" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {LABOR_TYPES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                                  </SelectContent>
+                                </Select>
                               </div>
                               <div className="space-y-1">
-                                <Label className="text-xs text-muted-foreground">Hours</Label>
+                                <Label className="text-xs text-muted-foreground">Hours on Task</Label>
                                 <Input
                                   type="number"
                                   inputMode="decimal"
                                   min={0}
-                                  step="0.5"
-                                  value={localEquipmentHours[equip.id] ?? (equip.hours === 0 ? '' : String(equip.hours))}
+                                  max={remaining !== null ? remaining : undefined}
+                                  step="0.25"
+                                  value={localLaborHours[labor.id] ?? (labor.hours === 0 ? '' : String(labor.hours))}
                                   disabled={isCompleted}
-                                  onChange={(e) => setLocalEquipmentHours(prev => ({ ...prev, [equip.id]: e.target.value }))}
+                                  className={isOverAllocated ? 'border-destructive' : ''}
+                                  onChange={(e) => setLocalLaborHours(prev => ({ ...prev, [labor.id]: e.target.value }))}
                                   onBlur={(e) => {
                                     const val = Number(e.target.value);
-                                    if (!isNaN(val) && val >= 0 && val !== equip.hours) {
-                                      updateEquipmentLineMutation.mutate({ id: equip.id, data: { hours: val } });
+                                    if (!isNaN(val) && val >= 0 && val !== labor.hours) {
+                                      if (remaining !== null && val > remaining) {
+                                        toast({
+                                          title: "Hours exceed available time",
+                                          description: `${labor.employeeName} only has ${remaining}h remaining across all tasks.`,
+                                          variant: "destructive",
+                                        });
+                                        return;
+                                      }
+                                      updateLaborLineMutation.mutate({ id: labor.id, data: { hours: val } });
                                     }
                                   }}
                                   placeholder="0"
-                                  data-testid={`input-equipment-hours-${equip.id}`}
+                                  data-testid={`input-labor-hours-${labor.id}`}
                                 />
+                                {isOverAllocated && (
+                                  <p className="text-xs text-destructive flex items-center gap-1">
+                                    <AlertTriangle className="h-3 w-3" /> Exceeds available {remaining}h
+                                  </p>
+                                )}
                               </div>
                             </div>
                           </div>
-                        ))}
-                        {taskEntry.equipmentLines.length > 0 && (
-                          <div className="flex items-center justify-end gap-4 text-sm text-muted-foreground pt-1 border-t">
-                            <span>Total Units: <strong className="text-foreground">{taskEntry.equipmentLines.reduce((sum, e) => sum + (Number(localEquipmentQuantities[e.id]) || e.quantity), 0)}</strong></span>
-                            <span>Total Hours: <strong className="text-foreground">{taskEntry.equipmentLines.reduce((sum, e) => sum + (Number(localEquipmentHours[e.id]) || e.hours), 0)}</strong></span>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Photos Section */}
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between">
-                          <Label>Photos</Label>
-                          {!isCompleted && (
-                            <NativeFileUploader
-                              maxNumberOfFiles={50}
-                              accept="image/*"
-                              onUploadComplete={(uploadedFiles) => {
-                                uploadedFiles.forEach((file) => {
-                                  createPhotoMutation.mutate({ 
-                                    taskEntryId: taskEntry.id, 
-                                    url: file.cloudinaryUrl,
-                                    cloudinaryPublicId: file.cloudinaryPublicId,
-                                    cloudinaryUrl: file.cloudinaryUrl,
-                                    fileName: file.name,
-                                    takenAt: file.takenAt?.toISOString(),
-                                  });
-                                });
-                              }}
-                            >
-                              <Camera className="h-3 w-3 mr-1" /> Upload Photos
-                            </NativeFileUploader>
-                          )}
+                        );
+                      })}
+                      {taskEntry.laborLines.length > 0 && (
+                        <div className="flex items-center justify-end gap-4 text-sm text-muted-foreground pt-1 border-t">
+                          <span>Workers: <strong className="text-foreground">{taskEntry.laborLines.length}</strong></span>
+                          <span>Total Hours: <strong className="text-foreground">{taskEntry.laborLines.reduce((sum, l) => sum + (Number(localLaborHours[l.id]) || Number(l.hours)), 0).toFixed(2)}</strong></span>
                         </div>
-                        {taskEntry.photos && taskEntry.photos.length > 0 && (
-                          <div className="grid grid-cols-3 gap-2">
-                            {taskEntry.photos.map((photo) => (
-                              <div key={photo.id} className="relative group">
-                                <img
-                                  src={getProxyUrl(photo.url)}
-                                  alt={photo.caption || "Task photo"}
-                                  className="w-full h-24 object-cover rounded border"
-                                />
-                                {!isCompleted && (
-                                  <Button
-                                    variant="destructive"
-                                    size="icon"
-                                    className="absolute top-1 right-1 h-6 w-6 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity"
-                                    onClick={() => deletePhotoMutation.mutate(photo.id)}
-                                  >
-                                    <X className="h-3 w-3" />
-                                  </Button>
-                                )}
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                        {(!taskEntry.photos || taskEntry.photos.length === 0) && (
-                          <p className="text-sm text-muted-foreground">No photos uploaded.</p>
-                        )}
-                      </div>
-                    </CardContent>
-                  )}
-                </Card>
-              ))
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Deliveries Section */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="flex items-center gap-2 text-foreground">
-              <Truck className="h-5 w-5" /> Deliveries
-            </CardTitle>
-            {!isCompleted && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => createDeliveryMutation.mutate()}
-                data-testid="button-add-delivery"
-              >
-                <Plus className="h-4 w-4 mr-2" /> Add Delivery
-              </Button>
-            )}
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {(!report.deliveryEntries || report.deliveryEntries.length === 0) ? (
-              <p className="text-muted-foreground text-center py-8">No deliveries recorded.</p>
-            ) : (
-              report.deliveryEntries.map((delivery) => (
-                <Card key={delivery.id} className="border">
-                  <CardHeader 
-                    className="cursor-pointer py-3"
-                    onClick={() => toggleDeliveryExpanded(delivery.id)}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        {expandedDeliveries.has(delivery.id) ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                        <span className="font-medium text-foreground">{(localDeliveryVendors[delivery.id] ?? delivery.vendor) || 'New Delivery'}</span>
-                        {delivery.deliveryTime && <Badge variant="secondary">{delivery.deliveryTime}</Badge>}
-                      </div>
-                      {!isCompleted && (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setDeleteDeliveryId(delivery.id);
-                          }}
-                          data-testid={`button-delete-delivery-${delivery.id}`}
-                        >
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                        </Button>
                       )}
                     </div>
-                  </CardHeader>
-                  {expandedDeliveries.has(delivery.id) && (
-                    <CardContent className="pt-0 space-y-4">
-                      <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <Label>Vendor</Label>
-                          <Input
-                            value={localDeliveryVendors[delivery.id] ?? delivery.vendor ?? ''}
-                            disabled={isCompleted}
-                            onChange={(e) => setLocalDeliveryVendors(prev => ({ ...prev, [delivery.id]: e.target.value }))}
-                            onBlur={(e) => {
-                              const newValue = e.target.value;
-                              if (newValue !== (delivery.vendor ?? '')) {
-                                updateDeliveryMutation.mutate({ id: delivery.id, data: { vendor: newValue } });
-                              }
-                            }}
-                            placeholder="Vendor name"
-                            data-testid={`input-vendor-${delivery.id}`}
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label>Delivery Time</Label>
-                          <TimePicker
-                            value={delivery.deliveryTime || ''}
-                            disabled={isCompleted}
-                            onChange={(value) => updateDeliveryMutation.mutate({ id: delivery.id, data: { deliveryTime: value } })}
-                          />
-                        </div>
+
+                    {/* Equipment Lines */}
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <Label>Equipment</Label>
+                        {!isCompleted && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => createEquipmentLineMutation.mutate({ taskEntryId: taskEntry.id, data: {} })}
+                          >
+                            <Plus className="h-3 w-3 mr-1" /> Add Equipment
+                          </Button>
+                        )}
                       </div>
+                      {taskEntry.equipmentLines.map((equip) => (
+                        <div key={equip.id} className="space-y-2 p-3 bg-muted rounded">
+                          <div className="flex items-center justify-between gap-2">
+                            <Select
+                              value={equip.equipmentType}
+                              disabled={isCompleted}
+                              onValueChange={(value) => updateEquipmentLineMutation.mutate({ id: equip.id, data: { equipmentType: value } })}
+                            >
+                              <SelectTrigger className="flex-1" data-testid={`select-equipment-type-${equip.id}`}>
+                                <SelectValue placeholder="Select type" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {EQUIPMENT_TYPES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                              </SelectContent>
+                            </Select>
+                            {!isCompleted && (
+                              <Button variant="ghost" size="icon" onClick={() => deleteEquipmentLineMutation.mutate(equip.id)} data-testid={`button-delete-equipment-${equip.id}`}>
+                                <Trash2 className="h-4 w-4 text-destructive" />
+                              </Button>
+                            )}
+                          </div>
+                          <div className="grid grid-cols-2 gap-2">
+                            <div className="space-y-1">
+                              <Label className="text-xs text-muted-foreground"># of Units</Label>
+                              <Input
+                                type="number"
+                                inputMode="numeric"
+                                min={1}
+                                value={localEquipmentQuantities[equip.id] ?? (equip.quantity === 0 ? '' : String(equip.quantity))}
+                                disabled={isCompleted}
+                                onChange={(e) => setLocalEquipmentQuantities(prev => ({ ...prev, [equip.id]: e.target.value }))}
+                                onBlur={(e) => {
+                                  const val = Number(e.target.value);
+                                  if (!isNaN(val) && val > 0 && val !== equip.quantity) {
+                                    updateEquipmentLineMutation.mutate({ id: equip.id, data: { quantity: val } });
+                                  }
+                                }}
+                                placeholder="0"
+                                data-testid={`input-equipment-qty-${equip.id}`}
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <Label className="text-xs text-muted-foreground">Hours</Label>
+                              <Input
+                                type="number"
+                                inputMode="decimal"
+                                min={0}
+                                step="0.5"
+                                value={localEquipmentHours[equip.id] ?? (equip.hours === 0 ? '' : String(equip.hours))}
+                                disabled={isCompleted}
+                                onChange={(e) => setLocalEquipmentHours(prev => ({ ...prev, [equip.id]: e.target.value }))}
+                                onBlur={(e) => {
+                                  const val = Number(e.target.value);
+                                  if (!isNaN(val) && val >= 0 && val !== equip.hours) {
+                                    updateEquipmentLineMutation.mutate({ id: equip.id, data: { hours: val } });
+                                  }
+                                }}
+                                placeholder="0"
+                                data-testid={`input-equipment-hours-${equip.id}`}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                      {taskEntry.equipmentLines.length > 0 && (
+                        <div className="flex items-center justify-end gap-4 text-sm text-muted-foreground pt-1 border-t">
+                          <span>Total Units: <strong className="text-foreground">{taskEntry.equipmentLines.reduce((sum, e) => sum + (Number(localEquipmentQuantities[e.id]) || e.quantity), 0)}</strong></span>
+                          <span>Total Hours: <strong className="text-foreground">{taskEntry.equipmentLines.reduce((sum, e) => sum + (Number(localEquipmentHours[e.id]) || e.hours), 0)}</strong></span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Photos Section */}
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <Label>Photos</Label>
+                        {!isCompleted && (
+                          <NativeFileUploader
+                            maxNumberOfFiles={50}
+                            accept="image/*"
+                            onUploadComplete={(uploadedFiles) => {
+                              uploadedFiles.forEach((file) => {
+                                createPhotoMutation.mutate({ 
+                                  taskEntryId: taskEntry.id, 
+                                  url: file.cloudinaryUrl,
+                                  cloudinaryPublicId: file.cloudinaryPublicId,
+                                  cloudinaryUrl: file.cloudinaryUrl,
+                                  fileName: file.name,
+                                  takenAt: file.takenAt?.toISOString(),
+                                });
+                              });
+                            }}
+                          >
+                            <Camera className="h-3 w-3 mr-1" /> Upload Photos
+                          </NativeFileUploader>
+                        )}
+                      </div>
+                      {taskEntry.photos && taskEntry.photos.length > 0 && (
+                        <div className="grid grid-cols-3 gap-2">
+                          {taskEntry.photos.map((photo) => (
+                            <div key={photo.id} className="relative group">
+                              <img
+                                src={getProxyUrl(photo.url)}
+                                alt={photo.caption || "Task photo"}
+                                className="w-full h-24 object-cover rounded border"
+                              />
+                              {!isCompleted && (
+                                <Button
+                                  variant="destructive"
+                                  size="icon"
+                                  className="absolute top-1 right-1 h-6 w-6 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity"
+                                  onClick={() => deletePhotoMutation.mutate(photo.id)}
+                                >
+                                  <X className="h-3 w-3" />
+                                </Button>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {(!taskEntry.photos || taskEntry.photos.length === 0) && (
+                        <p className="text-sm text-muted-foreground">No photos uploaded.</p>
+                      )}
+                    </div>
+
+                    {/* Collapse Button at Bottom */}
+                    <div className="flex justify-center pt-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => toggleTaskExpanded(taskEntry.id)}
+                        data-testid={`button-collapse-task-${taskEntry.id}`}
+                        className="text-muted-foreground"
+                      >
+                        <ChevronUp className="h-4 w-4 mr-1" /> Collapse
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </Card>
+            ))}
+          </div>
+        )}
+
+        {/* Deliveries Section - only show header when deliveries exist */}
+        {report.deliveryEntries && report.deliveryEntries.length > 0 && (
+          <div className="space-y-3">
+            <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide" data-testid="section-header-deliveries">Deliveries</h3>
+            {report.deliveryEntries.map((delivery) => (
+              <Card key={delivery.id}>
+                <div 
+                  className="cursor-pointer px-4 py-3"
+                  onClick={() => toggleDeliveryExpanded(delivery.id)}
+                  data-testid={`delivery-entry-header-${delivery.id}`}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 min-w-0 flex-1">
+                      {expandedDeliveries.has(delivery.id) ? <ChevronUp className="h-4 w-4 shrink-0" /> : <ChevronDown className="h-4 w-4 shrink-0" />}
+                      <span className="font-medium text-foreground truncate">{(localDeliveryVendors[delivery.id] ?? delivery.vendor) || 'New Delivery'}</span>
+                      {delivery.deliveryTime && <Badge variant="secondary">{delivery.deliveryTime}</Badge>}
+                    </div>
+                    {!isCompleted && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setDeleteDeliveryId(delivery.id);
+                        }}
+                        data-testid={`button-delete-delivery-${delivery.id}`}
+                      >
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
+                    )}
+                  </div>
+                </div>
+                {expandedDeliveries.has(delivery.id) && (
+                  <div className="px-4 pb-4 space-y-4">
+                    <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div className="space-y-2">
-                        <Label>Description</Label>
-                        <Textarea
-                          value={localDeliveryDescriptions[delivery.id] ?? delivery.description ?? ''}
+                        <Label>Vendor</Label>
+                        <Input
+                          value={localDeliveryVendors[delivery.id] ?? delivery.vendor ?? ''}
                           disabled={isCompleted}
-                          onChange={(e) => setLocalDeliveryDescriptions(prev => ({ ...prev, [delivery.id]: e.target.value }))}
+                          onChange={(e) => setLocalDeliveryVendors(prev => ({ ...prev, [delivery.id]: e.target.value }))}
                           onBlur={(e) => {
                             const newValue = e.target.value;
-                            if (newValue !== (delivery.description ?? '')) {
-                              updateDeliveryMutation.mutate({ id: delivery.id, data: { description: newValue } });
+                            if (newValue !== (delivery.vendor ?? '')) {
+                              updateDeliveryMutation.mutate({ id: delivery.id, data: { vendor: newValue } });
                             }
                           }}
-                          placeholder="What was delivered?"
-                          data-testid={`textarea-delivery-desc-${delivery.id}`}
+                          placeholder="Vendor name"
+                          data-testid={`input-vendor-${delivery.id}`}
                         />
                       </div>
                       <div className="space-y-2">
-                        <Label>Was everything delivered?</Label>
-                        <Select
-                          value={delivery.allDelivered ? "yes" : "no"}
+                        <Label>Delivery Time</Label>
+                        <TimePicker
+                          value={delivery.deliveryTime || ''}
                           disabled={isCompleted}
-                          onValueChange={(value) => updateDeliveryMutation.mutate({ id: delivery.id, data: { allDelivered: value === "yes" } })}
-                        >
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="yes">Yes</SelectItem>
-                            <SelectItem value="no">No</SelectItem>
-                          </SelectContent>
-                        </Select>
+                          onChange={(value) => updateDeliveryMutation.mutate({ id: delivery.id, data: { deliveryTime: value } })}
+                        />
                       </div>
-                      {delivery.allDelivered === false && (
-                        <div className="space-y-2">
-                          <Label className="text-destructive">
-                            <span className="text-destructive">*</span> Missing Items Details
-                          </Label>
-                          <Textarea
-                            value={localDeliveryMissing[delivery.id] ?? delivery.missingItemsDetails ?? ''}
-                            disabled={isCompleted}
-                            onChange={(e) => setLocalDeliveryMissing(prev => ({ ...prev, [delivery.id]: e.target.value }))}
-                            onBlur={(e) => {
-                              const newValue = e.target.value;
-                              if (newValue !== (delivery.missingItemsDetails ?? '')) {
-                                updateDeliveryMutation.mutate({ id: delivery.id, data: { missingItemsDetails: newValue } });
-                              }
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Description</Label>
+                      <Textarea
+                        value={localDeliveryDescriptions[delivery.id] ?? delivery.description ?? ''}
+                        disabled={isCompleted}
+                        onChange={(e) => setLocalDeliveryDescriptions(prev => ({ ...prev, [delivery.id]: e.target.value }))}
+                        onBlur={(e) => {
+                          const newValue = e.target.value;
+                          if (newValue !== (delivery.description ?? '')) {
+                            updateDeliveryMutation.mutate({ id: delivery.id, data: { description: newValue } });
+                          }
+                        }}
+                        placeholder="What was delivered?"
+                        data-testid={`textarea-delivery-desc-${delivery.id}`}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Was everything delivered?</Label>
+                      <Select
+                        value={delivery.allDelivered ? "yes" : "no"}
+                        disabled={isCompleted}
+                        onValueChange={(value) => updateDeliveryMutation.mutate({ id: delivery.id, data: { allDelivered: value === "yes" } })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="yes">Yes</SelectItem>
+                          <SelectItem value="no">No</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    {delivery.allDelivered === false && (
+                      <div className="space-y-2">
+                        <Label className="text-destructive">
+                          <span className="text-destructive">*</span> Missing Items Details
+                        </Label>
+                        <Textarea
+                          value={localDeliveryMissing[delivery.id] ?? delivery.missingItemsDetails ?? ''}
+                          disabled={isCompleted}
+                          onChange={(e) => setLocalDeliveryMissing(prev => ({ ...prev, [delivery.id]: e.target.value }))}
+                          onBlur={(e) => {
+                            const newValue = e.target.value;
+                            if (newValue !== (delivery.missingItemsDetails ?? '')) {
+                              updateDeliveryMutation.mutate({ id: delivery.id, data: { missingItemsDetails: newValue } });
+                            }
+                          }}
+                          placeholder="Describe what was missing..."
+                          data-testid={`textarea-missing-items-${delivery.id}`}
+                        />
+                      </div>
+                    )}
+
+                    {/* Photos Section */}
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <Label>Photos</Label>
+                        {!isCompleted && (
+                          <NativeFileUploader
+                            maxNumberOfFiles={50}
+                            accept="image/*"
+                            onUploadComplete={(uploadedFiles) => {
+                              uploadedFiles.forEach((file) => {
+                                createPhotoMutation.mutate({ 
+                                  deliveryEntryId: delivery.id, 
+                                  url: file.cloudinaryUrl,
+                                  cloudinaryPublicId: file.cloudinaryPublicId,
+                                  cloudinaryUrl: file.cloudinaryUrl,
+                                  fileName: file.name,
+                                  takenAt: file.takenAt?.toISOString(),
+                                });
+                              });
                             }}
-                            placeholder="Describe what was missing..."
-                            data-testid={`textarea-missing-items-${delivery.id}`}
-                          />
+                          >
+                            <Camera className="h-3 w-3 mr-1" /> Upload Photos
+                          </NativeFileUploader>
+                        )}
+                      </div>
+                      {delivery.photos && delivery.photos.length > 0 && (
+                        <div className="grid grid-cols-3 gap-2">
+                          {delivery.photos.map((photo) => (
+                            <div key={photo.id} className="relative group">
+                              <img
+                                src={getProxyUrl(photo.url)}
+                                alt={photo.caption || "Delivery photo"}
+                                className="w-full h-24 object-cover rounded border"
+                              />
+                              {!isCompleted && (
+                                <Button
+                                  variant="destructive"
+                                  size="icon"
+                                  className="absolute top-1 right-1 h-6 w-6 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity"
+                                  onClick={() => deletePhotoMutation.mutate(photo.id)}
+                                >
+                                  <X className="h-3 w-3" />
+                                </Button>
+                              )}
+                            </div>
+                          ))}
                         </div>
                       )}
+                      {(!delivery.photos || delivery.photos.length === 0) && (
+                        <p className="text-sm text-muted-foreground">
+                          Please upload photos of the delivery slip and delivered items.
+                        </p>
+                      )}
+                    </div>
 
-                      {/* Photos Section */}
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between">
-                          <Label>Photos</Label>
-                          {!isCompleted && (
-                            <NativeFileUploader
-                              maxNumberOfFiles={50}
-                              accept="image/*"
-                              onUploadComplete={(uploadedFiles) => {
-                                uploadedFiles.forEach((file) => {
-                                  createPhotoMutation.mutate({ 
-                                    deliveryEntryId: delivery.id, 
-                                    url: file.cloudinaryUrl,
-                                    cloudinaryPublicId: file.cloudinaryPublicId,
-                                    cloudinaryUrl: file.cloudinaryUrl,
-                                    fileName: file.name,
-                                    takenAt: file.takenAt?.toISOString(),
-                                  });
-                                });
-                              }}
-                            >
-                              <Camera className="h-3 w-3 mr-1" /> Upload Photos
-                            </NativeFileUploader>
-                          )}
-                        </div>
-                        {delivery.photos && delivery.photos.length > 0 && (
-                          <div className="grid grid-cols-3 gap-2">
-                            {delivery.photos.map((photo) => (
-                              <div key={photo.id} className="relative group">
-                                <img
-                                  src={getProxyUrl(photo.url)}
-                                  alt={photo.caption || "Delivery photo"}
-                                  className="w-full h-24 object-cover rounded border"
-                                />
-                                {!isCompleted && (
-                                  <Button
-                                    variant="destructive"
-                                    size="icon"
-                                    className="absolute top-1 right-1 h-6 w-6 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity"
-                                    onClick={() => deletePhotoMutation.mutate(photo.id)}
-                                  >
-                                    <X className="h-3 w-3" />
-                                  </Button>
-                                )}
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                        {(!delivery.photos || delivery.photos.length === 0) && (
-                          <p className="text-sm text-muted-foreground">
-                            Please upload photos of the delivery slip and delivered items.
-                          </p>
-                        )}
-                      </div>
-                    </CardContent>
+                    {/* Collapse Button at Bottom */}
+                    <div className="flex justify-center pt-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => toggleDeliveryExpanded(delivery.id)}
+                        data-testid={`button-collapse-delivery-${delivery.id}`}
+                        className="text-muted-foreground"
+                      >
+                        <ChevronUp className="h-4 w-4 mr-1" /> Collapse
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </Card>
+            ))}
+          </div>
+        )}
+
+        {/* Report-Level Photos Section - only show when photos exist */}
+        {report.reportPhotos && report.reportPhotos.length > 0 && (
+          <div className="space-y-3">
+            <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide" data-testid="section-header-photos">Photos</h3>
+            <div className="grid grid-cols-3 gap-2">
+              {report.reportPhotos.map((photo) => (
+                <div key={photo.id} className="relative group">
+                  <img
+                    src={getProxyUrl(photo.url)}
+                    alt={photo.caption || "Report photo"}
+                    className="w-full h-24 object-cover rounded border"
+                    data-testid={`report-photo-${photo.id}`}
+                  />
+                  {!isCompleted && (
+                    <Button
+                      variant="destructive"
+                      size="icon"
+                      className="absolute top-1 right-1 h-6 w-6 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity"
+                      onClick={() => deletePhotoMutation.mutate(photo.id)}
+                      data-testid={`button-delete-report-photo-${photo.id}`}
+                    >
+                      <X className="h-3 w-3" />
+                    </Button>
                   )}
-                </Card>
-              ))
+                </div>
+              ))}
+            </div>
+            {!isCompleted && (
+              <NativeFileUploader
+                maxNumberOfFiles={50}
+                accept="image/*"
+                onUploadComplete={(uploadedFiles) => {
+                  uploadedFiles.forEach((file) => {
+                    createPhotoMutation.mutate({ 
+                      reportId: report.id,
+                      url: file.cloudinaryUrl,
+                      cloudinaryPublicId: file.cloudinaryPublicId,
+                      cloudinaryUrl: file.cloudinaryUrl,
+                      fileName: file.name,
+                      takenAt: file.takenAt?.toISOString(),
+                    });
+                  });
+                }}
+              >
+                <Plus className="h-3 w-3 mr-1" /> Add More Photos
+              </NativeFileUploader>
             )}
-          </CardContent>
-        </Card>
+          </div>
+        )}
 
-        {/* Notes Section */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-foreground">Notes</CardTitle>
-          </CardHeader>
-          <CardContent>
+        {/* Notes Section - show when notes exist, user toggled via Add Entry, or report is completed */}
+        {(showNotes || (report.notes && report.notes.trim().length > 0) || isCompleted) && (
+          <div className="space-y-3">
+            <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide" data-testid="section-header-notes">Notes</h3>
             <Textarea
+              ref={notesRef}
               value={notes}
               disabled={isCompleted}
               onChange={(e) => setNotes(e.target.value)}
@@ -1696,11 +1757,105 @@ export default function DailyReportPage() {
               }}
               placeholder="Additional notes about today's work..."
               rows={4}
+              data-testid="textarea-notes"
             />
-          </CardContent>
-        </Card>
+          </div>
+        )}
+
+        {/* Report-level photo uploader shown when triggered from Add Entry */}
+        {showReportPhotoUploader && !(report.reportPhotos && report.reportPhotos.length > 0) && (
+          <div className="space-y-3">
+            <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Photos</h3>
+            <NativeFileUploader
+              maxNumberOfFiles={50}
+              accept="image/*"
+              buttonVariant="outline"
+              onUploadComplete={(uploadedFiles) => {
+                uploadedFiles.forEach((file) => {
+                  createPhotoMutation.mutate({ 
+                    reportId: report.id,
+                    url: file.cloudinaryUrl,
+                    cloudinaryPublicId: file.cloudinaryPublicId,
+                    cloudinaryUrl: file.cloudinaryUrl,
+                    fileName: file.name,
+                    takenAt: file.takenAt?.toISOString(),
+                  });
+                });
+              }}
+            >
+              <Camera className="h-3 w-3 mr-1" /> Upload Photos
+            </NativeFileUploader>
+          </div>
+        )}
       </div>
       </div>
+
+      {/* Add Entry Dialog */}
+      <Dialog open={showAddEntryDialog} onOpenChange={setShowAddEntryDialog}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Add Entry</DialogTitle>
+            <DialogDescription>
+              Choose what to add to this report.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid grid-cols-2 gap-3 py-4">
+            <Button
+              variant="outline"
+              className="flex flex-col items-center gap-2 h-auto py-4"
+              onClick={() => {
+                setShowAddEntryDialog(false);
+                setShowAddTaskDialog(true);
+              }}
+              disabled={availableTasks.length === 0}
+              data-testid="button-add-entry-task"
+            >
+              <ClipboardList className="h-6 w-6" />
+              <span className="text-sm">Task</span>
+            </Button>
+            <Button
+              variant="outline"
+              className="flex flex-col items-center gap-2 h-auto py-4"
+              onClick={() => {
+                setShowAddEntryDialog(false);
+                createDeliveryMutation.mutate();
+              }}
+              data-testid="button-add-entry-delivery"
+            >
+              <Truck className="h-6 w-6" />
+              <span className="text-sm">Delivery</span>
+            </Button>
+            <Button
+              variant="outline"
+              className="flex flex-col items-center gap-2 h-auto py-4"
+              onClick={() => {
+                setShowAddEntryDialog(false);
+                setShowNotes(true);
+                setTimeout(() => {
+                  notesRef.current?.focus();
+                  notesRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }, 100);
+              }}
+              data-testid="button-add-entry-note"
+            >
+              <StickyNote className="h-6 w-6" />
+              <span className="text-sm">Note</span>
+            </Button>
+            <Button
+              variant="outline"
+              className="flex flex-col items-center gap-2 h-auto py-4"
+              onClick={() => {
+                setShowAddEntryDialog(false);
+                setShowReportPhotoUploader(true);
+              }}
+              data-testid="button-add-entry-photos"
+            >
+              <ImagePlus className="h-6 w-6" />
+              <span className="text-sm">Photos</span>
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Add Task Dialog */}
       <Dialog open={showAddTaskDialog} onOpenChange={setShowAddTaskDialog}>

@@ -505,11 +505,14 @@ export async function registerRoutes(
       return { ...entry, photos };
     }));
     
+    const reportPhotos = await storage.getReportLevelPhotos(report.id);
+    
     res.json({
       ...report,
       isLatestReport,
       taskEntries: taskEntriesWithDetails,
       deliveryEntries: deliveryEntriesWithPhotos,
+      reportPhotos,
     });
   });
 

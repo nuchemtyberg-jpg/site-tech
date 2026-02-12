@@ -216,6 +216,7 @@ export interface IStorage {
 
   // New Daily Report Photos
   getDailyReportPhotos(reportId?: number, taskEntryId?: number, deliveryEntryId?: number): Promise<DailyReportPhoto[]>;
+  getReportLevelPhotos(reportId: number): Promise<DailyReportPhoto[]>;
   createDailyReportPhoto(photo: InsertDailyReportPhoto): Promise<DailyReportPhoto>;
   deleteDailyReportPhoto(id: number): Promise<void>;
 
@@ -982,6 +983,16 @@ export class DatabaseStorage implements IStorage {
       return await db.select().from(dailyReportPhotos).where(and(eq(dailyReportPhotos.reportId, reportId), isNull(dailyReportPhotos.deletedAt)));
     }
     return [];
+  }
+  async getReportLevelPhotos(reportId: number): Promise<DailyReportPhoto[]> {
+    return await db.select().from(dailyReportPhotos).where(
+      and(
+        eq(dailyReportPhotos.reportId, reportId),
+        isNull(dailyReportPhotos.taskEntryId),
+        isNull(dailyReportPhotos.deliveryEntryId),
+        isNull(dailyReportPhotos.deletedAt)
+      )
+    );
   }
   async createDailyReportPhoto(photo: InsertDailyReportPhoto): Promise<DailyReportPhoto> {
     const [record] = await db.insert(dailyReportPhotos).values(photo).returning();
