@@ -651,7 +651,10 @@ export async function registerRoutes(
       res.json(report);
 
       // Auto-email daily report PDF to configured recipients (async, non-blocking)
+      // Use loopback address for self-fetch since server calls its own PDF endpoint.
+      // This avoids cross-domain auth issues that occur with external URLs.
       const cookieHeader = req.headers.cookie || '';
+      const selfBaseUrl = `http://127.0.0.1:${process.env.PORT || 5000}`;
       setImmediate(async () => {
         try {
           const existingReport = await storage.getDailyReport(reportId);
@@ -666,8 +669,7 @@ export async function registerRoutes(
           if (!project) return;
 
           console.log(`[AutoEmail] Generating PDF for report ${reportId}, sending to ${recipients.length} recipient(s)...`);
-          const appBaseUrl = process.env.APP_BASE_URL || `https://${process.env.REPLIT_DOMAINS?.split(',')[0] || 'localhost:5000'}`;
-          const pdfUrl = `${appBaseUrl}/api/reports/${reportId}/pdf?includePhotos=true`;
+          const pdfUrl = `${selfBaseUrl}/api/reports/${reportId}/pdf?includePhotos=true`;
           console.log(`[AutoEmail] Fetching PDF from: ${pdfUrl}`);
           const pdfRes = await fetch(pdfUrl, {
             headers: { cookie: cookieHeader },
