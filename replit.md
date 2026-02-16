@@ -85,6 +85,16 @@ Core entities, utilizing soft deletes with a `deletedAt` timestamp, include Proj
 - **Open-Meteo Weather API**: Weather information.
 - **exifreader**: EXIF data extraction.
 - **yet-another-react-lightbox**: Photo lightbox.
-- **Mailgun**: Inbound email routing.
+- **Mailgun**: Inbound email routing and daily report auto-email sending (domain: `updates.sitetechnj.com`).
 - **Microsoft Graph API**: For Outlook email integration and RFI sending.
 - **Fingercheck REST API**: Employee sync and time tracking data.
+
+## Recent Changes
+
+### 2026-02-16: Mailgun Email Configuration & Auto-Email Fix
+- **Switched from SendGrid to Mailgun** for all outbound email (daily report auto-email). Removed `@sendgrid/mail` dependency.
+- **Renamed** `server/services/sendgridHelper.ts` to `server/services/dailyReportMailer.ts` with Mailgun REST API implementation using native `fetch` and `FormData` with `File` attachment for PDF.
+- **Mailgun Configuration**: Domain is `updates.sitetechnj.com`, from address is `reports@updates.sitetechnj.com`. Secrets: `MAILGUN_API_KEY`, `MAILGUN_FROM_EMAIL`. Env var: `MAILGUN_DOMAIN`.
+- **Fixed auto-email PDF fetch 401 error**: The server was fetching the PDF from the external production URL (`APP_BASE_URL`), which caused authentication failures. Changed to use loopback address (`http://127.0.0.1:PORT`) for self-fetch since the server calls its own PDF endpoint. The user's session cookie is forwarded for auth.
+- **Project Daily Report Recipients**: `project_daily_report_recipients` table with CRUD operations. Recipients have email (required) and name (optional), with soft delete support. Managed in Project Settings page.
+- **Project Settings Page**: Accessible via gear icon in project header or floating tools. Contains Fingercheck job mapping and daily report recipient management sections.
