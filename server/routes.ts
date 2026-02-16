@@ -16,6 +16,7 @@ import {
 } from "./services/outlook";
 import { processInboundEmail, verifyMailgunSignature } from "./services/inboundEmail";
 import multer from "multer";
+import sharp from "sharp";
 
 // Weather fetch helper using Open-Meteo API
 async function fetchWeatherData(address: string, city: string, state: string): Promise<{
@@ -694,30 +695,50 @@ export async function registerRoutes(
         }
       };
 
+      const autoOrientImage = async (imageBytes: Uint8Array): Promise<Uint8Array> => {
+        try {
+          const oriented = await sharp(Buffer.from(imageBytes))
+            .rotate()
+            .jpeg({ quality: 90 })
+            .toBuffer();
+          return new Uint8Array(oriented);
+        } catch (err) {
+          console.log(`[PDF Photo] sharp auto-orient failed, using original bytes`, err);
+          return imageBytes;
+        }
+      };
+
       const getPhotoBytes = async (url: string): Promise<Uint8Array | null> => {
         try {
+          let rawBytes: Uint8Array | null = null;
+
           if (url.startsWith('http://') || url.startsWith('https://')) {
             const objectPath = getObjectPath(url);
             if (objectPath.startsWith('/objects/')) {
               try {
                 const file = await objectStorageService.getObjectEntityFile(objectPath);
                 const [buffer] = await file.download();
-                return new Uint8Array(buffer);
+                rawBytes = new Uint8Array(buffer);
               } catch {
                 console.log(`[PDF Photo] Object storage failed, trying HTTP fetch: ${url}`);
               }
             }
-            return await fetchPhotoFromUrl(url);
+            if (!rawBytes) {
+              rawBytes = await fetchPhotoFromUrl(url);
+            }
+          } else {
+            const objectPath = getObjectPath(url);
+            if (!objectPath.startsWith('/objects/')) {
+              console.log(`[PDF Photo] Skipping unrecognized URL: ${url}`);
+              return null;
+            }
+            const file = await objectStorageService.getObjectEntityFile(objectPath);
+            const [buffer] = await file.download();
+            rawBytes = new Uint8Array(buffer);
           }
 
-          const objectPath = getObjectPath(url);
-          if (!objectPath.startsWith('/objects/')) {
-            console.log(`[PDF Photo] Skipping unrecognized URL: ${url}`);
-            return null;
-          }
-          const file = await objectStorageService.getObjectEntityFile(objectPath);
-          const [buffer] = await file.download();
-          return new Uint8Array(buffer);
+          if (!rawBytes) return null;
+          return await autoOrientImage(rawBytes);
         } catch (err) {
           console.error(`[PDF Photo] Failed to read photo: ${url}`, err);
           return null;
