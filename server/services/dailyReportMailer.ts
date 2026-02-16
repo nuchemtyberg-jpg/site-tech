@@ -1,5 +1,3 @@
-const MAILGUN_API_BASE = 'https://api.mailgun.net/v3';
-
 export async function sendDailyReportEmail(
   recipientEmails: { email: string; name?: string | null }[],
   projectName: string,
@@ -11,6 +9,7 @@ export async function sendDailyReportEmail(
   const mailgunApiKey = process.env.MAILGUN_API_KEY;
   const mailgunDomain = process.env.MAILGUN_DOMAIN;
   const fromEmail = process.env.MAILGUN_FROM_EMAIL;
+  const mailgunApiBase = process.env.MAILGUN_API_BASE || 'https://api.mailgun.net/v3';
 
   if (!mailgunApiKey || !mailgunDomain || !fromEmail) {
     console.error('[AutoEmail] Mailgun not configured - missing MAILGUN_API_KEY, MAILGUN_DOMAIN, or MAILGUN_FROM_EMAIL');
@@ -32,7 +31,10 @@ export async function sendDailyReportEmail(
     const pdfFile = new File([pdfBuffer], filename, { type: 'application/pdf' });
     formData.append('attachment', pdfFile);
 
-    const response = await fetch(`${MAILGUN_API_BASE}/${mailgunDomain}/messages`, {
+    const url = `${mailgunApiBase}/${mailgunDomain}/messages`;
+    console.log(`[AutoEmail] Sending via Mailgun: domain=${mailgunDomain}, from=${fromEmail}, to=${toList}, url=${url}`);
+
+    const response = await fetch(url, {
       method: 'POST',
       headers: {
         'Authorization': 'Basic ' + Buffer.from(`api:${mailgunApiKey}`).toString('base64'),
@@ -46,7 +48,8 @@ export async function sendDailyReportEmail(
       return;
     }
 
-    console.log(`[AutoEmail] Daily report emailed to ${recipientEmails.length} recipient(s) for project "${projectName}"`);
+    const result = await response.json();
+    console.log(`[AutoEmail] Daily report emailed to ${recipientEmails.length} recipient(s) for project "${projectName}"`, result);
   } catch (err) {
     console.error('[AutoEmail] Failed to send daily report email:', err);
   }
