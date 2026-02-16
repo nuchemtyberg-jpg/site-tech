@@ -1333,8 +1333,8 @@ export async function registerRoutes(
         for (const inspection of inspectionEntriesWithPhotos) {
           addNewPageIfNeeded(50);
           drawText(inspection.inspectionType || 'Unknown type', margin + 12, y, 10, true, darkText);
-          const passedText = inspection.passed ? "PASSED" : "FAILED";
-          const passedClr = inspection.passed ? successGreen : warningRed;
+          const passedText = inspection.passed === true ? "PASSED" : inspection.passed === false ? "FAILED" : "PENDING";
+          const passedClr = inspection.passed === true ? successGreen : inspection.passed === false ? warningRed : mediumText;
           drawText(passedText, rightEdge - 10 - font.widthOfTextAtSize(passedText, 9), y, 9, true, passedClr);
           y -= lineHeight + 2;
           

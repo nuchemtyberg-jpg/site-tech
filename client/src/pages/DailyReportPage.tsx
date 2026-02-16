@@ -645,7 +645,7 @@ export default function DailyReportPage() {
   // Inspection mutations
   const createInspectionMutation = useMutation({
     mutationFn: async () => {
-      return apiRequest("POST", `/api/reports/${reportId}/inspection-entries`, { inspectionType: "", inspectionAuthority: "", passed: true });
+      return apiRequest("POST", `/api/reports/${reportId}/inspection-entries`, { inspectionType: "", inspectionAuthority: "", passed: null });
     },
     onSuccess: () => refetchReport(),
   });
@@ -1754,8 +1754,8 @@ export default function DailyReportPage() {
                     <div className="flex items-center gap-2 min-w-0 flex-1">
                       {expandedInspections.has(inspection.id) ? <ChevronUp className="h-4 w-4 shrink-0" /> : <ChevronDown className="h-4 w-4 shrink-0" />}
                       <span className="font-medium text-foreground truncate">{inspection.inspectionType || 'New Inspection'}</span>
-                      <Badge variant={inspection.passed ? "default" : "destructive"}>
-                        {inspection.passed ? "Passed" : "Failed"}
+                      <Badge variant={inspection.passed === true ? "default" : inspection.passed === false ? "destructive" : "secondary"}>
+                        {inspection.passed === true ? "Passed" : inspection.passed === false ? "Failed" : "Pending"}
                       </Badge>
                     </div>
                     {!isCompleted && (
@@ -1852,14 +1852,15 @@ export default function DailyReportPage() {
                       <div className="space-y-2">
                         <Label>Result</Label>
                         <Select
-                          value={inspection.passed ? "passed" : "failed"}
+                          value={inspection.passed === true ? "passed" : inspection.passed === false ? "failed" : "pending"}
                           disabled={isCompleted}
-                          onValueChange={(value) => updateInspectionMutation.mutate({ id: inspection.id, data: { passed: value === "passed" } })}
+                          onValueChange={(value) => updateInspectionMutation.mutate({ id: inspection.id, data: { passed: value === "passed" ? true : value === "failed" ? false : null } })}
                         >
                           <SelectTrigger data-testid={`select-inspection-result-${inspection.id}`}>
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
+                            <SelectItem value="pending">Pending</SelectItem>
                             <SelectItem value="passed">Passed</SelectItem>
                             <SelectItem value="failed">Failed</SelectItem>
                           </SelectContent>

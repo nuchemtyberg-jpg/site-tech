@@ -247,7 +247,7 @@ export const dailyReportInspectionEntries = pgTable("daily_report_inspection_ent
   inspectionType: text("inspection_type").notNull(),
   inspectionAuthority: text("inspection_authority").notNull(),
   inspectorName: text("inspector_name"),
-  passed: boolean("passed").default(true),
+  passed: boolean("passed"),
   createdAt: timestamp("created_at").defaultNow(),
   deletedAt: timestamp("deleted_at"),
 });
