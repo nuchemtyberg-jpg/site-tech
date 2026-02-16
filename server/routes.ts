@@ -651,26 +651,34 @@ export async function registerRoutes(
       res.json(report);
 
       // Auto-email daily report PDF to configured recipients (async, non-blocking)
-      const baseUrl = `${req.protocol}://${req.get('host')}`;
       const cookieHeader = req.headers.cookie || '';
       setImmediate(async () => {
         try {
           const existingReport = await storage.getDailyReport(reportId);
           if (!existingReport) return;
           const recipients = await storage.getProjectDailyReportRecipients(existingReport.projectId);
-          if (recipients.length === 0) return;
+          if (recipients.length === 0) {
+            console.log(`[AutoEmail] No recipients configured for project ${existingReport.projectId}`);
+            return;
+          }
 
           const project = await storage.getProject(existingReport.projectId);
           if (!project) return;
 
-          const pdfRes = await fetch(`${baseUrl}/api/reports/${reportId}/pdf?includePhotos=true`, {
+          console.log(`[AutoEmail] Generating PDF for report ${reportId}, sending to ${recipients.length} recipient(s)...`);
+          const appBaseUrl = process.env.APP_BASE_URL || `https://${process.env.REPLIT_DOMAINS?.split(',')[0] || 'localhost:5000'}`;
+          const pdfUrl = `${appBaseUrl}/api/reports/${reportId}/pdf?includePhotos=true`;
+          console.log(`[AutoEmail] Fetching PDF from: ${pdfUrl}`);
+          const pdfRes = await fetch(pdfUrl, {
             headers: { cookie: cookieHeader },
           });
           if (!pdfRes.ok) {
-            console.error(`[AutoEmail] Failed to generate PDF: ${pdfRes.status}`);
+            const errorBody = await pdfRes.text().catch(() => '');
+            console.error(`[AutoEmail] Failed to generate PDF: ${pdfRes.status} - ${errorBody}`);
             return;
           }
           const pdfBuffer = Buffer.from(await pdfRes.arrayBuffer());
+          console.log(`[AutoEmail] PDF generated successfully (${pdfBuffer.length} bytes)`);
 
           const { sendDailyReportEmail } = await import("./services/dailyReportMailer");
           await sendDailyReportEmail(
