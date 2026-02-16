@@ -51,6 +51,8 @@ Core entities, utilizing soft deletes with a `deletedAt` timestamp, include Proj
     - **Primary Method**: Each project receives an auto-generated email address (`{slug}-{id}@updates.sitetechnj.com`). Emails CC'd to this address are captured via a Mailgun inbound route webhook, with attachments stored in Replit Object Storage.
     - **Secondary Method**: Optional Outlook OAuth integration for syncing additional project emails via Microsoft Graph API.
     - **Features**: Centralized view of project emails, classification (internal/external), full-text search, HTML rendering, attachment handling.
+- **Project Settings Page**: Accessible via gear icon in project header or floating tools. Contains Fingercheck job mapping and daily report recipient management.
+- **Daily Report Auto-Email**: When a daily report is signed/completed, PDF is automatically emailed to configured recipients via SendGrid. Recipients managed in project settings via `project_daily_report_recipients` table.
 - **RFI (Request for Information) Tool**: Facilitates creation, sending, and tracking of RFIs.
     - **Email Integration**: Sends RFIs via the user's Outlook account using the Replit Outlook Connector (Microsoft Graph API).
     - **PDF Generation**: PDFKit generates professional RFI documents.

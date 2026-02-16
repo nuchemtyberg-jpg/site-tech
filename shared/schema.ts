@@ -664,3 +664,17 @@ export const userOutlookConnections = pgTable("user_outlook_connections", {
 
 export type UserOutlookConnection = typeof userOutlookConnections.$inferSelect;
 export type InsertUserOutlookConnection = typeof userOutlookConnections.$inferInsert;
+
+// Project Daily Report Recipients - email addresses that auto-receive daily reports when signed
+export const projectDailyReportRecipients = pgTable("project_daily_report_recipients", {
+  id: serial("id").primaryKey(),
+  projectId: integer("project_id").notNull(),
+  email: text("email").notNull(),
+  name: text("name"),
+  createdAt: timestamp("created_at").defaultNow(),
+  deletedAt: timestamp("deleted_at"),
+});
+
+export const insertProjectDailyReportRecipientSchema = createInsertSchema(projectDailyReportRecipients).omit({ id: true, createdAt: true, deletedAt: true });
+export type ProjectDailyReportRecipient = typeof projectDailyReportRecipients.$inferSelect;
+export type InsertProjectDailyReportRecipient = z.infer<typeof insertProjectDailyReportRecipientSchema>;

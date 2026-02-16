@@ -13,6 +13,7 @@ import {
   Calendar,
   Mail,
   MessageSquareText,
+  Settings,
   Wrench,
   X
 } from "lucide-react";
@@ -31,6 +32,7 @@ const toolItems = [
   { value: "tasks", label: "Tasks", icon: ClipboardList },
   { value: "communications", label: "Communications", icon: Mail },
   { value: "rfis", label: "RFIs", icon: MessageSquareText },
+  { value: "settings", label: "Settings", icon: Settings },
 ];
 
 export function FloatingProjectTools({ activeTab, onTabChange, hidden = false }: FloatingProjectToolsProps) {

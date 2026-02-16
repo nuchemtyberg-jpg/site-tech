@@ -649,6 +649,40 @@ export async function registerRoutes(
       });
       
       res.json(report);
+
+      // Auto-email daily report PDF to configured recipients (async, non-blocking)
+      const baseUrl = `${req.protocol}://${req.get('host')}`;
+      const cookieHeader = req.headers.cookie || '';
+      setImmediate(async () => {
+        try {
+          const existingReport = await storage.getDailyReport(reportId);
+          if (!existingReport) return;
+          const recipients = await storage.getProjectDailyReportRecipients(existingReport.projectId);
+          if (recipients.length === 0) return;
+
+          const project = await storage.getProject(existingReport.projectId);
+          if (!project) return;
+
+          const pdfRes = await fetch(`${baseUrl}/api/reports/${reportId}/pdf?includePhotos=true`, {
+            headers: { cookie: cookieHeader },
+          });
+          if (!pdfRes.ok) {
+            console.error(`[AutoEmail] Failed to generate PDF: ${pdfRes.status}`);
+            return;
+          }
+          const pdfBuffer = Buffer.from(await pdfRes.arrayBuffer());
+
+          const { sendDailyReportEmail } = await import("./services/sendgridHelper");
+          await sendDailyReportEmail(
+            recipients.map(r => ({ email: r.email, name: r.name })),
+            project.name,
+            existingReport.reportDate,
+            pdfBuffer
+          );
+        } catch (emailErr) {
+          console.error("[AutoEmail] Error sending daily report email:", emailErr);
+        }
+      });
     } catch (err) {
       console.error("Complete report error:", err);
       return res.status(500).json({ message: "Failed to complete report" });
@@ -2843,6 +2877,45 @@ export async function registerRoutes(
       res.json({ message: "Mapping deleted" });
     } catch (err) {
       res.status(500).json({ message: "Failed to delete mapping" });
+    }
+  });
+
+  // ============================================================
+  // Project Daily Report Recipients Routes
+  // ============================================================
+
+  app.get("/api/projects/:projectId/daily-report-recipients", isAuthenticated, isAuthorizedUser, async (req, res) => {
+    try {
+      const recipients = await storage.getProjectDailyReportRecipients(Number(req.params.projectId));
+      res.json(recipients);
+    } catch (err) {
+      res.status(500).json({ message: "Failed to fetch recipients" });
+    }
+  });
+
+  app.post("/api/projects/:projectId/daily-report-recipients", isAuthenticated, isAuthorizedUser, async (req, res) => {
+    try {
+      const { email, name } = req.body;
+      if (!email || typeof email !== 'string') {
+        return res.status(400).json({ message: "Email is required" });
+      }
+      const recipient = await storage.createProjectDailyReportRecipient({
+        projectId: Number(req.params.projectId),
+        email: email.trim(),
+        name: name?.trim() || null,
+      });
+      res.json(recipient);
+    } catch (err) {
+      res.status(500).json({ message: "Failed to add recipient" });
+    }
+  });
+
+  app.delete("/api/daily-report-recipients/:id", isAuthenticated, isAuthorizedUser, async (req, res) => {
+    try {
+      await storage.deleteProjectDailyReportRecipient(Number(req.params.id));
+      res.json({ message: "Recipient removed" });
+    } catch (err) {
+      res.status(500).json({ message: "Failed to remove recipient" });
     }
   });
 

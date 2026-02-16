@@ -5,7 +5,7 @@ import {
   authorizedUsers,
   projectEmailConnections, projectEmails, projectEmailAttachments,
   fingercheckEmployees, fingercheckTimePunches, fingercheckProjectMappings,
-  rfis, rfiResponses, userOutlookConnections,
+  rfis, rfiResponses, userOutlookConnections, projectDailyReportRecipients,
   type InsertProject, type InsertTask, type InsertEquipment, type InsertAllocation, type InsertFolder, type InsertFileMetadata, type InsertPhoto,
   type InsertCustomer, type InsertDailyReport, type InsertMaintenanceLog, type InsertCommunication, type InsertTaskStatusHistory, type InsertPhotoAlbum,
   type InsertReportTask, type InsertLaborEntry, type InsertEquipmentEntry, type InsertReportTaskPhoto, type InsertDelivery, type InsertDeliveryPhoto,
@@ -13,14 +13,14 @@ import {
   type InsertAuthorizedUser,
   type InsertProjectEmailConnection, type InsertProjectEmail, type InsertProjectEmailAttachment,
   type InsertFingercheckEmployee, type InsertFingercheckTimePunch, type InsertFingercheckProjectMapping,
-  type InsertRfi, type InsertRfiResponse,
+  type InsertRfi, type InsertRfiResponse, type InsertProjectDailyReportRecipient,
   type Project, type Task, type Equipment, type Allocation, type Folder, type FileMetadata, type Photo,
   type Customer, type DailyReport, type MaintenanceLog, type Communication, type TaskStatusHistory, type PhotoAlbum,
   type ReportTask, type LaborEntry, type EquipmentEntry, type ReportTaskPhoto, type Delivery, type DeliveryPhoto,
   type DailyReportTaskEntry, type DailyReportLaborLine, type DailyReportEquipmentLine, type DailyReportDeliveryEntry, type DailyReportInspectionEntry, type DailyReportPhoto,
   type ProjectEmailConnection, type ProjectEmail, type ProjectEmailAttachment,
   type FingercheckEmployee, type FingercheckTimePunch, type FingercheckProjectMapping,
-  type Rfi, type RfiResponse, type UserOutlookConnection,
+  type Rfi, type RfiResponse, type UserOutlookConnection, type ProjectDailyReportRecipient,
   type User, type UpsertUser, type AuthorizedUser
 } from "@shared/schema";
 import { db } from "./db";
@@ -280,6 +280,11 @@ export interface IStorage {
   getUserOutlookConnection(userId: string): Promise<UserOutlookConnection | undefined>;
   upsertUserOutlookConnection(data: { userId: string; email: string; accessToken: string; refreshToken: string; expiresAt: Date }): Promise<UserOutlookConnection>;
   deleteUserOutlookConnection(userId: string): Promise<void>;
+
+  // Project Daily Report Recipients
+  getProjectDailyReportRecipients(projectId: number): Promise<ProjectDailyReportRecipient[]>;
+  createProjectDailyReportRecipient(recipient: InsertProjectDailyReportRecipient): Promise<ProjectDailyReportRecipient>;
+  deleteProjectDailyReportRecipient(id: number): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1372,6 +1377,17 @@ export class DatabaseStorage implements IStorage {
 
   async deleteUserOutlookConnection(userId: string): Promise<void> {
     await db.delete(userOutlookConnections).where(eq(userOutlookConnections.userId, userId));
+  }
+
+  async getProjectDailyReportRecipients(projectId: number): Promise<ProjectDailyReportRecipient[]> {
+    return await db.select().from(projectDailyReportRecipients).where(and(eq(projectDailyReportRecipients.projectId, projectId), isNull(projectDailyReportRecipients.deletedAt))).orderBy(asc(projectDailyReportRecipients.id));
+  }
+  async createProjectDailyReportRecipient(recipient: InsertProjectDailyReportRecipient): Promise<ProjectDailyReportRecipient> {
+    const [record] = await db.insert(projectDailyReportRecipients).values(recipient).returning();
+    return record;
+  }
+  async deleteProjectDailyReportRecipient(id: number): Promise<void> {
+    await db.update(projectDailyReportRecipients).set({ deletedAt: new Date() }).where(eq(projectDailyReportRecipients.id, id));
   }
 }
 

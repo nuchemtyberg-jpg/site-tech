@@ -57,7 +57,9 @@ import {
   FolderInput,
   Info,
   FileType,
-  HardDrive
+  HardDrive,
+  Settings,
+  Mail
 } from "lucide-react";
 import { 
   DropdownMenu, 
@@ -110,6 +112,7 @@ import { AddressAutocomplete } from "@/components/AddressAutocomplete";
 import { DailyReportsTab } from "@/components/DailyReportsTab";
 import { logRouteMount, logRouteUnmount } from "@/lib/debugPerf";
 import { HardHat } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 interface FingercheckJob {
   code: string;
@@ -257,11 +260,102 @@ export default function ProjectDetails() {
 
   const currentMapping = projectMappings.length > 0 ? projectMappings[0] : null;
 
+  interface DailyReportRecipient {
+    id: number;
+    projectId: number;
+    email: string;
+    name: string | null;
+    createdAt: string | null;
+  }
+
+  const { data: recipients = [] } = useQuery<DailyReportRecipient[]>({
+    queryKey: ["/api/projects", projectId, "daily-report-recipients"],
+    queryFn: async () => {
+      const res = await fetch(`/api/projects/${projectId}/daily-report-recipients`, { credentials: "include" });
+      if (!res.ok) return [];
+      return res.json();
+    },
+  });
+
+  const createRecipientMutation = useMutation({
+    mutationFn: async (data: { email: string; name?: string }) => {
+      const res = await apiRequest("POST", `/api/projects/${projectId}/daily-report-recipients`, data);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "daily-report-recipients"] });
+      toast({ title: "Recipient added successfully" });
+      setNewRecipientEmail("");
+      setNewRecipientName("");
+    },
+    onError: () => {
+      toast({ title: "Failed to add recipient", variant: "destructive" });
+    },
+  });
+
+  const deleteRecipientMutation = useMutation({
+    mutationFn: async (id: number) => {
+      await apiRequest("DELETE", `/api/daily-report-recipients/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "daily-report-recipients"] });
+      toast({ title: "Recipient removed" });
+      setDeleteRecipientId(null);
+    },
+    onError: () => {
+      toast({ title: "Failed to remove recipient", variant: "destructive" });
+    },
+  });
+
+  const [newRecipientEmail, setNewRecipientEmail] = useState("");
+  const [newRecipientName, setNewRecipientName] = useState("");
+  const [deleteRecipientId, setDeleteRecipientId] = useState<number | null>(null);
+  const [settingsFingercheckJob, setSettingsFingercheckJob] = useState<string>("none");
+  const [isSavingFingercheck, setIsSavingFingercheck] = useState(false);
+
+  useEffect(() => {
+    setSettingsFingercheckJob(currentMapping?.fingercheckJobCode || "none");
+  }, [currentMapping]);
+
   useEffect(() => {
     if (isEditOpen) {
       setSelectedFingercheckJob(currentMapping?.fingercheckJobCode || "none");
     }
   }, [isEditOpen, currentMapping]);
+
+  const handleSaveFingercheckMapping = async () => {
+    setIsSavingFingercheck(true);
+    try {
+      if (settingsFingercheckJob !== (currentMapping?.fingercheckJobCode || "none")) {
+        if (currentMapping) {
+          await apiRequest("DELETE", `/api/project-mappings/${currentMapping.id}`);
+        }
+        if (settingsFingercheckJob !== "none") {
+          const selectedJob = fingercheckJobs.find(j => j.code === settingsFingercheckJob);
+          await apiRequest("POST", "/api/project-mappings", {
+            projectId,
+            fingercheckJobCode: settingsFingercheckJob,
+            fingercheckJobDescription: selectedJob?.description || null,
+          });
+        }
+        queryClient.invalidateQueries({ queryKey: ["/api/project-mappings/project", projectId] });
+        queryClient.invalidateQueries({ queryKey: ["/api/project-mappings"] });
+      }
+      toast({ title: "Fingercheck mapping updated" });
+    } catch {
+      toast({ title: "Failed to update Fingercheck mapping", variant: "destructive" });
+    } finally {
+      setIsSavingFingercheck(false);
+    }
+  };
+
+  const handleAddRecipient = () => {
+    if (!newRecipientEmail.trim()) return;
+    createRecipientMutation.mutate({
+      email: newRecipientEmail.trim(),
+      name: newRecipientName.trim() || undefined,
+    });
+  };
 
   const getStatusColor = (status: string) => {
     const statusObj = PROJECT_STATUSES.find(s => s.value === status);
@@ -306,26 +400,6 @@ export default function ProjectDetails() {
     const location = [data.streetAddress, data.city, data.state, data.zip].filter(Boolean).join(", ");
     const color = getStatusColor(data.status);
 
-    try {
-      if (selectedFingercheckJob !== (currentMapping?.fingercheckJobCode || "none")) {
-        if (currentMapping) {
-          await apiRequest("DELETE", `/api/project-mappings/${currentMapping.id}`);
-        }
-        if (selectedFingercheckJob !== "none") {
-          const selectedJob = fingercheckJobs.find(j => j.code === selectedFingercheckJob);
-          await apiRequest("POST", "/api/project-mappings", {
-            projectId,
-            fingercheckJobCode: selectedFingercheckJob,
-            fingercheckJobDescription: selectedJob?.description || null,
-          });
-        }
-        queryClient.invalidateQueries({ queryKey: ["/api/project-mappings/project", projectId] });
-        queryClient.invalidateQueries({ queryKey: ["/api/project-mappings"] });
-      }
-    } catch {
-      toast({ title: "Failed to update Fingercheck mapping", variant: "destructive" });
-    }
-
     updateProjectMutation.mutate(
       { id: projectId, ...data, location, color },
       {
@@ -354,7 +428,7 @@ export default function ProjectDetails() {
   const activeTab = useMemo(() => {
     const params = new URLSearchParams(search);
     const tab = params.get("tab");
-    return tab && ["tasks", "documents", "photos", "daily-reports", "communications", "rfis"].includes(tab) ? tab : "documents";
+    return tab && ["tasks", "documents", "photos", "daily-reports", "communications", "rfis", "settings"].includes(tab) ? tab : "documents";
   }, [search]);
 
   // Update URL when tab changes using wouter navigation
@@ -1504,6 +1578,9 @@ export default function ProjectDetails() {
                 <Button variant="outline" onClick={() => setIsEditOpen(true)} data-testid="button-edit-project" className="min-h-[44px] md:min-h-9">
                   <Pencil className="w-4 h-4 mr-2" /> Edit
                 </Button>
+                <Button variant="outline" size="icon" onClick={() => handleTabChange("settings")} data-testid="button-project-settings" className="min-h-[44px] min-w-[44px] md:min-h-9 md:min-w-9">
+                  <Settings className="w-4 h-4" />
+                </Button>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button variant="outline" size="icon" data-testid="button-project-menu" className="min-h-[44px] min-w-[44px] md:min-h-9 md:min-w-9">
@@ -1734,29 +1811,6 @@ export default function ProjectDetails() {
                     </FormItem>
                   )}
                 />
-
-                {fingercheckJobs.length > 0 && (
-                  <div className="space-y-2 border-t pt-4">
-                    <div className="flex items-center gap-2">
-                      <HardHat className="w-4 h-4 text-muted-foreground" />
-                      <Label className="text-sm font-medium">Fingercheck Job Mapping</Label>
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      Link this project to a Fingercheck job to track employee hours against it.
-                    </p>
-                    <Select value={selectedFingercheckJob} onValueChange={setSelectedFingercheckJob}>
-                      <SelectTrigger className="bg-white dark:bg-zinc-900 text-black dark:text-white" data-testid="select-fingercheck-job">
-                        <SelectValue placeholder="Select a Fingercheck job..." />
-                      </SelectTrigger>
-                      <SelectContent className="bg-white dark:bg-zinc-900 text-black dark:text-white">
-                        <SelectItem value="none">No mapping</SelectItem>
-                        {fingercheckJobs.map((job) => (
-                          <SelectItem key={job.code} value={job.code}>{job.description}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
 
                 <DialogFooter>
                   <Button type="button" variant="outline" onClick={() => setIsEditOpen(false)}>
@@ -2662,7 +2716,141 @@ export default function ProjectDetails() {
         <TabsContent value="rfis">
           {project && <RfiTab project={project} />}
         </TabsContent>
+
+        <TabsContent value="settings">
+          <div className="space-y-6 max-w-2xl">
+            {fingercheckJobs.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <HardHat className="w-5 h-5" />
+                    Fingercheck Job Mapping
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <p className="text-sm text-muted-foreground">
+                    Link this project to a Fingercheck job to track employee hours against it.
+                  </p>
+                  <Select value={settingsFingercheckJob} onValueChange={setSettingsFingercheckJob}>
+                    <SelectTrigger className="bg-white dark:bg-zinc-900 text-black dark:text-white" data-testid="select-settings-fingercheck-job">
+                      <SelectValue placeholder="Select a Fingercheck job..." />
+                    </SelectTrigger>
+                    <SelectContent className="bg-white dark:bg-zinc-900 text-black dark:text-white">
+                      <SelectItem value="none">No mapping</SelectItem>
+                      {fingercheckJobs.map((job) => (
+                        <SelectItem key={job.code} value={job.code}>{job.description}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    onClick={handleSaveFingercheckMapping}
+                    disabled={isSavingFingercheck}
+                    data-testid="button-save-fingercheck-mapping"
+                  >
+                    {isSavingFingercheck ? "Saving..." : "Save"}
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Mail className="w-5 h-5" />
+                  Daily Report Recipients
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <p className="text-sm text-muted-foreground">
+                  Email addresses that will automatically receive daily report PDFs when reports are signed
+                </p>
+                <div className="flex flex-col sm:flex-row items-start sm:items-end gap-3">
+                  <div className="grid gap-1.5 flex-1 w-full">
+                    <Label htmlFor="recipient-email"><span className="text-red-500">*</span> Email</Label>
+                    <Input
+                      id="recipient-email"
+                      type="email"
+                      placeholder="email@example.com"
+                      value={newRecipientEmail}
+                      onChange={(e) => setNewRecipientEmail(e.target.value)}
+                      data-testid="input-recipient-email"
+                      className="bg-white dark:bg-zinc-900 text-black dark:text-white"
+                    />
+                  </div>
+                  <div className="grid gap-1.5 flex-1 w-full">
+                    <Label htmlFor="recipient-name">Name</Label>
+                    <Input
+                      id="recipient-name"
+                      placeholder="John Doe"
+                      value={newRecipientName}
+                      onChange={(e) => setNewRecipientName(e.target.value)}
+                      data-testid="input-recipient-name"
+                      className="bg-white dark:bg-zinc-900 text-black dark:text-white"
+                    />
+                  </div>
+                  <Button
+                    onClick={handleAddRecipient}
+                    disabled={!newRecipientEmail.trim() || createRecipientMutation.isPending}
+                    data-testid="button-add-recipient"
+                    className="w-full sm:w-auto"
+                  >
+                    <Plus className="w-4 h-4 mr-2" />
+                    {createRecipientMutation.isPending ? "Adding..." : "Add"}
+                  </Button>
+                </div>
+
+                {recipients.length > 0 && (
+                  <div className="space-y-2 border-t border-border pt-4">
+                    {recipients.map((recipient) => (
+                      <div key={recipient.id} className="flex items-center justify-between gap-2 py-2 px-3 rounded-md bg-muted/50" data-testid={`recipient-row-${recipient.id}`}>
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium truncate" data-testid={`text-recipient-email-${recipient.id}`}>{recipient.email}</p>
+                          {recipient.name && (
+                            <p className="text-xs text-muted-foreground truncate" data-testid={`text-recipient-name-${recipient.id}`}>{recipient.name}</p>
+                          )}
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => setDeleteRecipientId(recipient.id)}
+                          data-testid={`button-delete-recipient-${recipient.id}`}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {recipients.length === 0 && (
+                  <p className="text-sm text-muted-foreground italic" data-testid="text-no-recipients">No recipients added yet</p>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
       </Tabs>
+
+      <AlertDialog open={deleteRecipientId !== null} onOpenChange={(open) => { if (!open) setDeleteRecipientId(null); }}>
+        <AlertDialogContent className="bg-white dark:bg-zinc-900 text-black dark:text-white">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove Recipient</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to remove this recipient? They will no longer receive daily report PDFs.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-cancel-delete-recipient">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => { if (deleteRecipientId) deleteRecipientMutation.mutate(deleteRecipientId); }}
+              data-testid="button-confirm-delete-recipient"
+            >
+              Remove
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* PDF Viewer with markup tools */}
       {viewingFile && isPdfFile(viewingFile.contentType) && (
