@@ -24,7 +24,7 @@ import {
   type User, type UpsertUser, type AuthorizedUser
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, and, or, isNull, sql, lt, ilike } from "drizzle-orm";
+import { eq, desc, asc, and, or, isNull, sql, lt, ilike } from "drizzle-orm";
 
 const PROJECT_EMAIL_DOMAIN = "updates.sitetechnj.com";
 
@@ -574,7 +574,7 @@ export class DatabaseStorage implements IStorage {
 
   // Report Tasks
   async getReportTasks(reportId: number): Promise<ReportTask[]> {
-    return await db.select().from(reportTasks).where(eq(reportTasks.reportId, reportId));
+    return await db.select().from(reportTasks).where(eq(reportTasks.reportId, reportId)).orderBy(asc(reportTasks.id));
   }
   async getReportTask(id: number): Promise<ReportTask | undefined> {
     const [task] = await db.select().from(reportTasks).where(eq(reportTasks.id, id));
@@ -598,7 +598,7 @@ export class DatabaseStorage implements IStorage {
 
   // Labor Entries
   async getLaborEntries(reportTaskId: number): Promise<LaborEntry[]> {
-    return await db.select().from(laborEntries).where(eq(laborEntries.reportTaskId, reportTaskId));
+    return await db.select().from(laborEntries).where(eq(laborEntries.reportTaskId, reportTaskId)).orderBy(asc(laborEntries.id));
   }
   async createLaborEntry(entry: InsertLaborEntry): Promise<LaborEntry> {
     const [record] = await db.insert(laborEntries).values(entry).returning();
@@ -614,7 +614,7 @@ export class DatabaseStorage implements IStorage {
 
   // Equipment Entries
   async getEquipmentEntries(reportTaskId: number): Promise<EquipmentEntry[]> {
-    return await db.select().from(equipmentEntries).where(eq(equipmentEntries.reportTaskId, reportTaskId));
+    return await db.select().from(equipmentEntries).where(eq(equipmentEntries.reportTaskId, reportTaskId)).orderBy(asc(equipmentEntries.id));
   }
   async createEquipmentEntry(entry: InsertEquipmentEntry): Promise<EquipmentEntry> {
     const [record] = await db.insert(equipmentEntries).values(entry).returning();
@@ -630,7 +630,7 @@ export class DatabaseStorage implements IStorage {
 
   // Report Task Photos
   async getReportTaskPhotos(reportTaskId: number): Promise<ReportTaskPhoto[]> {
-    return await db.select().from(reportTaskPhotos).where(eq(reportTaskPhotos.reportTaskId, reportTaskId));
+    return await db.select().from(reportTaskPhotos).where(eq(reportTaskPhotos.reportTaskId, reportTaskId)).orderBy(asc(reportTaskPhotos.id));
   }
   async createReportTaskPhoto(photo: InsertReportTaskPhoto): Promise<ReportTaskPhoto> {
     const [record] = await db.insert(reportTaskPhotos).values(photo).returning();
@@ -642,7 +642,7 @@ export class DatabaseStorage implements IStorage {
 
   // Deliveries
   async getDeliveries(reportId: number): Promise<Delivery[]> {
-    return await db.select().from(deliveries).where(eq(deliveries.reportId, reportId));
+    return await db.select().from(deliveries).where(eq(deliveries.reportId, reportId)).orderBy(asc(deliveries.id));
   }
   async getDelivery(id: number): Promise<Delivery | undefined> {
     const [delivery] = await db.select().from(deliveries).where(eq(deliveries.id, id));
@@ -663,7 +663,7 @@ export class DatabaseStorage implements IStorage {
 
   // Delivery Photos
   async getDeliveryPhotos(deliveryId: number): Promise<DeliveryPhoto[]> {
-    return await db.select().from(deliveryPhotos).where(eq(deliveryPhotos.deliveryId, deliveryId));
+    return await db.select().from(deliveryPhotos).where(eq(deliveryPhotos.deliveryId, deliveryId)).orderBy(asc(deliveryPhotos.id));
   }
   async createDeliveryPhoto(photo: InsertDeliveryPhoto): Promise<DeliveryPhoto> {
     const [record] = await db.insert(deliveryPhotos).values(photo).returning();
@@ -703,7 +703,7 @@ export class DatabaseStorage implements IStorage {
 
   // Folders (with soft delete)
   async getFolders(projectId: number): Promise<Folder[]> {
-    return await db.select().from(folders).where(and(eq(folders.projectId, projectId), isNull(folders.deletedAt)));
+    return await db.select().from(folders).where(and(eq(folders.projectId, projectId), isNull(folders.deletedAt))).orderBy(asc(folders.id));
   }
   async getFolder(id: number): Promise<Folder | undefined> {
     const [folder] = await db.select().from(folders).where(and(eq(folders.id, id), isNull(folders.deletedAt)));
@@ -713,11 +713,11 @@ export class DatabaseStorage implements IStorage {
     if (parentId === null) {
       return await db.select().from(folders).where(
         and(eq(folders.projectId, projectId), isNull(folders.parentId), isNull(folders.deletedAt))
-      );
+      ).orderBy(asc(folders.id));
     }
     return await db.select().from(folders).where(
       and(eq(folders.projectId, projectId), eq(folders.parentId, parentId), isNull(folders.deletedAt))
-    );
+    ).orderBy(asc(folders.id));
   }
   async getFolderPath(folderId: number): Promise<Array<{ id: number; name: string }>> {
     const path: Array<{ id: number; name: string }> = [];
@@ -756,7 +756,7 @@ export class DatabaseStorage implements IStorage {
 
   // Files (with soft delete)
   async getFiles(projectId: number): Promise<FileMetadata[]> {
-    return await db.select().from(files).where(and(eq(files.projectId, projectId), isNull(files.deletedAt)));
+    return await db.select().from(files).where(and(eq(files.projectId, projectId), isNull(files.deletedAt))).orderBy(asc(files.id));
   }
   async getFile(id: number): Promise<FileMetadata | undefined> {
     const [file] = await db.select().from(files).where(and(eq(files.id, id), isNull(files.deletedAt)));
@@ -896,7 +896,7 @@ export class DatabaseStorage implements IStorage {
 
   // New Daily Report Task Entries (with soft delete)
   async getDailyReportTaskEntries(reportId: number): Promise<DailyReportTaskEntry[]> {
-    return await db.select().from(dailyReportTaskEntries).where(and(eq(dailyReportTaskEntries.reportId, reportId), isNull(dailyReportTaskEntries.deletedAt)));
+    return await db.select().from(dailyReportTaskEntries).where(and(eq(dailyReportTaskEntries.reportId, reportId), isNull(dailyReportTaskEntries.deletedAt))).orderBy(asc(dailyReportTaskEntries.id));
   }
   async getDailyReportTaskEntry(id: number): Promise<DailyReportTaskEntry | undefined> {
     const [entry] = await db.select().from(dailyReportTaskEntries).where(and(eq(dailyReportTaskEntries.id, id), isNull(dailyReportTaskEntries.deletedAt)));
@@ -920,7 +920,7 @@ export class DatabaseStorage implements IStorage {
 
   // New Daily Report Labor Lines (with soft delete)
   async getDailyReportLaborLines(taskEntryId: number): Promise<DailyReportLaborLine[]> {
-    return await db.select().from(dailyReportLaborLines).where(and(eq(dailyReportLaborLines.taskEntryId, taskEntryId), isNull(dailyReportLaborLines.deletedAt)));
+    return await db.select().from(dailyReportLaborLines).where(and(eq(dailyReportLaborLines.taskEntryId, taskEntryId), isNull(dailyReportLaborLines.deletedAt))).orderBy(asc(dailyReportLaborLines.id));
   }
   async createDailyReportLaborLine(line: InsertDailyReportLaborLine): Promise<DailyReportLaborLine> {
     const [record] = await db.insert(dailyReportLaborLines).values(line).returning();
@@ -936,7 +936,7 @@ export class DatabaseStorage implements IStorage {
 
   // New Daily Report Equipment Lines (with soft delete)
   async getDailyReportEquipmentLines(taskEntryId: number): Promise<DailyReportEquipmentLine[]> {
-    return await db.select().from(dailyReportEquipmentLines).where(and(eq(dailyReportEquipmentLines.taskEntryId, taskEntryId), isNull(dailyReportEquipmentLines.deletedAt)));
+    return await db.select().from(dailyReportEquipmentLines).where(and(eq(dailyReportEquipmentLines.taskEntryId, taskEntryId), isNull(dailyReportEquipmentLines.deletedAt))).orderBy(asc(dailyReportEquipmentLines.id));
   }
   async createDailyReportEquipmentLine(line: InsertDailyReportEquipmentLine): Promise<DailyReportEquipmentLine> {
     const [record] = await db.insert(dailyReportEquipmentLines).values(line).returning();
@@ -952,7 +952,7 @@ export class DatabaseStorage implements IStorage {
 
   // New Daily Report Delivery Entries (with soft delete)
   async getDailyReportDeliveryEntries(reportId: number): Promise<DailyReportDeliveryEntry[]> {
-    return await db.select().from(dailyReportDeliveryEntries).where(and(eq(dailyReportDeliveryEntries.reportId, reportId), isNull(dailyReportDeliveryEntries.deletedAt)));
+    return await db.select().from(dailyReportDeliveryEntries).where(and(eq(dailyReportDeliveryEntries.reportId, reportId), isNull(dailyReportDeliveryEntries.deletedAt))).orderBy(asc(dailyReportDeliveryEntries.id));
   }
   async getDailyReportDeliveryEntry(id: number): Promise<DailyReportDeliveryEntry | undefined> {
     const [entry] = await db.select().from(dailyReportDeliveryEntries).where(and(eq(dailyReportDeliveryEntries.id, id), isNull(dailyReportDeliveryEntries.deletedAt)));
@@ -974,13 +974,13 @@ export class DatabaseStorage implements IStorage {
   // New Daily Report Photos (with soft delete)
   async getDailyReportPhotos(reportId?: number, taskEntryId?: number, deliveryEntryId?: number): Promise<DailyReportPhoto[]> {
     if (taskEntryId) {
-      return await db.select().from(dailyReportPhotos).where(and(eq(dailyReportPhotos.taskEntryId, taskEntryId), isNull(dailyReportPhotos.deletedAt)));
+      return await db.select().from(dailyReportPhotos).where(and(eq(dailyReportPhotos.taskEntryId, taskEntryId), isNull(dailyReportPhotos.deletedAt))).orderBy(asc(dailyReportPhotos.id));
     }
     if (deliveryEntryId) {
-      return await db.select().from(dailyReportPhotos).where(and(eq(dailyReportPhotos.deliveryEntryId, deliveryEntryId), isNull(dailyReportPhotos.deletedAt)));
+      return await db.select().from(dailyReportPhotos).where(and(eq(dailyReportPhotos.deliveryEntryId, deliveryEntryId), isNull(dailyReportPhotos.deletedAt))).orderBy(asc(dailyReportPhotos.id));
     }
     if (reportId) {
-      return await db.select().from(dailyReportPhotos).where(and(eq(dailyReportPhotos.reportId, reportId), isNull(dailyReportPhotos.deletedAt)));
+      return await db.select().from(dailyReportPhotos).where(and(eq(dailyReportPhotos.reportId, reportId), isNull(dailyReportPhotos.deletedAt))).orderBy(asc(dailyReportPhotos.id));
     }
     return [];
   }
@@ -992,7 +992,7 @@ export class DatabaseStorage implements IStorage {
         isNull(dailyReportPhotos.deliveryEntryId),
         isNull(dailyReportPhotos.deletedAt)
       )
-    );
+    ).orderBy(asc(dailyReportPhotos.id));
   }
   async createDailyReportPhoto(photo: InsertDailyReportPhoto): Promise<DailyReportPhoto> {
     const [record] = await db.insert(dailyReportPhotos).values(photo).returning();
@@ -1147,7 +1147,7 @@ export class DatabaseStorage implements IStorage {
 
   // Project Email Attachments
   async getProjectEmailAttachments(emailId: number): Promise<ProjectEmailAttachment[]> {
-    return await db.select().from(projectEmailAttachments).where(eq(projectEmailAttachments.emailId, emailId));
+    return await db.select().from(projectEmailAttachments).where(eq(projectEmailAttachments.emailId, emailId)).orderBy(asc(projectEmailAttachments.id));
   }
 
   async createProjectEmailAttachment(att: InsertProjectEmailAttachment): Promise<ProjectEmailAttachment> {
@@ -1242,7 +1242,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getProjectMappingsByProjectId(projectId: number): Promise<FingercheckProjectMapping[]> {
-    return db.select().from(fingercheckProjectMappings).where(eq(fingercheckProjectMappings.projectId, projectId));
+    return db.select().from(fingercheckProjectMappings).where(eq(fingercheckProjectMappings.projectId, projectId)).orderBy(asc(fingercheckProjectMappings.id));
   }
 
   async getProjectMappingByJobCode(jobCode: string): Promise<FingercheckProjectMapping | undefined> {
