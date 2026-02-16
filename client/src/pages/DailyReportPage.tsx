@@ -113,6 +113,16 @@ interface DeliveryEntry {
   photos: Photo[];
 }
 
+interface InspectionEntry {
+  id: number;
+  reportId: number;
+  inspectionType: string;
+  inspectionAuthority: string;
+  inspectorName: string | null;
+  passed: boolean | null;
+  photos: Photo[];
+}
+
 interface Photo {
   id: number;
   url: string;
@@ -140,6 +150,7 @@ interface ReportWithDetails {
   updatedAt: Date | null;
   taskEntries: TaskEntryWithDetails[];
   deliveryEntries: DeliveryEntry[];
+  inspectionEntries: InspectionEntry[];
   reportPhotos: Photo[];
   isLatestReport?: boolean;
 }
@@ -170,6 +181,7 @@ export default function DailyReportPage() {
   const [expandedTasks, setExpandedTasks] = useState<Set<number>>(new Set());
   const [deleteTaskEntryId, setDeleteTaskEntryId] = useState<number | null>(null);
   const [deleteDeliveryId, setDeleteDeliveryId] = useState<number | null>(null);
+  const [deleteInspectionId, setDeleteInspectionId] = useState<number | null>(null);
   const [showSignatureDialog, setShowSignatureDialog] = useState(false);
   const [signatureType, setSignatureType] = useState<'freehand' | 'typed'>('freehand');
   const [typedSignature, setTypedSignature] = useState('');
@@ -194,6 +206,7 @@ export default function DailyReportPage() {
   const [localEquipmentQuantities, setLocalEquipmentQuantities] = useState<Record<number, string>>({});
   const [localEquipmentHours, setLocalEquipmentHours] = useState<Record<number, string>>({});
   const [expandedDeliveries, setExpandedDeliveries] = useState<Set<number>>(new Set());
+  const [expandedInspections, setExpandedInspections] = useState<Set<number>>(new Set());
   const [localDeliveryVendors, setLocalDeliveryVendors] = useState<Record<number, string>>({});
   
   // Unsaved changes protection
@@ -629,9 +642,34 @@ export default function DailyReportPage() {
     },
   });
 
+  // Inspection mutations
+  const createInspectionMutation = useMutation({
+    mutationFn: async () => {
+      return apiRequest("POST", `/api/reports/${reportId}/inspection-entries`, { inspectionType: "", inspectionAuthority: "", passed: true });
+    },
+    onSuccess: () => refetchReport(),
+  });
+
+  const updateInspectionMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: number; data: any }) => {
+      return apiRequest("PUT", `/api/daily-report-inspection-entries/${id}`, data);
+    },
+    onSuccess: () => refetchReport(),
+  });
+
+  const deleteInspectionMutation = useMutation({
+    mutationFn: async (id: number) => {
+      return apiRequest("DELETE", `/api/daily-report-inspection-entries/${id}`);
+    },
+    onSuccess: () => {
+      refetchReport();
+      setDeleteInspectionId(null);
+    },
+  });
+
   // Photo mutations
   const createPhotoMutation = useMutation({
-    mutationFn: async (data: { taskEntryId?: number; deliveryEntryId?: number; url: string; cloudinaryPublicId?: string; cloudinaryUrl?: string; fileName?: string; takenAt?: string }) => {
+    mutationFn: async (data: { taskEntryId?: number; deliveryEntryId?: number; inspectionEntryId?: number; url: string; cloudinaryPublicId?: string; cloudinaryUrl?: string; fileName?: string; takenAt?: string }) => {
       return apiRequest("POST", `/api/daily-report-photos`, data);
     },
     onSuccess: () => refetchReport(),
@@ -852,6 +890,16 @@ export default function DailyReportPage() {
       newExpanded.add(deliveryId);
     }
     setExpandedDeliveries(newExpanded);
+  };
+
+  const toggleInspectionExpanded = (inspectionId: number) => {
+    const newExpanded = new Set(expandedInspections);
+    if (newExpanded.has(inspectionId)) {
+      newExpanded.delete(inspectionId);
+    } else {
+      newExpanded.add(inspectionId);
+    }
+    setExpandedInspections(newExpanded);
   };
 
   const handleAddTask = () => {
@@ -1691,6 +1739,203 @@ export default function DailyReportPage() {
           </div>
         )}
 
+        {/* Inspections Section - only show when inspections exist */}
+        {report.inspectionEntries && report.inspectionEntries.length > 0 && (
+          <div className="space-y-3">
+            <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide" data-testid="section-header-inspections">Inspections</h3>
+            {report.inspectionEntries.map((inspection) => (
+              <Card key={inspection.id}>
+                <div 
+                  className="cursor-pointer px-4 py-3"
+                  onClick={() => toggleInspectionExpanded(inspection.id)}
+                  data-testid={`inspection-entry-header-${inspection.id}`}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 min-w-0 flex-1">
+                      {expandedInspections.has(inspection.id) ? <ChevronUp className="h-4 w-4 shrink-0" /> : <ChevronDown className="h-4 w-4 shrink-0" />}
+                      <span className="font-medium text-foreground truncate">{inspection.inspectionType || 'New Inspection'}</span>
+                      <Badge variant={inspection.passed ? "default" : "destructive"}>
+                        {inspection.passed ? "Passed" : "Failed"}
+                      </Badge>
+                    </div>
+                    {!isCompleted && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setDeleteInspectionId(inspection.id);
+                        }}
+                        data-testid={`button-delete-inspection-${inspection.id}`}
+                      >
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
+                    )}
+                  </div>
+                </div>
+                {expandedInspections.has(inspection.id) && (
+                  <div className="px-4 pb-4 space-y-4">
+                    <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label>Inspection Type</Label>
+                        <Select
+                          value={inspection.inspectionType || '__custom__'}
+                          disabled={isCompleted}
+                          onValueChange={(value) => {
+                            if (value === '__custom__') {
+                              const custom = prompt("Enter custom inspection type:");
+                              if (custom) updateInspectionMutation.mutate({ id: inspection.id, data: { inspectionType: custom } });
+                            } else {
+                              updateInspectionMutation.mutate({ id: inspection.id, data: { inspectionType: value } });
+                            }
+                          }}
+                        >
+                          <SelectTrigger data-testid={`select-inspection-type-${inspection.id}`}>
+                            <SelectValue placeholder="Select type" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="Sewer removal">Sewer removal</SelectItem>
+                            <SelectItem value="Demo">Demo</SelectItem>
+                            <SelectItem value="Recharge">Recharge</SelectItem>
+                            {inspection.inspectionType && !["Sewer removal", "Demo", "Recharge"].includes(inspection.inspectionType) && (
+                              <SelectItem value={inspection.inspectionType}>{inspection.inspectionType}</SelectItem>
+                            )}
+                            <SelectItem value="__custom__">+ Add custom type...</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Inspection Authority</Label>
+                        <Select
+                          value={inspection.inspectionAuthority || '__custom__'}
+                          disabled={isCompleted}
+                          onValueChange={(value) => {
+                            if (value === '__custom__') {
+                              const custom = prompt("Enter custom authority:");
+                              if (custom) updateInspectionMutation.mutate({ id: inspection.id, data: { inspectionAuthority: custom } });
+                            } else {
+                              updateInspectionMutation.mutate({ id: inspection.id, data: { inspectionAuthority: value } });
+                            }
+                          }}
+                        >
+                          <SelectTrigger data-testid={`select-inspection-authority-${inspection.id}`}>
+                            <SelectValue placeholder="Select authority" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="Lakewood Township">Lakewood Township</SelectItem>
+                            <SelectItem value="Lakewood MUA">Lakewood MUA</SelectItem>
+                            {inspection.inspectionAuthority && !["Lakewood Township", "Lakewood MUA"].includes(inspection.inspectionAuthority) && (
+                              <SelectItem value={inspection.inspectionAuthority}>{inspection.inspectionAuthority}</SelectItem>
+                            )}
+                            <SelectItem value="__custom__">+ Add custom authority...</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                    <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label>Inspector Name</Label>
+                        <Input
+                          defaultValue={inspection.inspectorName ?? ''}
+                          key={`inspector-name-${inspection.id}-${inspection.inspectorName}`}
+                          disabled={isCompleted}
+                          onBlur={(e) => {
+                            const newValue = e.target.value;
+                            if (newValue !== (inspection.inspectorName ?? '')) {
+                              updateInspectionMutation.mutate({ id: inspection.id, data: { inspectorName: newValue } });
+                            }
+                          }}
+                          placeholder="Inspector name"
+                          data-testid={`input-inspector-name-${inspection.id}`}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Result</Label>
+                        <Select
+                          value={inspection.passed ? "passed" : "failed"}
+                          disabled={isCompleted}
+                          onValueChange={(value) => updateInspectionMutation.mutate({ id: inspection.id, data: { passed: value === "passed" } })}
+                        >
+                          <SelectTrigger data-testid={`select-inspection-result-${inspection.id}`}>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="passed">Passed</SelectItem>
+                            <SelectItem value="failed">Failed</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+
+                    {/* Photos Section */}
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <Label>Photos</Label>
+                        {!isCompleted && (
+                          <NativeFileUploader
+                            maxNumberOfFiles={50}
+                            accept="image/*"
+                            onUploadComplete={(uploadedFiles) => {
+                              uploadedFiles.forEach((file) => {
+                                createPhotoMutation.mutate({ 
+                                  inspectionEntryId: inspection.id, 
+                                  url: file.cloudinaryUrl,
+                                  cloudinaryPublicId: file.cloudinaryPublicId,
+                                  cloudinaryUrl: file.cloudinaryUrl,
+                                  fileName: file.name,
+                                  takenAt: file.takenAt?.toISOString(),
+                                });
+                              });
+                            }}
+                          >
+                            <Camera className="h-3 w-3 mr-1" /> Upload Photos
+                          </NativeFileUploader>
+                        )}
+                      </div>
+                      {inspection.photos && inspection.photos.length > 0 && (
+                        <div className="grid grid-cols-3 gap-2">
+                          {inspection.photos.map((photo) => (
+                            <div key={photo.id} className="relative group">
+                              <img
+                                src={getProxyUrl(photo.url)}
+                                alt={photo.caption || "Inspection photo"}
+                                className="w-full h-24 object-cover rounded border"
+                              />
+                              {!isCompleted && (
+                                <Button
+                                  variant="destructive"
+                                  size="icon"
+                                  className="absolute top-1 right-1 h-6 w-6 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity"
+                                  onClick={() => deletePhotoMutation.mutate(photo.id)}
+                                >
+                                  <X className="h-3 w-3" />
+                                </Button>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Collapse Button at Bottom */}
+                    <div className="flex justify-center pt-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => toggleInspectionExpanded(inspection.id)}
+                        data-testid={`button-collapse-inspection-${inspection.id}`}
+                        className="text-muted-foreground"
+                      >
+                        <ChevronUp className="h-4 w-4 mr-1" /> Collapse
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </Card>
+            ))}
+          </div>
+        )}
+
         {/* Report-Level Photos Section - only show when photos exist */}
         {report.reportPhotos && report.reportPhotos.length > 0 && (
           <div className="space-y-3">
@@ -1824,6 +2069,18 @@ export default function DailyReportPage() {
             >
               <Truck className="h-6 w-6" />
               <span className="text-sm">Delivery</span>
+            </Button>
+            <Button
+              variant="outline"
+              className="flex flex-col items-center gap-2 h-auto py-4"
+              onClick={() => {
+                setShowAddEntryDialog(false);
+                createInspectionMutation.mutate();
+              }}
+              data-testid="button-add-entry-inspection"
+            >
+              <CheckCircle className="h-6 w-6" />
+              <span className="text-sm">Inspection</span>
             </Button>
             <Button
               variant="outline"
@@ -1999,6 +2256,27 @@ export default function DailyReportPage() {
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
               onClick={() => deleteDeliveryId && deleteDeliveryMutation.mutate(deleteDeliveryId)}
+              className="bg-destructive text-destructive-foreground"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      
+      {/* Delete Inspection Confirmation */}
+      <AlertDialog open={!!deleteInspectionId} onOpenChange={() => setDeleteInspectionId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Inspection?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will remove the inspection entry and all associated photos from this report.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => deleteInspectionId && deleteInspectionMutation.mutate(deleteInspectionId)}
               className="bg-destructive text-destructive-foreground"
             >
               Delete

@@ -1,7 +1,7 @@
 import {
   projects, tasks, equipment, allocations, folders, files, photos, users, customers, dailyReports, maintenanceLogs, communications, taskStatusHistory, photoAlbums,
   reportTasks, laborEntries, equipmentEntries, reportTaskPhotos, deliveries, deliveryPhotos,
-  dailyReportTaskEntries, dailyReportLaborLines, dailyReportEquipmentLines, dailyReportDeliveryEntries, dailyReportPhotos,
+  dailyReportTaskEntries, dailyReportLaborLines, dailyReportEquipmentLines, dailyReportDeliveryEntries, dailyReportInspectionEntries, dailyReportPhotos,
   authorizedUsers,
   projectEmailConnections, projectEmails, projectEmailAttachments,
   fingercheckEmployees, fingercheckTimePunches, fingercheckProjectMappings,
@@ -9,7 +9,7 @@ import {
   type InsertProject, type InsertTask, type InsertEquipment, type InsertAllocation, type InsertFolder, type InsertFileMetadata, type InsertPhoto,
   type InsertCustomer, type InsertDailyReport, type InsertMaintenanceLog, type InsertCommunication, type InsertTaskStatusHistory, type InsertPhotoAlbum,
   type InsertReportTask, type InsertLaborEntry, type InsertEquipmentEntry, type InsertReportTaskPhoto, type InsertDelivery, type InsertDeliveryPhoto,
-  type InsertDailyReportTaskEntry, type InsertDailyReportLaborLine, type InsertDailyReportEquipmentLine, type InsertDailyReportDeliveryEntry, type InsertDailyReportPhoto,
+  type InsertDailyReportTaskEntry, type InsertDailyReportLaborLine, type InsertDailyReportEquipmentLine, type InsertDailyReportDeliveryEntry, type InsertDailyReportInspectionEntry, type InsertDailyReportPhoto,
   type InsertAuthorizedUser,
   type InsertProjectEmailConnection, type InsertProjectEmail, type InsertProjectEmailAttachment,
   type InsertFingercheckEmployee, type InsertFingercheckTimePunch, type InsertFingercheckProjectMapping,
@@ -17,7 +17,7 @@ import {
   type Project, type Task, type Equipment, type Allocation, type Folder, type FileMetadata, type Photo,
   type Customer, type DailyReport, type MaintenanceLog, type Communication, type TaskStatusHistory, type PhotoAlbum,
   type ReportTask, type LaborEntry, type EquipmentEntry, type ReportTaskPhoto, type Delivery, type DeliveryPhoto,
-  type DailyReportTaskEntry, type DailyReportLaborLine, type DailyReportEquipmentLine, type DailyReportDeliveryEntry, type DailyReportPhoto,
+  type DailyReportTaskEntry, type DailyReportLaborLine, type DailyReportEquipmentLine, type DailyReportDeliveryEntry, type DailyReportInspectionEntry, type DailyReportPhoto,
   type ProjectEmailConnection, type ProjectEmail, type ProjectEmailAttachment,
   type FingercheckEmployee, type FingercheckTimePunch, type FingercheckProjectMapping,
   type Rfi, type RfiResponse, type UserOutlookConnection,
@@ -214,8 +214,15 @@ export interface IStorage {
   updateDailyReportDeliveryEntry(id: number, entry: Partial<InsertDailyReportDeliveryEntry>): Promise<DailyReportDeliveryEntry>;
   deleteDailyReportDeliveryEntry(id: number): Promise<void>;
 
+  // New Daily Report Inspection Entries
+  getDailyReportInspectionEntries(reportId: number): Promise<DailyReportInspectionEntry[]>;
+  getDailyReportInspectionEntry(id: number): Promise<DailyReportInspectionEntry | undefined>;
+  createDailyReportInspectionEntry(entry: InsertDailyReportInspectionEntry): Promise<DailyReportInspectionEntry>;
+  updateDailyReportInspectionEntry(id: number, entry: Partial<InsertDailyReportInspectionEntry>): Promise<DailyReportInspectionEntry>;
+  deleteDailyReportInspectionEntry(id: number): Promise<void>;
+
   // New Daily Report Photos
-  getDailyReportPhotos(reportId?: number, taskEntryId?: number, deliveryEntryId?: number): Promise<DailyReportPhoto[]>;
+  getDailyReportPhotos(reportId?: number, taskEntryId?: number, deliveryEntryId?: number, inspectionEntryId?: number): Promise<DailyReportPhoto[]>;
   getReportLevelPhotos(reportId: number): Promise<DailyReportPhoto[]>;
   createDailyReportPhoto(photo: InsertDailyReportPhoto): Promise<DailyReportPhoto>;
   deleteDailyReportPhoto(id: number): Promise<void>;
@@ -971,13 +978,37 @@ export class DatabaseStorage implements IStorage {
     await db.update(dailyReportDeliveryEntries).set({ deletedAt: new Date() }).where(eq(dailyReportDeliveryEntries.id, id));
   }
 
+  // New Daily Report Inspection Entries (with soft delete)
+  async getDailyReportInspectionEntries(reportId: number): Promise<DailyReportInspectionEntry[]> {
+    return await db.select().from(dailyReportInspectionEntries).where(and(eq(dailyReportInspectionEntries.reportId, reportId), isNull(dailyReportInspectionEntries.deletedAt))).orderBy(asc(dailyReportInspectionEntries.id));
+  }
+  async getDailyReportInspectionEntry(id: number): Promise<DailyReportInspectionEntry | undefined> {
+    const [entry] = await db.select().from(dailyReportInspectionEntries).where(and(eq(dailyReportInspectionEntries.id, id), isNull(dailyReportInspectionEntries.deletedAt)));
+    return entry;
+  }
+  async createDailyReportInspectionEntry(entry: InsertDailyReportInspectionEntry): Promise<DailyReportInspectionEntry> {
+    const [record] = await db.insert(dailyReportInspectionEntries).values(entry).returning();
+    return record;
+  }
+  async updateDailyReportInspectionEntry(id: number, updates: Partial<InsertDailyReportInspectionEntry>): Promise<DailyReportInspectionEntry> {
+    const [record] = await db.update(dailyReportInspectionEntries).set(updates).where(eq(dailyReportInspectionEntries.id, id)).returning();
+    return record;
+  }
+  async deleteDailyReportInspectionEntry(id: number): Promise<void> {
+    await db.update(dailyReportPhotos).set({ deletedAt: new Date() }).where(eq(dailyReportPhotos.inspectionEntryId, id));
+    await db.update(dailyReportInspectionEntries).set({ deletedAt: new Date() }).where(eq(dailyReportInspectionEntries.id, id));
+  }
+
   // New Daily Report Photos (with soft delete)
-  async getDailyReportPhotos(reportId?: number, taskEntryId?: number, deliveryEntryId?: number): Promise<DailyReportPhoto[]> {
+  async getDailyReportPhotos(reportId?: number, taskEntryId?: number, deliveryEntryId?: number, inspectionEntryId?: number): Promise<DailyReportPhoto[]> {
     if (taskEntryId) {
       return await db.select().from(dailyReportPhotos).where(and(eq(dailyReportPhotos.taskEntryId, taskEntryId), isNull(dailyReportPhotos.deletedAt))).orderBy(asc(dailyReportPhotos.id));
     }
     if (deliveryEntryId) {
       return await db.select().from(dailyReportPhotos).where(and(eq(dailyReportPhotos.deliveryEntryId, deliveryEntryId), isNull(dailyReportPhotos.deletedAt))).orderBy(asc(dailyReportPhotos.id));
+    }
+    if (inspectionEntryId) {
+      return await db.select().from(dailyReportPhotos).where(and(eq(dailyReportPhotos.inspectionEntryId, inspectionEntryId), isNull(dailyReportPhotos.deletedAt))).orderBy(asc(dailyReportPhotos.id));
     }
     if (reportId) {
       return await db.select().from(dailyReportPhotos).where(and(eq(dailyReportPhotos.reportId, reportId), isNull(dailyReportPhotos.deletedAt))).orderBy(asc(dailyReportPhotos.id));
@@ -990,6 +1021,7 @@ export class DatabaseStorage implements IStorage {
         eq(dailyReportPhotos.reportId, reportId),
         isNull(dailyReportPhotos.taskEntryId),
         isNull(dailyReportPhotos.deliveryEntryId),
+        isNull(dailyReportPhotos.inspectionEntryId),
         isNull(dailyReportPhotos.deletedAt)
       )
     ).orderBy(asc(dailyReportPhotos.id));

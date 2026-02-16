@@ -45,6 +45,7 @@ Core entities, utilizing soft deletes with a `deletedAt` timestamp, include Proj
 - **Photo Management**: Organizes photos into albums, offers variable tile sizes, multi-select for bulk actions, and date-based grouping with EXIF data. Includes virtualized scrolling, cursor-based pagination, background image processing (thumbnails, WebP), BlurHash LQIP placeholders, client-side IndexedDB caching, and prefetching. Features tab-gated loading and smart thumbnail fallback for performance.
 - **Daily Report Weather Integration**: Open-Meteo geocoding and weather APIs provide local weather conditions.
 - **Daily Report Labor Integration**: Links to Fingercheck time tracking, allowing employees who punched into a project to be added to daily report tasks with role selection and hours input, validated against actual tracked hours.
+- **Daily Report Inspections**: Tracks inspection entries with type (Sewer removal, Demo, Recharge + custom), authority (Lakewood Township, Lakewood MUA + custom), inspector name, pass/fail status, and photos. Stored in `daily_report_inspection_entries` table. Photos linked via `inspection_entry_id` in `daily_report_photos`.
 - **Signature Capture**: Enables freehand or typed signatures for daily reports.
 - **Project Communications (Email Integration)**:
     - **Primary Method**: Each project receives an auto-generated email address (`{slug}-{id}@updates.sitetechnj.com`). Emails CC'd to this address are captured via a Mailgun inbound route webhook, with attachments stored in Replit Object Storage.

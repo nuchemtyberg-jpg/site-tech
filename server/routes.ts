@@ -478,12 +478,13 @@ export async function registerRoutes(
     // Fetch related data
     const taskEntries = await storage.getDailyReportTaskEntries(report.id);
     const deliveryEntries = await storage.getDailyReportDeliveryEntries(report.id);
+    const inspectionEntries = await storage.getDailyReportInspectionEntries(report.id);
     
     // For each task entry, get labor lines, equipment lines, photos, and snapshot bounds
     const taskEntriesWithDetails = await Promise.all(taskEntries.map(async (entry) => {
       const laborLines = await storage.getDailyReportLaborLines(entry.id);
       const equipmentLines = await storage.getDailyReportEquipmentLines(entry.id);
-      const photos = await storage.getDailyReportPhotos(undefined, entry.id, undefined);
+      const photos = await storage.getDailyReportPhotos(undefined, entry.id, undefined, undefined);
       const bounds = await storage.getTaskSnapshotBounds(
         report.projectId,
         entry.taskId,
@@ -502,7 +503,13 @@ export async function registerRoutes(
     
     // For each delivery entry, get photos
     const deliveryEntriesWithPhotos = await Promise.all(deliveryEntries.map(async (entry) => {
-      const photos = await storage.getDailyReportPhotos(undefined, undefined, entry.id);
+      const photos = await storage.getDailyReportPhotos(undefined, undefined, entry.id, undefined);
+      return { ...entry, photos };
+    }));
+    
+    // For each inspection entry, get photos
+    const inspectionEntriesWithPhotos = await Promise.all(inspectionEntries.map(async (entry) => {
+      const photos = await storage.getDailyReportPhotos(undefined, undefined, undefined, entry.id);
       return { ...entry, photos };
     }));
     
@@ -513,6 +520,7 @@ export async function registerRoutes(
       isLatestReport,
       taskEntries: taskEntriesWithDetails,
       deliveryEntries: deliveryEntriesWithPhotos,
+      inspectionEntries: inspectionEntriesWithPhotos,
       reportPhotos,
     });
   });
@@ -753,6 +761,7 @@ export async function registerRoutes(
       const project = await storage.getProject(report.projectId);
       const taskEntries = await storage.getDailyReportTaskEntries(reportId);
       const deliveryEntries = await storage.getDailyReportDeliveryEntries(reportId);
+      const inspectionEntries = await storage.getDailyReportInspectionEntries(reportId);
       
       // Load labor, equipment lines, and photos for each task entry
       const taskEntriesWithLines = await Promise.all(
@@ -760,7 +769,7 @@ export async function registerRoutes(
           ...entry,
           laborLines: await storage.getDailyReportLaborLines(entry.id),
           equipmentLines: await storage.getDailyReportEquipmentLines(entry.id),
-          photos: includePhotos ? await storage.getDailyReportPhotos(undefined, entry.id, undefined) : [],
+          photos: includePhotos ? await storage.getDailyReportPhotos(undefined, entry.id, undefined, undefined) : [],
         }))
       );
       
@@ -768,7 +777,15 @@ export async function registerRoutes(
       const deliveryEntriesWithPhotos = await Promise.all(
         deliveryEntries.map(async (entry) => ({
           ...entry,
-          photos: includePhotos ? await storage.getDailyReportPhotos(undefined, undefined, entry.id) : [],
+          photos: includePhotos ? await storage.getDailyReportPhotos(undefined, undefined, entry.id, undefined) : [],
+        }))
+      );
+      
+      // Load photos for inspection entries if including photos
+      const inspectionEntriesWithPhotos = await Promise.all(
+        inspectionEntries.map(async (entry) => ({
+          ...entry,
+          photos: includePhotos ? await storage.getDailyReportPhotos(undefined, undefined, undefined, entry.id) : [],
         }))
       );
       
@@ -1306,6 +1323,71 @@ export async function registerRoutes(
       }
       y -= 12;
       
+      // === INSPECTIONS ===
+      drawSectionHeader("INSPECTIONS");
+      
+      if (inspectionEntriesWithPhotos.length === 0) {
+        drawItalicText("No inspections recorded", margin + 12, y, 9);
+        y -= lineHeight;
+      } else {
+        for (const inspection of inspectionEntriesWithPhotos) {
+          addNewPageIfNeeded(50);
+          drawText(inspection.inspectionType || 'Unknown type', margin + 12, y, 10, true, darkText);
+          const passedText = inspection.passed ? "PASSED" : "FAILED";
+          const passedClr = inspection.passed ? successGreen : warningRed;
+          drawText(passedText, rightEdge - 10 - font.widthOfTextAtSize(passedText, 9), y, 9, true, passedClr);
+          y -= lineHeight + 2;
+          
+          drawText("Authority: ", margin + 15, y, 9, true, mediumText);
+          drawText(inspection.inspectionAuthority || '', margin + 75, y, 9, false, darkText);
+          y -= lineHeight;
+          
+          if (inspection.inspectorName) {
+            drawText("Inspector: ", margin + 15, y, 9, true, mediumText);
+            drawText(inspection.inspectorName, margin + 75, y, 9, false, darkText);
+            y -= lineHeight;
+          }
+          
+          if (inspection.photos && inspection.photos.length > 0) {
+            drawText("Photos:", margin + 15, y, 9, true, mediumText);
+            y -= lineHeight + 5;
+            const photoMaxWidth = 235;
+            const photoMaxHeight = 160;
+            const photoGap = 20;
+            for (let i = 0; i < inspection.photos.length; i += 2) {
+              const photosInRow: { image: any; width: number; height: number }[] = [];
+              for (let j = 0; j < 2 && i + j < inspection.photos.length; j++) {
+                const photo = inspection.photos[i + j];
+                try {
+                  const imageBytes = await getPhotoBytes(photo.url);
+                  if (!imageBytes) continue;
+                  let embeddedImage;
+                  try { embeddedImage = await pdfDoc.embedJpg(imageBytes); }
+                  catch { try { embeddedImage = await pdfDoc.embedPng(imageBytes); } catch { continue; } }
+                  const scale = Math.min(photoMaxWidth / embeddedImage.width, photoMaxHeight / embeddedImage.height);
+                  photosInRow.push({ image: embeddedImage, width: embeddedImage.width * scale, height: embeddedImage.height * scale });
+                } catch (err) { console.error("Failed to embed inspection photo:", err); }
+              }
+              if (photosInRow.length > 0) {
+                const maxRowHeight = Math.max(...photosInRow.map(p => p.height));
+                if (y - maxRowHeight < 80) { page = pdfDoc.addPage([pageWidth, pageHeight]); y = height - 50; addDraftWatermark(page); }
+                let xPos = margin + 15;
+                for (const p of photosInRow) {
+                  page.drawRectangle({ x: xPos - 2, y: y - p.height - 2, width: p.width + 4, height: p.height + 4, borderColor: tableBorder, borderWidth: 0.5, color: rgb(1, 1, 1) });
+                  page.drawImage(p.image, { x: xPos, y: y - p.height, width: p.width, height: p.height });
+                  xPos += p.width + photoGap;
+                }
+                y -= maxRowHeight + 12;
+              }
+            }
+          }
+          
+          y -= 5;
+          addNewPageIfNeeded();
+        }
+      }
+      y -= 12;
+      
       // === NOTES ===
       if (report.notes) {
         drawSectionHeader("NOTES");
@@ -1742,14 +1824,59 @@ export async function registerRoutes(
     res.status(204).send();
   });
 
+  // Daily Report Inspection Entries
+  app.post("/api/reports/:reportId/inspection-entries", isAuthenticated, isAuthorizedUser, async (req, res) => {
+    try {
+      const reportId = Number(req.params.reportId);
+      const report = await storage.getDailyReport(reportId);
+      if (!report) return res.status(404).json({ message: "Report not found" });
+      if (report.status === 'completed') return res.status(403).json({ message: "Cannot edit a completed report" });
+      
+      const entry = await storage.createDailyReportInspectionEntry({
+        reportId,
+        ...req.body,
+      });
+      res.status(201).json(entry);
+    } catch (err) {
+      console.error("Create inspection entry error:", err);
+      return res.status(500).json({ message: "Failed to create inspection entry" });
+    }
+  });
+
+  app.put("/api/daily-report-inspection-entries/:id", isAuthenticated, isAuthorizedUser, async (req, res) => {
+    try {
+      const entry = await storage.getDailyReportInspectionEntry(Number(req.params.id));
+      if (!entry) return res.status(404).json({ message: "Inspection entry not found" });
+      
+      const report = await storage.getDailyReport(entry.reportId);
+      if (report?.status === 'completed') return res.status(403).json({ message: "Cannot edit a completed report" });
+      
+      const updated = await storage.updateDailyReportInspectionEntry(Number(req.params.id), req.body);
+      res.json(updated);
+    } catch (err) {
+      return res.status(500).json({ message: "Failed to update inspection entry" });
+    }
+  });
+
+  app.delete("/api/daily-report-inspection-entries/:id", isAuthenticated, isAuthorizedUser, async (req, res) => {
+    const entry = await storage.getDailyReportInspectionEntry(Number(req.params.id));
+    if (!entry) return res.status(404).json({ message: "Inspection entry not found" });
+    
+    const report = await storage.getDailyReport(entry.reportId);
+    if (report?.status === 'completed') return res.status(403).json({ message: "Cannot delete from a completed report" });
+    
+    await storage.deleteDailyReportInspectionEntry(Number(req.params.id));
+    res.status(204).send();
+  });
+
   // Daily Report Photos
   app.post("/api/daily-report-photos", isAuthenticated, isAuthorizedUser, async (req, res) => {
     try {
-      const { reportId, taskEntryId, deliveryEntryId, url, caption, createdBy, createdByName, cloudinaryPublicId, cloudinaryUrl, fileName, takenAt } = req.body;
+      const { reportId, taskEntryId, deliveryEntryId, inspectionEntryId, url, caption, createdBy, createdByName, cloudinaryPublicId, cloudinaryUrl, fileName, takenAt } = req.body;
       
       // Validate that at least one reference is provided
-      if (!reportId && !taskEntryId && !deliveryEntryId) {
-        return res.status(400).json({ message: "Must provide reportId, taskEntryId, or deliveryEntryId" });
+      if (!reportId && !taskEntryId && !deliveryEntryId && !inspectionEntryId) {
+        return res.status(400).json({ message: "Must provide reportId, taskEntryId, deliveryEntryId, or inspectionEntryId" });
       }
       
       // Get the report and check if it's completed
@@ -1760,6 +1887,10 @@ export async function registerRoutes(
       }
       if (deliveryEntryId) {
         const entry = await storage.getDailyReportDeliveryEntry(deliveryEntryId);
+        if (entry) checkReportId = entry.reportId;
+      }
+      if (inspectionEntryId) {
+        const entry = await storage.getDailyReportInspectionEntry(inspectionEntryId);
         if (entry) checkReportId = entry.reportId;
       }
       
@@ -1775,6 +1906,7 @@ export async function registerRoutes(
         reportId,
         taskEntryId,
         deliveryEntryId,
+        inspectionEntryId,
         url,
         caption,
         createdBy,

@@ -241,18 +241,34 @@ export type DailyReportDeliveryEntry = typeof dailyReportDeliveryEntries.$inferS
 export type InsertDailyReportDeliveryEntry = z.infer<typeof insertDailyReportDeliveryEntrySchema>;
 
 // Daily Report Photos - Flexible photo storage for reports, task entries, or deliveries
+export const dailyReportInspectionEntries = pgTable("daily_report_inspection_entries", {
+  id: serial("id").primaryKey(),
+  reportId: integer("report_id").notNull(),
+  inspectionType: text("inspection_type").notNull(),
+  inspectionAuthority: text("inspection_authority").notNull(),
+  inspectorName: text("inspector_name"),
+  passed: boolean("passed").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+  deletedAt: timestamp("deleted_at"),
+});
+
+export const insertDailyReportInspectionEntrySchema = createInsertSchema(dailyReportInspectionEntries).omit({ id: true, createdAt: true, deletedAt: true });
+export type DailyReportInspectionEntry = typeof dailyReportInspectionEntries.$inferSelect;
+export type InsertDailyReportInspectionEntry = z.infer<typeof insertDailyReportInspectionEntrySchema>;
+
 export const dailyReportPhotos = pgTable("daily_report_photos", {
   id: serial("id").primaryKey(),
-  reportId: integer("report_id"), // Optional - for general report photos
-  taskEntryId: integer("task_entry_id"), // Optional - for task photos
-  deliveryEntryId: integer("delivery_entry_id"), // Optional - for delivery photos
+  reportId: integer("report_id"),
+  taskEntryId: integer("task_entry_id"),
+  deliveryEntryId: integer("delivery_entry_id"),
+  inspectionEntryId: integer("inspection_entry_id"),
   url: text("url").notNull(),
   caption: text("caption"),
-  takenAt: timestamp("taken_at"), // EXIF date when photo was taken
+  takenAt: timestamp("taken_at"),
   createdBy: text("created_by"),
   createdByName: text("created_by_name"),
   createdAt: timestamp("created_at").defaultNow(),
-  deletedAt: timestamp("deleted_at"), // Soft delete support
+  deletedAt: timestamp("deleted_at"),
 });
 
 export const insertDailyReportPhotoSchema = createInsertSchema(dailyReportPhotos).omit({ id: true, createdAt: true, deletedAt: true });
