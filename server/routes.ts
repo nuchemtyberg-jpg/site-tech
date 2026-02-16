@@ -672,7 +672,7 @@ export async function registerRoutes(
           }
           const pdfBuffer = Buffer.from(await pdfRes.arrayBuffer());
 
-          const { sendDailyReportEmail } = await import("./services/sendgridHelper");
+          const { sendDailyReportEmail } = await import("./services/dailyReportMailer");
           await sendDailyReportEmail(
             recipients.map(r => ({ email: r.email, name: r.name })),
             project.name,
