@@ -1347,6 +1347,12 @@ export async function registerRoutes(
             drawText(inspection.inspectorName, margin + 75, y, 9, false, darkText);
             y -= lineHeight;
           }
+
+          if (inspection.notes) {
+            drawText("Notes: ", margin + 15, y, 9, true, mediumText);
+            drawText(inspection.notes, margin + 75, y, 9, false, darkText);
+            y -= lineHeight;
+          }
           
           if (inspection.photos && inspection.photos.length > 0) {
             drawText("Photos:", margin + 15, y, 9, true, mediumText);

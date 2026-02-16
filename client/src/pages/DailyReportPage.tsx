@@ -119,6 +119,7 @@ interface InspectionEntry {
   inspectionType: string;
   inspectionAuthority: string;
   inspectorName: string | null;
+  notes: string | null;
   passed: boolean | null;
   photos: Photo[];
 }
@@ -1865,6 +1866,22 @@ export default function DailyReportPage() {
                             <SelectItem value="failed">Failed</SelectItem>
                           </SelectContent>
                         </Select>
+                      </div>
+                      <div className="space-y-2 md:col-span-2">
+                        <Label>Notes</Label>
+                        <Textarea
+                          key={`inspection-notes-${inspection.id}`}
+                          defaultValue={inspection.notes || ''}
+                          disabled={isCompleted}
+                          onBlur={(e) => {
+                            const newValue = e.target.value.trim();
+                            if (newValue !== (inspection.notes || '')) {
+                              updateInspectionMutation.mutate({ id: inspection.id, data: { notes: newValue } });
+                            }
+                          }}
+                          placeholder="Add inspection notes..."
+                          data-testid={`input-inspection-notes-${inspection.id}`}
+                        />
                       </div>
                     </div>
 
