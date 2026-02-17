@@ -2084,6 +2084,54 @@ export async function registerRoutes(
     res.status(204).send();
   });
 
+  // Schedule Entries
+  app.get(api.scheduleEntries.list.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
+    const list = await storage.getScheduleEntries();
+    res.json(list);
+  });
+
+  app.get(api.scheduleEntries.get.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
+    const entry = await storage.getScheduleEntry(Number(req.params.id));
+    if (!entry) return res.status(404).json({ message: "Schedule entry not found" });
+    res.json(entry);
+  });
+
+  app.post(api.scheduleEntries.create.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
+    try {
+      const input = api.scheduleEntries.create.input.parse(req.body);
+      const entry = await storage.createScheduleEntry(input);
+      res.status(201).json(entry);
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0].message });
+      }
+      throw err;
+    }
+  });
+
+  app.put(api.scheduleEntries.update.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
+    try {
+      const input = api.scheduleEntries.update.input.parse(req.body);
+      const updated = await storage.updateScheduleEntry(Number(req.params.id), input);
+      res.json(updated);
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0].message });
+      }
+      return res.status(404).json({ message: "Schedule entry not found" });
+    }
+  });
+
+  app.delete(api.scheduleEntries.delete.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
+    await storage.deleteScheduleEntry(Number(req.params.id));
+    res.status(204).send();
+  });
+
+  app.get(api.scheduleEntries.allocations.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
+    const list = await storage.getAllocationsByScheduleEntry(Number(req.params.id));
+    res.json(list);
+  });
+
   // Allocations
   app.get(api.allocations.list.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
     const list = await storage.getAllocations();

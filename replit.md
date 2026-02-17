@@ -36,7 +36,7 @@ Preferred communication style: Simple, everyday language.
 - **User Management**: Automatic user upsertion upon authentication.
 
 ### Data Models
-Core entities, utilizing soft deletes with a `deletedAt` timestamp, include Projects, Tasks, Equipment, Allocations, Customers, DailyReports, Photos, and Files.
+Core entities, utilizing soft deletes with a `deletedAt` timestamp, include Projects, Tasks, Equipment, Allocations, ScheduleEntries, Customers, DailyReports, Photos, and Files.
 
 ### Specific Features
 - **Address Autocomplete**: Utilizes OpenStreetMap's Nominatim API.
@@ -91,7 +91,15 @@ Core entities, utilizing soft deletes with a `deletedAt` timestamp, include Proj
 
 - **Admin Billing Tool**: Admin page at `/admin/billing` showing all 100% completed tasks across projects with completion dates, billing status tracking (`billedAt`, `billedBy` fields on tasks table), individual/bulk mark-as-billed, project grouping, filters (search, project, billed/unbilled), summary stats, and CSV export.
 
+- **Schedule Feature**: Full-featured project scheduling with `schedule_entries` table. Users can schedule unfinished tasks to dates with working-day duration (Mon-Fri, optionally including Sunday). Responsive calendar views: monthly on desktop, weekly on mobile. Resource allocation (Fingercheck employees and equipment) per schedule entry via updated `allocations` table with `scheduleEntryId` and `employeeId` fields. CRUD operations with delete confirmations. Multi-day task span rendering across working days (skips Saturday, optionally includes Sunday). Project color coding on entries.
+
 ## Recent Changes
+
+### 2026-02-17: Schedule Feature
+- **New `schedule_entries` table**: `taskId`, `projectId`, `startDate`, `duration`, `includeSunday`, `notes`, `createdBy`, soft delete.
+- **Updated `allocations` table**: Added `scheduleEntryId` and `employeeId` columns to link allocations to schedule entries and Fingercheck employees.
+- **API routes**: Full CRUD for schedule entries (`/api/schedule-entries`), plus allocations by schedule entry.
+- **Schedule page**: Responsive monthly/weekly calendar, add/edit/delete dialogs, resource allocation dialog, multi-day working-day spans.
 
 ### 2026-02-16: Mailgun Email Configuration & Auto-Email Fix
 - **Switched from SendGrid to Mailgun** for all outbound email (daily report auto-email). Removed `@sendgrid/mail` dependency.

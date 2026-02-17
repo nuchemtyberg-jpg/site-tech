@@ -2,7 +2,7 @@ import {
   projects, tasks, equipment, allocations, folders, files, photos, users, customers, dailyReports, maintenanceLogs, communications, taskStatusHistory, photoAlbums,
   reportTasks, laborEntries, equipmentEntries, reportTaskPhotos, deliveries, deliveryPhotos,
   dailyReportTaskEntries, dailyReportLaborLines, dailyReportEquipmentLines, dailyReportDeliveryEntries, dailyReportInspectionEntries, dailyReportPhotos,
-  authorizedUsers,
+  authorizedUsers, scheduleEntries,
   projectEmailConnections, projectEmails, projectEmailAttachments,
   fingercheckEmployees, fingercheckTimePunches, fingercheckProjectMappings,
   rfis, rfiResponses, userOutlookConnections, projectDailyReportRecipients,
@@ -10,7 +10,7 @@ import {
   type InsertCustomer, type InsertDailyReport, type InsertMaintenanceLog, type InsertCommunication, type InsertTaskStatusHistory, type InsertPhotoAlbum,
   type InsertReportTask, type InsertLaborEntry, type InsertEquipmentEntry, type InsertReportTaskPhoto, type InsertDelivery, type InsertDeliveryPhoto,
   type InsertDailyReportTaskEntry, type InsertDailyReportLaborLine, type InsertDailyReportEquipmentLine, type InsertDailyReportDeliveryEntry, type InsertDailyReportInspectionEntry, type InsertDailyReportPhoto,
-  type InsertAuthorizedUser,
+  type InsertAuthorizedUser, type InsertScheduleEntry,
   type InsertProjectEmailConnection, type InsertProjectEmail, type InsertProjectEmailAttachment,
   type InsertFingercheckEmployee, type InsertFingercheckTimePunch, type InsertFingercheckProjectMapping,
   type InsertRfi, type InsertRfiResponse, type InsertProjectDailyReportRecipient,
@@ -21,6 +21,7 @@ import {
   type ProjectEmailConnection, type ProjectEmail, type ProjectEmailAttachment,
   type FingercheckEmployee, type FingercheckTimePunch, type FingercheckProjectMapping,
   type Rfi, type RfiResponse, type UserOutlookConnection, type ProjectDailyReportRecipient,
+  type ScheduleEntry,
   type User, type UpsertUser, type AuthorizedUser
 } from "@shared/schema";
 import { db } from "./db";
@@ -147,8 +148,16 @@ export interface IStorage {
   createCommunication(comm: InsertCommunication): Promise<Communication>;
   deleteCommunication(id: number): Promise<void>;
 
+  // Schedule Entries
+  getScheduleEntries(): Promise<ScheduleEntry[]>;
+  getScheduleEntry(id: number): Promise<ScheduleEntry | undefined>;
+  createScheduleEntry(entry: InsertScheduleEntry): Promise<ScheduleEntry>;
+  updateScheduleEntry(id: number, entry: Partial<InsertScheduleEntry>): Promise<ScheduleEntry>;
+  deleteScheduleEntry(id: number): Promise<void>;
+
   // Allocations
   getAllocations(): Promise<Allocation[]>;
+  getAllocationsByScheduleEntry(scheduleEntryId: number): Promise<Allocation[]>;
   createAllocation(allocation: InsertAllocation): Promise<Allocation>;
   updateAllocation(id: number, allocation: Partial<InsertAllocation>): Promise<Allocation>;
   deleteAllocation(id: number): Promise<void>;
@@ -758,9 +767,32 @@ export class DatabaseStorage implements IStorage {
     await db.update(communications).set({ deletedAt: new Date() }).where(eq(communications.id, id));
   }
 
+  // Schedule Entries (with soft delete)
+  async getScheduleEntries(): Promise<ScheduleEntry[]> {
+    return await db.select().from(scheduleEntries).where(isNull(scheduleEntries.deletedAt)).orderBy(scheduleEntries.startDate);
+  }
+  async getScheduleEntry(id: number): Promise<ScheduleEntry | undefined> {
+    const [entry] = await db.select().from(scheduleEntries).where(and(eq(scheduleEntries.id, id), isNull(scheduleEntries.deletedAt)));
+    return entry;
+  }
+  async createScheduleEntry(entry: InsertScheduleEntry): Promise<ScheduleEntry> {
+    const [created] = await db.insert(scheduleEntries).values(entry).returning();
+    return created;
+  }
+  async updateScheduleEntry(id: number, updates: Partial<InsertScheduleEntry>): Promise<ScheduleEntry> {
+    const [updated] = await db.update(scheduleEntries).set(updates).where(eq(scheduleEntries.id, id)).returning();
+    return updated;
+  }
+  async deleteScheduleEntry(id: number): Promise<void> {
+    await db.update(scheduleEntries).set({ deletedAt: new Date() }).where(eq(scheduleEntries.id, id));
+  }
+
   // Allocations (with soft delete)
   async getAllocations(): Promise<Allocation[]> {
     return await db.select().from(allocations).where(isNull(allocations.deletedAt)).orderBy(allocations.startDate);
+  }
+  async getAllocationsByScheduleEntry(scheduleEntryId: number): Promise<Allocation[]> {
+    return await db.select().from(allocations).where(and(eq(allocations.scheduleEntryId, scheduleEntryId), isNull(allocations.deletedAt)));
   }
   async createAllocation(insertAllocation: InsertAllocation): Promise<Allocation> {
     const [allocation] = await db.insert(allocations).values(insertAllocation).returning();

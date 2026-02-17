@@ -555,13 +555,36 @@ export const insertCommunicationSchema = createInsertSchema(communications).omit
 export type Communication = typeof communications.$inferSelect;
 export type InsertCommunication = z.infer<typeof insertCommunicationSchema>;
 
+// Schedule Entries - tasks placed on the schedule with duration
+export const scheduleEntries = pgTable("schedule_entries", {
+  id: serial("id").primaryKey(),
+  taskId: integer("task_id").notNull(),
+  projectId: integer("project_id").notNull(),
+  startDate: date("start_date").notNull(),
+  duration: integer("duration").notNull().default(1),
+  includeSunday: boolean("include_sunday").notNull().default(false),
+  notes: text("notes"),
+  createdBy: text("created_by"),
+  createdAt: timestamp("created_at").defaultNow(),
+  deletedAt: timestamp("deleted_at"),
+});
+
+export const insertScheduleEntrySchema = createInsertSchema(scheduleEntries).omit({ id: true, createdAt: true, deletedAt: true }).extend({
+  startDate: z.string().min(1, "Start date is required"),
+  duration: z.number().min(1, "Duration must be at least 1 day"),
+});
+export type ScheduleEntry = typeof scheduleEntries.$inferSelect;
+export type InsertScheduleEntry = z.infer<typeof insertScheduleEntrySchema>;
+
 // Schedule Allocations (Equipment/Crew to Tasks)
 export const allocations = pgTable("allocations", {
   id: serial("id").primaryKey(),
+  scheduleEntryId: integer("schedule_entry_id"),
   taskId: integer("task_id"),
   projectId: integer("project_id"),
   equipmentId: integer("equipment_id"),
   crewMember: text("crew_member"),
+  employeeId: integer("employee_id"),
   allocationType: text("allocation_type").notNull(), // equipment, crew
   startDate: date("start_date").notNull(),
   endDate: date("end_date").notNull(),

@@ -3,8 +3,9 @@ import {
   insertProjectSchema, insertTaskSchema, insertEquipmentSchema, insertAllocationSchema,
   insertCustomerSchema, insertDailyReportSchema, insertMaintenanceLogSchema, insertCommunicationSchema,
   insertPhotoAlbumSchema, insertReportTaskSchema, insertLaborEntrySchema, insertEquipmentEntrySchema, insertDeliverySchema,
+  insertScheduleEntrySchema,
   projects, tasks, equipment, allocations, customers, dailyReports, maintenanceLogs, communications, photoAlbums,
-  reportTasks, laborEntries, equipmentEntries, deliveries
+  reportTasks, laborEntries, equipmentEntries, deliveries, scheduleEntries
 } from './schema';
 
 export const errorSchemas = {
@@ -299,6 +300,59 @@ export const api = {
       path: '/api/communications/:id',
       responses: {
         204: z.void(),
+      },
+    },
+  },
+
+  // Schedule Entries
+  scheduleEntries: {
+    list: {
+      method: 'GET' as const,
+      path: '/api/schedule-entries',
+      responses: {
+        200: z.array(z.custom<typeof scheduleEntries.$inferSelect>()),
+      },
+    },
+    get: {
+      method: 'GET' as const,
+      path: '/api/schedule-entries/:id',
+      responses: {
+        200: z.custom<typeof scheduleEntries.$inferSelect>(),
+        404: errorSchemas.notFound,
+      },
+    },
+    create: {
+      method: 'POST' as const,
+      path: '/api/schedule-entries',
+      input: insertScheduleEntrySchema,
+      responses: {
+        201: z.custom<typeof scheduleEntries.$inferSelect>(),
+        400: errorSchemas.validation,
+      },
+    },
+    update: {
+      method: 'PUT' as const,
+      path: '/api/schedule-entries/:id',
+      input: insertScheduleEntrySchema.partial(),
+      responses: {
+        200: z.custom<typeof scheduleEntries.$inferSelect>(),
+        400: errorSchemas.validation,
+        404: errorSchemas.notFound,
+      },
+    },
+    delete: {
+      method: 'DELETE' as const,
+      path: '/api/schedule-entries/:id',
+      responses: {
+        204: z.void(),
+        404: errorSchemas.notFound,
+      },
+    },
+    allocations: {
+      method: 'GET' as const,
+      path: '/api/schedule-entries/:id/allocations',
+      responses: {
+        200: z.array(z.custom<typeof allocations.$inferSelect>()),
       },
     },
   },
