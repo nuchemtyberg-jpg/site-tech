@@ -30,7 +30,7 @@ type BillingTask = Task & { projectName: string };
 export default function Billing() {
   const [searchTerm, setSearchTerm] = useState("");
   const [projectFilter, setProjectFilter] = useState("all");
-  const [statusFilter, setStatusFilter] = useState<"all" | "unbilled" | "billed">("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | "unbilled" | "billed">("unbilled");
   const [selectedTasks, setSelectedTasks] = useState<Set<number>>(new Set());
   const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(new Set());
 
