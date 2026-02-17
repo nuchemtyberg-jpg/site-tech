@@ -185,9 +185,9 @@ export default function Billing() {
 
   if (isLoading) {
     return (
-      <div className="p-6 space-y-6">
+      <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
         <Skeleton className="h-8 w-48" />
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
           {[1, 2, 3, 4].map((i) => (
             <Skeleton key={i} className="h-24" />
           ))}
@@ -198,113 +198,127 @@ export default function Billing() {
   }
 
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between gap-4 flex-wrap">
+    <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
+      <div className="flex items-start sm:items-center justify-between gap-3 flex-wrap">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight" data-testid="text-billing-title">Billing</h1>
-          <p className="text-sm text-muted-foreground mt-1">Manage billing for completed tasks across all projects</p>
+          <h1 className="text-xl sm:text-2xl font-bold tracking-tight" data-testid="text-billing-title">Billing</h1>
+          <p className="text-xs sm:text-sm text-muted-foreground mt-1">Manage billing for completed tasks</p>
         </div>
-        <Button variant="outline" onClick={exportCSV} data-testid="button-export-csv">
+        <Button variant="outline" size="sm" onClick={exportCSV} data-testid="button-export-csv">
           <Download className="w-4 h-4 mr-2" />
           Export CSV
         </Button>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Total Completed</CardTitle>
-            <CheckCircle2 className="w-4 h-4 text-muted-foreground" />
+          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-1 sm:pb-2 p-3 sm:p-6">
+            <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground">Total Completed</CardTitle>
+            <CheckCircle2 className="w-4 h-4 text-muted-foreground hidden sm:block" />
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold" data-testid="text-total-completed">{stats.total}</div>
-            <p className="text-xs text-muted-foreground">tasks at 100%</p>
+          <CardContent className="p-3 pt-0 sm:p-6 sm:pt-0">
+            <div className="text-xl sm:text-2xl font-bold" data-testid="text-total-completed">{stats.total}</div>
+            <p className="text-[10px] sm:text-xs text-muted-foreground">tasks at 100%</p>
           </CardContent>
         </Card>
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Unbilled</CardTitle>
-            <Clock className="w-4 h-4 text-amber-500" />
+          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-1 sm:pb-2 p-3 sm:p-6">
+            <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground">Unbilled</CardTitle>
+            <Clock className="w-4 h-4 text-amber-500 hidden sm:block" />
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-amber-500" data-testid="text-unbilled-count">{stats.unbilledCount}</div>
-            <p className="text-xs text-muted-foreground">{stats.unbilledHours} est. hours</p>
+          <CardContent className="p-3 pt-0 sm:p-6 sm:pt-0">
+            <div className="text-xl sm:text-2xl font-bold text-amber-500" data-testid="text-unbilled-count">{stats.unbilledCount}</div>
+            <p className="text-[10px] sm:text-xs text-muted-foreground">{stats.unbilledHours} est. hours</p>
           </CardContent>
         </Card>
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Billed</CardTitle>
-            <DollarSign className="w-4 h-4 text-green-500" />
+          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-1 sm:pb-2 p-3 sm:p-6">
+            <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground">Billed</CardTitle>
+            <DollarSign className="w-4 h-4 text-green-500 hidden sm:block" />
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-green-500" data-testid="text-billed-count">{stats.billedCount}</div>
-            <p className="text-xs text-muted-foreground">{stats.billedHours} est. hours</p>
+          <CardContent className="p-3 pt-0 sm:p-6 sm:pt-0">
+            <div className="text-xl sm:text-2xl font-bold text-green-500" data-testid="text-billed-count">{stats.billedCount}</div>
+            <p className="text-[10px] sm:text-xs text-muted-foreground">{stats.billedHours} est. hours</p>
           </CardContent>
         </Card>
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Projects</CardTitle>
-            <Receipt className="w-4 h-4 text-muted-foreground" />
+          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-1 sm:pb-2 p-3 sm:p-6">
+            <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground">Projects</CardTitle>
+            <Receipt className="w-4 h-4 text-muted-foreground hidden sm:block" />
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold" data-testid="text-project-count">{projectNames.length}</div>
-            <p className="text-xs text-muted-foreground">with completed tasks</p>
+          <CardContent className="p-3 pt-0 sm:p-6 sm:pt-0">
+            <div className="text-xl sm:text-2xl font-bold" data-testid="text-project-count">{projectNames.length}</div>
+            <p className="text-[10px] sm:text-xs text-muted-foreground">with completed tasks</p>
           </CardContent>
         </Card>
       </div>
 
       <Card>
-        <CardHeader className="pb-4">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-            <div className="flex items-center gap-2 flex-wrap">
-              <Filter className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-              <div className="relative">
+        <CardHeader className="p-3 sm:p-6 pb-3 sm:pb-4">
+          <div className="flex flex-col gap-3">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-2">
+              <div className="relative flex-1 sm:flex-none">
                 <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input
                   placeholder="Search tasks or projects..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-8 w-[220px]"
+                  className="pl-8 sm:w-[220px]"
                   data-testid="input-search-billing"
                 />
               </div>
-              <Select value={projectFilter} onValueChange={setProjectFilter}>
-                <SelectTrigger className="w-[180px]" data-testid="select-project-filter">
-                  <SelectValue placeholder="All Projects" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Projects</SelectItem>
-                  {projectNames.map((name) => (
-                    <SelectItem key={name} value={name}>{name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as "all" | "unbilled" | "billed")}>
-                <SelectTrigger className="w-[140px]" data-testid="select-status-filter">
-                  <SelectValue placeholder="All Status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Status</SelectItem>
-                  <SelectItem value="unbilled">Unbilled</SelectItem>
-                  <SelectItem value="billed">Billed</SelectItem>
-                </SelectContent>
-              </Select>
+              <div className="flex gap-2">
+                <Select value={projectFilter} onValueChange={setProjectFilter}>
+                  <SelectTrigger className="flex-1 sm:flex-none sm:w-[180px]" data-testid="select-project-filter">
+                    <SelectValue placeholder="All Projects" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Projects</SelectItem>
+                    {projectNames.map((name) => (
+                      <SelectItem key={name} value={name}>{name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as "all" | "unbilled" | "billed")}>
+                  <SelectTrigger className="flex-1 sm:flex-none sm:w-[140px]" data-testid="select-status-filter">
+                    <SelectValue placeholder="All Status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Status</SelectItem>
+                    <SelectItem value="unbilled">Unbilled</SelectItem>
+                    <SelectItem value="billed">Billed</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
-            {unbilledSelected.length > 0 && (
-              <Button
-                size="sm"
-                onClick={() => bulkBillMutation.mutate(unbilledSelected)}
-                disabled={bulkBillMutation.isPending}
-                data-testid="button-bulk-bill"
-              >
-                {bulkBillMutation.isPending ? (
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                ) : (
-                  <DollarSign className="w-4 h-4 mr-2" />
-                )}
-                Mark {unbilledSelected.length} as Billed
-              </Button>
-            )}
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  checked={selectedTasks.size === filteredTasks.length && filteredTasks.length > 0}
+                  onCheckedChange={toggleSelectAll}
+                  data-testid="checkbox-select-all"
+                />
+                <span className="text-xs text-muted-foreground">
+                  {selectedTasks.size > 0 ? `${selectedTasks.size} selected` : "Select all"}
+                </span>
+              </div>
+              {unbilledSelected.length > 0 && (
+                <Button
+                  size="sm"
+                  onClick={() => bulkBillMutation.mutate(unbilledSelected)}
+                  disabled={bulkBillMutation.isPending}
+                  data-testid="button-bulk-bill"
+                >
+                  {bulkBillMutation.isPending ? (
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  ) : (
+                    <DollarSign className="w-4 h-4 mr-2" />
+                  )}
+                  <span className="hidden sm:inline">Mark {unbilledSelected.length} as Billed</span>
+                  <span className="sm:hidden">Bill ({unbilledSelected.length})</span>
+                </Button>
+              )}
+            </div>
           </div>
         </CardHeader>
         <CardContent className="p-0">
@@ -315,136 +329,240 @@ export default function Billing() {
               <p className="text-xs mt-1">Tasks will appear here when they reach 100% completion</p>
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-12">
-                      <Checkbox
-                        checked={selectedTasks.size === filteredTasks.length && filteredTasks.length > 0}
-                        onCheckedChange={toggleSelectAll}
-                        data-testid="checkbox-select-all"
-                      />
-                    </TableHead>
-                    <TableHead>Task</TableHead>
-                    <TableHead className="hidden md:table-cell">Assigned To</TableHead>
-                    <TableHead className="hidden lg:table-cell">Est. Hours</TableHead>
-                    <TableHead>Completed</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="w-[100px]">Action</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {groupedTasks.map(([projectName, projectTasks]) => {
-                    const isCollapsed = collapsedProjects.has(projectName);
-                    const projectUnbilled = projectTasks.filter((t) => !t.billedAt).length;
-                    const projectBilled = projectTasks.filter((t) => t.billedAt).length;
-                    const allProjectSelected = projectTasks.every((t) => selectedTasks.has(t.id));
+            <>
+              {/* Desktop table view */}
+              <div className="hidden md:block overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-12">
+                        <Checkbox
+                          checked={selectedTasks.size === filteredTasks.length && filteredTasks.length > 0}
+                          onCheckedChange={toggleSelectAll}
+                        />
+                      </TableHead>
+                      <TableHead>Task</TableHead>
+                      <TableHead>Assigned To</TableHead>
+                      <TableHead className="hidden lg:table-cell">Est. Hours</TableHead>
+                      <TableHead>Completed</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="w-[100px]">Action</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {groupedTasks.map(([projectName, projectTasks]) => {
+                      const isCollapsed = collapsedProjects.has(projectName);
+                      const projectUnbilled = projectTasks.filter((t) => !t.billedAt).length;
+                      const projectBilled = projectTasks.filter((t) => t.billedAt).length;
+                      const allProjectSelected = projectTasks.every((t) => selectedTasks.has(t.id));
 
-                    return (
-                      <Fragment key={`project-${projectName}`}>
-                        <TableRow
-                          key={`group-${projectName}`}
-                          className="bg-muted/50 cursor-pointer"
-                          onClick={() => toggleProjectCollapse(projectName)}
-                          data-testid={`row-project-group-${projectName}`}
-                        >
-                          <TableCell>
-                            <Checkbox
-                              checked={allProjectSelected}
-                              onCheckedChange={(e) => {
-                                e && e !== "indeterminate" ? null : null;
-                                toggleAllInProject(projectTasks);
-                              }}
-                              onClick={(e) => e.stopPropagation()}
-                              data-testid={`checkbox-project-${projectName}`}
-                            />
-                          </TableCell>
-                          <TableCell colSpan={4}>
-                            <div className="flex items-center gap-2">
-                              {isCollapsed ? (
-                                <ChevronRight className="w-4 h-4 text-muted-foreground" />
-                              ) : (
-                                <ChevronDown className="w-4 h-4 text-muted-foreground" />
-                              )}
-                              <span className="font-semibold">{projectName}</span>
-                              <Badge variant="secondary" className="text-xs">{projectTasks.length} tasks</Badge>
-                              {projectUnbilled > 0 && (
-                                <Badge variant="outline" className="text-xs text-amber-500 border-amber-500/30">
-                                  {projectUnbilled} unbilled
-                                </Badge>
-                              )}
-                              {projectBilled > 0 && (
-                                <Badge variant="outline" className="text-xs text-green-500 border-green-500/30">
-                                  {projectBilled} billed
-                                </Badge>
-                              )}
-                            </div>
-                          </TableCell>
-                          <TableCell colSpan={2} />
-                        </TableRow>
-                        {!isCollapsed && projectTasks.map((task) => (
-                          <TableRow key={task.id} data-testid={`row-task-${task.id}`}>
+                      return (
+                        <Fragment key={`project-${projectName}`}>
+                          <TableRow
+                            className="bg-muted/50 cursor-pointer"
+                            onClick={() => toggleProjectCollapse(projectName)}
+                            data-testid={`row-project-group-${projectName}`}
+                          >
                             <TableCell>
+                              <Checkbox
+                                checked={allProjectSelected}
+                                onCheckedChange={() => toggleAllInProject(projectTasks)}
+                                onClick={(e) => e.stopPropagation()}
+                                data-testid={`checkbox-project-${projectName}`}
+                              />
+                            </TableCell>
+                            <TableCell colSpan={4}>
+                              <div className="flex items-center gap-2 flex-wrap">
+                                {isCollapsed ? (
+                                  <ChevronRight className="w-4 h-4 text-muted-foreground" />
+                                ) : (
+                                  <ChevronDown className="w-4 h-4 text-muted-foreground" />
+                                )}
+                                <span className="font-semibold">{projectName}</span>
+                                <Badge variant="secondary" className="text-xs">{projectTasks.length} tasks</Badge>
+                                {projectUnbilled > 0 && (
+                                  <Badge variant="outline" className="text-xs text-amber-500 border-amber-500/30">
+                                    {projectUnbilled} unbilled
+                                  </Badge>
+                                )}
+                                {projectBilled > 0 && (
+                                  <Badge variant="outline" className="text-xs text-green-500 border-green-500/30">
+                                    {projectBilled} billed
+                                  </Badge>
+                                )}
+                              </div>
+                            </TableCell>
+                            <TableCell colSpan={2} />
+                          </TableRow>
+                          {!isCollapsed && projectTasks.map((task) => (
+                            <TableRow key={task.id} data-testid={`row-task-${task.id}`}>
+                              <TableCell>
+                                <Checkbox
+                                  checked={selectedTasks.has(task.id)}
+                                  onCheckedChange={() => toggleTaskSelection(task.id)}
+                                  data-testid={`checkbox-task-${task.id}`}
+                                />
+                              </TableCell>
+                              <TableCell>
+                                <div className="font-medium" data-testid={`text-task-title-${task.id}`}>{task.title}</div>
+                                {task.description && (
+                                  <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{task.description}</p>
+                                )}
+                              </TableCell>
+                              <TableCell>
+                                <span className="text-sm text-muted-foreground">{task.assignedTo || "—"}</span>
+                              </TableCell>
+                              <TableCell className="hidden lg:table-cell">
+                                <span className="text-sm">{task.estimatedHours || "—"}</span>
+                              </TableCell>
+                              <TableCell>
+                                <span className="text-sm" data-testid={`text-completed-date-${task.id}`}>
+                                  {task.completedAt ? format(new Date(task.completedAt), "MM/dd/yyyy") : "—"}
+                                </span>
+                              </TableCell>
+                              <TableCell>
+                                {task.billedAt ? (
+                                  <div>
+                                    <Badge variant="default" className="bg-green-600 text-white text-xs" data-testid={`badge-billed-${task.id}`}>
+                                      Billed
+                                    </Badge>
+                                    <p className="text-[10px] text-muted-foreground mt-1">
+                                      {format(new Date(task.billedAt), "MM/dd/yyyy")}
+                                      {task.billedBy && ` by ${task.billedBy}`}
+                                    </p>
+                                  </div>
+                                ) : (
+                                  <Badge variant="outline" className="text-amber-500 border-amber-500/30 text-xs" data-testid={`badge-unbilled-${task.id}`}>
+                                    Unbilled
+                                  </Badge>
+                                )}
+                              </TableCell>
+                              <TableCell>
+                                <Button
+                                  size="sm"
+                                  variant={task.billedAt ? "outline" : "default"}
+                                  onClick={() => toggleBilledMutation.mutate({ taskId: task.id, billed: !task.billedAt })}
+                                  disabled={toggleBilledMutation.isPending}
+                                  data-testid={`button-toggle-billed-${task.id}`}
+                                >
+                                  {task.billedAt ? "Unbill" : "Bill"}
+                                </Button>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </Fragment>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+
+              {/* Mobile card view */}
+              <div className="md:hidden divide-y">
+                {groupedTasks.map(([projectName, projectTasks]) => {
+                  const isCollapsed = collapsedProjects.has(projectName);
+                  const projectUnbilled = projectTasks.filter((t) => !t.billedAt).length;
+                  const projectBilled = projectTasks.filter((t) => t.billedAt).length;
+                  const allProjectSelected = projectTasks.every((t) => selectedTasks.has(t.id));
+
+                  return (
+                    <div key={`mobile-project-${projectName}`}>
+                      <div
+                        className="flex items-center gap-2 p-3 bg-muted/50 cursor-pointer"
+                        onClick={() => toggleProjectCollapse(projectName)}
+                        data-testid={`mobile-row-project-group-${projectName}`}
+                      >
+                        <Checkbox
+                          checked={allProjectSelected}
+                          onCheckedChange={() => toggleAllInProject(projectTasks)}
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                        {isCollapsed ? (
+                          <ChevronRight className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                        ) : (
+                          <ChevronDown className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <span className="font-semibold text-sm truncate block">{projectName}</span>
+                          <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                            <Badge variant="secondary" className="text-[10px]">{projectTasks.length}</Badge>
+                            {projectUnbilled > 0 && (
+                              <Badge variant="outline" className="text-[10px] text-amber-500 border-amber-500/30">
+                                {projectUnbilled} unbilled
+                              </Badge>
+                            )}
+                            {projectBilled > 0 && (
+                              <Badge variant="outline" className="text-[10px] text-green-500 border-green-500/30">
+                                {projectBilled} billed
+                              </Badge>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                      {!isCollapsed && (
+                        <div className="divide-y">
+                          {projectTasks.map((task) => (
+                            <div key={task.id} className="p-3 flex gap-2" data-testid={`mobile-row-task-${task.id}`}>
                               <Checkbox
                                 checked={selectedTasks.has(task.id)}
                                 onCheckedChange={() => toggleTaskSelection(task.id)}
-                                data-testid={`checkbox-task-${task.id}`}
+                                className="mt-0.5 flex-shrink-0"
+                                data-testid={`mobile-checkbox-task-${task.id}`}
                               />
-                            </TableCell>
-                            <TableCell>
-                              <div className="font-medium" data-testid={`text-task-title-${task.id}`}>{task.title}</div>
-                              {task.description && (
-                                <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{task.description}</p>
-                              )}
-                            </TableCell>
-                            <TableCell className="hidden md:table-cell">
-                              <span className="text-sm text-muted-foreground">{task.assignedTo || "—"}</span>
-                            </TableCell>
-                            <TableCell className="hidden lg:table-cell">
-                              <span className="text-sm">{task.estimatedHours || "—"}</span>
-                            </TableCell>
-                            <TableCell>
-                              <span className="text-sm" data-testid={`text-completed-date-${task.id}`}>
-                                {task.completedAt ? format(new Date(task.completedAt), "MM/dd/yyyy") : "—"}
-                              </span>
-                            </TableCell>
-                            <TableCell>
-                              {task.billedAt ? (
-                                <div>
-                                  <Badge variant="default" className="bg-green-600 text-white text-xs" data-testid={`badge-billed-${task.id}`}>
-                                    Billed
-                                  </Badge>
-                                  <p className="text-[10px] text-muted-foreground mt-1">
-                                    {format(new Date(task.billedAt), "MM/dd/yyyy")}
+                              <div className="flex-1 min-w-0 space-y-1.5">
+                                <div className="flex items-start justify-between gap-2">
+                                  <div className="min-w-0 flex-1">
+                                    <p className="font-medium text-sm leading-tight" data-testid={`text-task-title-${task.id}`}>{task.title}</p>
+                                    {task.description && (
+                                      <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{task.description}</p>
+                                    )}
+                                  </div>
+                                  {task.billedAt ? (
+                                    <Badge variant="default" className="bg-green-600 text-white text-[10px] flex-shrink-0" data-testid={`badge-billed-${task.id}`}>
+                                      Billed
+                                    </Badge>
+                                  ) : (
+                                    <Badge variant="outline" className="text-amber-500 border-amber-500/30 text-[10px] flex-shrink-0" data-testid={`badge-unbilled-${task.id}`}>
+                                      Unbilled
+                                    </Badge>
+                                  )}
+                                </div>
+                                <div className="flex items-center justify-between gap-2 flex-wrap">
+                                  <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                                    {task.assignedTo && <span>{task.assignedTo}</span>}
+                                    {task.estimatedHours && <span>{task.estimatedHours}h</span>}
+                                    {task.completedAt && (
+                                      <span data-testid={`text-completed-date-${task.id}`}>
+                                        {format(new Date(task.completedAt), "MM/dd/yy")}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <Button
+                                    size="sm"
+                                    variant={task.billedAt ? "outline" : "default"}
+                                    onClick={() => toggleBilledMutation.mutate({ taskId: task.id, billed: !task.billedAt })}
+                                    disabled={toggleBilledMutation.isPending}
+                                    data-testid={`button-toggle-billed-${task.id}`}
+                                  >
+                                    {task.billedAt ? "Unbill" : "Bill"}
+                                  </Button>
+                                </div>
+                                {task.billedAt && (
+                                  <p className="text-[10px] text-muted-foreground">
+                                    Billed {format(new Date(task.billedAt), "MM/dd/yy")}
                                     {task.billedBy && ` by ${task.billedBy}`}
                                   </p>
-                                </div>
-                              ) : (
-                                <Badge variant="outline" className="text-amber-500 border-amber-500/30 text-xs" data-testid={`badge-unbilled-${task.id}`}>
-                                  Unbilled
-                                </Badge>
-                              )}
-                            </TableCell>
-                            <TableCell>
-                              <Button
-                                size="sm"
-                                variant={task.billedAt ? "outline" : "default"}
-                                onClick={() => toggleBilledMutation.mutate({ taskId: task.id, billed: !task.billedAt })}
-                                disabled={toggleBilledMutation.isPending}
-                                data-testid={`button-toggle-billed-${task.id}`}
-                              >
-                                {task.billedAt ? "Unbill" : "Bill"}
-                              </Button>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </Fragment>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </div>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </>
           )}
         </CardContent>
       </Card>
