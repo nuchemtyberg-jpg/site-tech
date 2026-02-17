@@ -34,13 +34,13 @@ export function Layout({ children }: { children: React.ReactNode }) {
     { href: "/customers", label: "Customers", icon: Users },
     { href: "/schedule", label: "Schedule", icon: Calendar },
     { href: "/equipment", label: "Equipment", icon: Truck },
-    { href: "/employees", label: "Employees", icon: HardHat },
   ];
   
   const adminItems = [
     { href: "/admin/users", label: "User Management", icon: Shield },
     { href: "/admin/email-setup", label: "Email Setup", icon: Mail },
     { href: "/admin/billing", label: "Billing", icon: Receipt },
+    { href: "/employees", label: "Employees", icon: HardHat },
   ];
 
   return (
