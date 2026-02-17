@@ -89,6 +89,8 @@ Core entities, utilizing soft deletes with a `deletedAt` timestamp, include Proj
 - **Microsoft Graph API**: For Outlook email integration and RFI sending.
 - **Fingercheck REST API**: Employee sync and time tracking data.
 
+- **Admin Billing Tool**: Admin page at `/admin/billing` showing all 100% completed tasks across projects with completion dates, billing status tracking (`billedAt`, `billedBy` fields on tasks table), individual/bulk mark-as-billed, project grouping, filters (search, project, billed/unbilled), summary stats, and CSV export.
+
 ## Recent Changes
 
 ### 2026-02-16: Mailgun Email Configuration & Auto-Email Fix

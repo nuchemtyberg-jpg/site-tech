@@ -23,6 +23,7 @@ import PDFViewerPage from "@/pages/PDFViewerPage";
 import DailyReportPage from "@/pages/DailyReportPage";
 import UserManagement from "@/pages/UserManagement";
 import EmailSetup from "@/pages/EmailSetup";
+import Billing from "@/pages/Billing";
 import Employees from "@/pages/Employees";
 import Settings from "@/pages/Settings";
 import NotFound from "@/pages/not-found";
@@ -97,6 +98,7 @@ function Router() {
       <Route path="/settings" component={() => <ProtectedRoute component={Settings} />} />
       <Route path="/admin/users" component={() => <ProtectedRoute component={UserManagement} adminOnly />} />
       <Route path="/admin/email-setup" component={() => <ProtectedRoute component={EmailSetup} adminOnly />} />
+      <Route path="/admin/billing" component={() => <ProtectedRoute component={Billing} adminOnly />} />
       <Route component={NotFound} />
     </Switch>
   );

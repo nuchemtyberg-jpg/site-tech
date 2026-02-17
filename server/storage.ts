@@ -76,6 +76,12 @@ export interface IStorage {
   updateTask(id: number, task: Partial<InsertTask>): Promise<Task>;
   deleteTask(id: number): Promise<void>;
 
+  // Billing
+  getCompletedTasksForBilling(): Promise<(Task & { projectName: string })[]>;
+  markTaskBilled(taskId: number, billedBy: string): Promise<Task>;
+  markTaskUnbilled(taskId: number): Promise<Task>;
+  bulkMarkTasksBilled(taskIds: number[], billedBy: string): Promise<void>;
+
   // Task Status History
   getTaskStatusHistory(taskId: number): Promise<TaskStatusHistory[]>;
   createTaskStatusHistory(history: InsertTaskStatusHistory): Promise<TaskStatusHistory>;
@@ -515,6 +521,61 @@ export class DatabaseStorage implements IStorage {
   }
   async deleteTask(id: number): Promise<void> {
     await db.update(tasks).set({ deletedAt: new Date() }).where(eq(tasks.id, id));
+  }
+
+  // Billing
+  async getCompletedTasksForBilling(): Promise<(Task & { projectName: string })[]> {
+    const result = await db
+      .select({
+        id: tasks.id,
+        projectId: tasks.projectId,
+        title: tasks.title,
+        description: tasks.description,
+        scheduledDate: tasks.scheduledDate,
+        dueDate: tasks.dueDate,
+        status: tasks.status,
+        priority: tasks.priority,
+        percentComplete: tasks.percentComplete,
+        estimatedHours: tasks.estimatedHours,
+        assignedTo: tasks.assignedTo,
+        completedAt: tasks.completedAt,
+        billedAt: tasks.billedAt,
+        billedBy: tasks.billedBy,
+        createdAt: tasks.createdAt,
+        deletedAt: tasks.deletedAt,
+        projectName: projects.name,
+      })
+      .from(tasks)
+      .innerJoin(projects, eq(tasks.projectId, projects.id))
+      .where(
+        and(
+          eq(tasks.percentComplete, 100),
+          isNull(tasks.deletedAt),
+          isNull(projects.deletedAt)
+        )
+      )
+      .orderBy(desc(tasks.completedAt));
+    return result;
+  }
+
+  async markTaskBilled(taskId: number, billedBy: string): Promise<Task> {
+    const [task] = await db.update(tasks).set({ billedAt: new Date(), billedBy }).where(eq(tasks.id, taskId)).returning();
+    return task;
+  }
+
+  async markTaskUnbilled(taskId: number): Promise<Task> {
+    const [task] = await db.update(tasks).set({ billedAt: null, billedBy: null }).where(eq(tasks.id, taskId)).returning();
+    return task;
+  }
+
+  async bulkMarkTasksBilled(taskIds: number[], billedBy: string): Promise<void> {
+    if (taskIds.length === 0) return;
+    await db.update(tasks).set({ billedAt: new Date(), billedBy }).where(
+      and(
+        sql`${tasks.id} = ANY(${taskIds})`,
+        isNull(tasks.billedAt)
+      )
+    );
   }
 
   // Task Status History

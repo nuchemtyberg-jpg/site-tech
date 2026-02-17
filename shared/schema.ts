@@ -65,11 +65,14 @@ export const tasks = pgTable("tasks", {
   percentComplete: integer("percent_complete").notNull().default(0), // 0-100
   estimatedHours: integer("estimated_hours"),
   assignedTo: text("assigned_to"),
+  completedAt: timestamp("completed_at"),
+  billedAt: timestamp("billed_at"),
+  billedBy: text("billed_by"),
   createdAt: timestamp("created_at").defaultNow(),
   deletedAt: timestamp("deleted_at"), // Soft delete support
 });
 
-export const insertTaskSchema = createInsertSchema(tasks).omit({ id: true, createdAt: true, deletedAt: true }).extend({
+export const insertTaskSchema = createInsertSchema(tasks).omit({ id: true, createdAt: true, deletedAt: true, completedAt: true, billedAt: true, billedBy: true }).extend({
   title: z.string().min(1, "Task title is required"),
   dueDate: z.string().optional().nullable(),
   scheduledDate: z.string().optional().nullable(),

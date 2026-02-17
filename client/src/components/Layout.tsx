@@ -13,6 +13,7 @@ import {
   User,
   Shield,
   Mail,
+  Receipt,
   Settings,
   ChevronRight
 } from "lucide-react";
@@ -39,6 +40,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const adminItems = [
     { href: "/admin/users", label: "User Management", icon: Shield },
     { href: "/admin/email-setup", label: "Email Setup", icon: Mail },
+    { href: "/admin/billing", label: "Billing", icon: Receipt },
   ];
 
   return (

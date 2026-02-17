@@ -189,6 +189,58 @@ export async function registerRoutes(
     res.status(204).send();
   });
 
+  // Admin Billing
+  app.get("/api/admin/billing", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const completedTasks = await storage.getCompletedTasksForBilling();
+      res.json(completedTasks);
+    } catch (err) {
+      console.error("Error fetching billing tasks:", err);
+      res.status(500).json({ message: "Failed to fetch billing tasks" });
+    }
+  });
+
+  app.patch("/api/admin/billing/:taskId", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const taskId = Number(req.params.taskId);
+      const billingSchema = z.object({ billed: z.boolean() });
+      const { billed } = billingSchema.parse(req.body);
+      const user = req.user as User;
+      const billedBy = [user.firstName, user.lastName].filter(Boolean).join(' ') || user.email || 'Admin';
+
+      let task;
+      if (billed) {
+        task = await storage.markTaskBilled(taskId, billedBy);
+      } else {
+        task = await storage.markTaskUnbilled(taskId);
+      }
+      res.json(task);
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0].message });
+      }
+      console.error("Error updating billing status:", err);
+      res.status(500).json({ message: "Failed to update billing status" });
+    }
+  });
+
+  app.post("/api/admin/billing/bulk", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const bulkSchema = z.object({ taskIds: z.array(z.number().int().positive()).min(1) });
+      const { taskIds } = bulkSchema.parse(req.body);
+      const user = req.user as User;
+      const billedBy = [user.firstName, user.lastName].filter(Boolean).join(' ') || user.email || 'Admin';
+      await storage.bulkMarkTasksBilled(taskIds, billedBy);
+      res.json({ success: true, count: taskIds.length });
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0].message });
+      }
+      console.error("Error bulk updating billing status:", err);
+      res.status(500).json({ message: "Failed to bulk update billing status" });
+    }
+  });
+
   // Customers - all routes protected by authorization
   app.get(api.customers.list.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
     const customers = await storage.getCustomers();
@@ -324,8 +376,16 @@ export async function registerRoutes(
       const statusChanged = input.status !== undefined && input.status !== currentTask.status;
       const percentChanged = input.percentComplete !== undefined && input.percentComplete !== currentTask.percentComplete;
       
+      // Auto-set completedAt when task reaches 100% complete
+      const updateData: any = { ...input };
+      if (input.percentComplete === 100 && currentTask.percentComplete !== 100) {
+        updateData.completedAt = new Date();
+      } else if (input.percentComplete !== undefined && input.percentComplete < 100 && currentTask.percentComplete === 100) {
+        updateData.completedAt = null;
+      }
+
       // Update the task
-      const task = await storage.updateTask(taskId, input);
+      const task = await storage.updateTask(taskId, updateData);
       
       // Log status/percent changes if there were any (non-blocking - don't fail the update if history fails)
       if (statusChanged || percentChanged) {
