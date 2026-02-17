@@ -139,7 +139,7 @@ function AddScheduleEntryDialog({
   const [selectedProjectId, setSelectedProjectId] = useState<string>("");
   const [selectedTaskId, setSelectedTaskId] = useState<string>("");
   const [startDate, setStartDate] = useState(defaultDate);
-  const [duration, setDuration] = useState(1);
+  const [duration, setDuration] = useState<number | string>(1);
   const [includeSunday, setIncludeSunday] = useState(false);
   const [notes, setNotes] = useState("");
 
@@ -222,12 +222,13 @@ function AddScheduleEntryDialog({
       toast({ title: "Please select a task", variant: "destructive" });
       return;
     }
+    const numDuration = typeof duration === "string" ? 1 : duration;
     const task = tasks.find(t => t.id === Number(selectedTaskId));
     const data = {
       taskId: Number(selectedTaskId),
       projectId: task?.projectId || Number(selectedProjectId),
       startDate,
-      duration,
+      duration: numDuration,
       includeSunday,
       notes: notes || null,
     };
@@ -292,7 +293,7 @@ function AddScheduleEntryDialog({
           </div>
           <div className="space-y-2">
             <Label><span className="text-destructive">*</span> Duration (working days)</Label>
-            <Input type="number" min={1} max={365} value={duration} onChange={e => setDuration(Math.max(1, parseInt(e.target.value) || 1))} data-testid="input-duration" />
+            <Input type="number" min={1} max={365} value={duration} onChange={e => { const v = e.target.value; setDuration(v === "" ? "" : Math.max(1, parseInt(v) || 1)); }} data-testid="input-duration" />
           </div>
           <div className="flex items-center justify-between">
             <Label htmlFor="include-sunday">Include Sundays</Label>
