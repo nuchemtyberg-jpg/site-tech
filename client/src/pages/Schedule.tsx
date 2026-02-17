@@ -778,7 +778,7 @@ function MonthView(props: CalendarViewProps) {
   const title = format(props.currentDate, "MMMM yyyy");
 
   return (
-    <div className="space-y-4 h-[calc(100vh-8rem)] flex flex-col">
+    <div className="space-y-4 h-[calc(100dvh-6rem)] flex flex-col">
       <CalendarHeader
         title={title}
         onPrev={props.onPrev}
@@ -879,7 +879,7 @@ function WeekView(props: CalendarViewProps) {
   const title = `${format(startDate, "MMM d")} - ${format(addDays(startDate, 6), "MMM d, yyyy")}`;
 
   return (
-    <div className="space-y-4 h-[calc(100vh-8rem)] flex flex-col">
+    <div className="space-y-4 h-[calc(100dvh-6rem)] flex flex-col">
       <CalendarHeader
         title={title}
         onPrev={props.onPrev}
