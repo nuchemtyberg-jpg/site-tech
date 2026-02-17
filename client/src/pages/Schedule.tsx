@@ -339,12 +339,6 @@ function ResourceAllocationDialog({
   const [selectedEmployeeId, setSelectedEmployeeId] = useState("");
   const [selectedEquipmentId, setSelectedEquipmentId] = useState("");
 
-  if (!entry) return null;
-
-  const entryAllocations = allocations.filter(a => a.scheduleEntryId === entry.id);
-  const workingDays = getWorkingDays(entry.startDate, entry.duration, entry.includeSunday);
-  const endDate = workingDays[workingDays.length - 1] || entry.startDate;
-
   const createAllocationMutation = useMutation({
     mutationFn: async (data: any) => {
       const res = await apiRequest("POST", "/api/allocations", data);
@@ -370,6 +364,12 @@ function ResourceAllocationDialog({
       toast({ title: "Resource removed" });
     },
   });
+
+  if (!entry) return null;
+
+  const entryAllocations = allocations.filter(a => a.scheduleEntryId === entry.id);
+  const workingDays = getWorkingDays(entry.startDate, entry.duration, entry.includeSunday);
+  const endDate = workingDays[workingDays.length - 1] || entry.startDate;
 
   const handleAddAllocation = () => {
     if (allocationType === "crew" && selectedEmployeeId) {
