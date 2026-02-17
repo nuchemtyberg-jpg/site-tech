@@ -778,7 +778,7 @@ function MonthView(props: CalendarViewProps) {
   const title = format(props.currentDate, "MMMM yyyy");
 
   return (
-    <div className="space-y-4 h-[calc(100dvh-6rem)] flex flex-col">
+    <div className="space-y-4 flex-1 flex flex-col min-h-0">
       <CalendarHeader
         title={title}
         onPrev={props.onPrev}
@@ -787,7 +787,7 @@ function MonthView(props: CalendarViewProps) {
         onAdd={() => props.onAddToDate(format(new Date(), "yyyy-MM-dd"))}
       />
 
-      <div className="flex-1 bg-card border border-border rounded-md overflow-hidden flex flex-col">
+      <div className="flex-1 bg-card border border-border rounded-md overflow-hidden flex flex-col min-h-0">
         <div className="grid grid-cols-7 border-b border-border bg-muted/30">
           {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map(day => (
             <div key={day} className="p-2 text-center text-xs uppercase text-muted-foreground font-semibold border-r border-border last:border-r-0">
@@ -879,7 +879,7 @@ function WeekView(props: CalendarViewProps) {
   const title = `${format(startDate, "MMM d")} - ${format(addDays(startDate, 6), "MMM d, yyyy")}`;
 
   return (
-    <div className="space-y-4 h-[calc(100dvh-6rem)] flex flex-col">
+    <div className="space-y-4 flex-1 flex flex-col min-h-0">
       <CalendarHeader
         title={title}
         onPrev={props.onPrev}
@@ -888,7 +888,7 @@ function WeekView(props: CalendarViewProps) {
         onAdd={() => props.onAddToDate(format(new Date(), "yyyy-MM-dd"))}
       />
 
-      <div className="flex-1 overflow-y-auto space-y-2">
+      <div className="flex-1 overflow-y-auto space-y-2 min-h-0">
         {props.isLoading ? (
           Array.from({ length: 7 }).map((_, i) => (
             <Card key={i} className="p-3">
