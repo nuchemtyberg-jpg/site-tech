@@ -860,28 +860,7 @@ function GanttView(props: CalendarViewProps) {
 
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const bodyScrollRef = useRef<HTMLDivElement>(null);
-  const topScrollRef = useRef<HTMLDivElement>(null);
-  const scrollSyncLock = useRef(false);
-  const ganttBodyContainerRef = useRef<HTMLDivElement>(null);
-  const [ganttBodyWidth, setGanttBodyWidth] = useState(0);
-
-  useEffect(() => {
-    const el = ganttBodyContainerRef.current;
-    if (!el) return;
-    const ro = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        setGanttBodyWidth(entry.contentRect.width);
-      }
-    });
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
-
-  const SIDEBAR_WIDTH = 200;
-  const availableChartWidth = ganttBodyWidth > SIDEBAR_WIDTH ? ganttBodyWidth - SIDEBAR_WIDTH : 0;
-  const COL_WIDTH = availableChartWidth > 0 && allDays.length > 0
-    ? availableChartWidth / allDays.length
-    : 30;
+  const COL_WIDTH = 40;
 
   const [dragState, setDragState] = useState<{
     entryId: number;
@@ -982,20 +961,14 @@ function GanttView(props: CalendarViewProps) {
     }
   }, [createAllocationMutation]);
 
-  const initialScrollDone = useRef(false);
   useEffect(() => {
-    initialScrollDone.current = false;
-  }, [props.currentDate]);
-  useEffect(() => {
-    if (initialScrollDone.current) return;
-    if (bodyScrollRef.current && ganttBodyWidth > 0) {
+    if (bodyScrollRef.current) {
       const todayIndex = allDays.findIndex(d => isToday(d));
       if (todayIndex >= 0) {
         bodyScrollRef.current.scrollLeft = Math.max(0, todayIndex * COL_WIDTH - 200);
       }
-      initialScrollDone.current = true;
     }
-  }, [props.currentDate, COL_WIDTH]);
+  }, [props.currentDate]);
 
   const handleDragStart = useCallback((e: React.MouseEvent, entry: ScheduleEntry, barLeft: number) => {
     e.preventDefault();
@@ -1075,15 +1048,17 @@ function GanttView(props: CalendarViewProps) {
       />
 
       <div className="flex-1 flex min-h-0 border border-border rounded-md overflow-hidden bg-card">
-      <div className="flex-1 flex flex-col min-h-0 overflow-hidden" ref={ganttBodyContainerRef}>
+      <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
         <div className="flex border-b border-border">
-          <div className="w-[200px] flex-shrink-0 border-r border-border bg-muted/20">
+          <div className="w-[280px] flex-shrink-0 border-r border-border bg-muted/20">
             <div className="h-[52px] flex items-center px-3">
               <span className="text-xs font-semibold uppercase text-muted-foreground">Task / Project</span>
             </div>
           </div>
-          <div className="flex-1 overflow-hidden" ref={scrollContainerRef}>
-            <div className="flex" style={{ width: allDays.length * COL_WIDTH }}>
+          <div className="flex-1 overflow-x-auto" ref={scrollContainerRef} onScroll={(e) => {
+            if (bodyScrollRef.current) bodyScrollRef.current.scrollLeft = (e.target as HTMLElement).scrollLeft;
+          }}>
+            <div className="flex" style={{ minWidth: allDays.length * COL_WIDTH }}>
               {allDays.map(day => {
                 const isSat = getDay(day) === 6;
                 const isSun = getDay(day) === 0;
@@ -1113,7 +1088,7 @@ function GanttView(props: CalendarViewProps) {
         </div>
 
         <div className="flex-1 flex min-h-0 overflow-y-auto" data-testid="gantt-body">
-          <div className="w-[200px] flex-shrink-0 border-r border-border bg-muted/20" data-testid="gantt-sidebar">
+          <div className="w-[280px] flex-shrink-0 border-r border-border bg-muted/20" data-testid="gantt-sidebar">
             {props.isLoading ? (
               <div className="space-y-2 p-3">
                 {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-8 w-full" />)}
@@ -1198,12 +1173,14 @@ function GanttView(props: CalendarViewProps) {
 
           </div>
 
-          <div className="flex-1 min-w-0 overflow-x-hidden" ref={bodyScrollRef}>
+          <div className="flex-1 min-w-0 overflow-x-auto" ref={bodyScrollRef} onScroll={(e) => {
+            if (scrollContainerRef.current) scrollContainerRef.current.scrollLeft = (e.target as HTMLElement).scrollLeft;
+          }}>
             {(() => {
               const totalRows = projectEntries.reduce((sum, g) => sum + g.entries.length + 1, 0);
               const bodyHeight = Math.max(totalRows * ROW_HEIGHT, 100);
               return (
-                <div className="relative" style={{ width: allDays.length * COL_WIDTH, height: bodyHeight }}>
+                <div className="relative" style={{ minWidth: allDays.length * COL_WIDTH, height: bodyHeight }}>
                   {allDays.map(day => {
                     const isSat = getDay(day) === 6;
                     const isSun = getDay(day) === 0;
