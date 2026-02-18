@@ -12,7 +12,6 @@ import {
   X,
   User,
   Shield,
-  Mail,
   Receipt,
   Settings,
   ChevronRight,
@@ -39,7 +38,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
   
   const adminItems = [
     { href: "/admin/users", label: "User Management", icon: Shield },
-    { href: "/admin/email-setup", label: "Email Setup", icon: Mail },
     { href: "/admin/billing", label: "Billing", icon: Receipt },
     { href: "/admin/documents", label: "Documents", icon: Files },
     { href: "/employees", label: "Employees", icon: HardHat },
