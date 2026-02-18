@@ -2141,6 +2141,37 @@ export async function registerRoutes(
   app.post(api.allocations.create.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
     try {
       const input = api.allocations.create.input.parse(req.body);
+
+      const allAllocations = await storage.getAllocations();
+      const newStart = input.startDate;
+      const newEnd = input.endDate;
+
+      for (const existing of allAllocations) {
+        if (existing.deletedAt) continue;
+        const existsStart = existing.startDate;
+        const existsEnd = existing.endDate;
+        const datesOverlap = existsStart <= newEnd && existsEnd >= newStart;
+        if (!datesOverlap) continue;
+
+        if (input.allocationType === "crew" && existing.allocationType === "crew" && input.employeeId && existing.employeeId === input.employeeId) {
+          const entryForExisting = existing.scheduleEntryId ? await storage.getScheduleEntry(existing.scheduleEntryId) : null;
+          const projectForExisting = entryForExisting?.projectId ? (await storage.getProject(entryForExisting.projectId)) : null;
+          const projectName = projectForExisting?.name || "another project";
+          return res.status(409).json({
+            message: `${existing.crewMember || "This employee"} is already allocated from ${existsStart} to ${existsEnd} on ${projectName}`
+          });
+        }
+
+        if (input.allocationType === "equipment" && existing.allocationType === "equipment" && input.equipmentId && existing.equipmentId === input.equipmentId) {
+          const entryForExisting = existing.scheduleEntryId ? await storage.getScheduleEntry(existing.scheduleEntryId) : null;
+          const projectForExisting = entryForExisting?.projectId ? (await storage.getProject(entryForExisting.projectId)) : null;
+          const projectName = projectForExisting?.name || "another project";
+          return res.status(409).json({
+            message: `${existing.crewMember || "This equipment"} is already allocated from ${existsStart} to ${existsEnd} on ${projectName}`
+          });
+        }
+      }
+
       const allocation = await storage.createAllocation(input);
       res.status(201).json(allocation);
     } catch (err) {

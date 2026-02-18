@@ -351,7 +351,13 @@ function ResourceAllocationDialog({
       setSelectedEquipmentId("");
     },
     onError: (err: Error) => {
-      toast({ title: "Failed to allocate", description: err.message, variant: "destructive" });
+      let description = err.message;
+      try {
+        const jsonPart = description.substring(description.indexOf("{"));
+        const parsed = JSON.parse(jsonPart);
+        if (parsed.message) description = parsed.message;
+      } catch {}
+      toast({ title: "Failed to allocate", description, variant: "destructive" });
     },
   });
 
