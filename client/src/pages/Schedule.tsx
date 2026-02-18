@@ -1,7 +1,7 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { format, startOfWeek, addDays, parseISO, startOfMonth, endOfMonth, eachDayOfInterval, getDay, addMonths, subMonths, isToday, differenceInCalendarDays, isBefore, isAfter, max, min } from "date-fns";
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
-import { ChevronLeft, ChevronRight, Plus, Clock, Users, Wrench, Trash2, Edit, X, CalendarRange, GanttChart, GripVertical, ChevronDown } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, Clock, Users, Wrench, Trash2, Edit, X, CalendarRange, GanttChart, GripVertical, ChevronDown, ListChecks } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -841,7 +841,7 @@ function GanttView(props: CalendarViewProps) {
     return Array.from(grouped.values()).sort((a, b) => (a.project?.name || "").localeCompare(b.project?.name || ""));
   }, [props.scheduleEntries, props.getProjectById]);
 
-  const [unscheduledExpanded, setUnscheduledExpanded] = useState(true);
+  const [unscheduledExpanded, setUnscheduledExpanded] = useState(false);
 
   const unscheduledByProject = useMemo(() => {
     const scheduledTaskIds = new Set(props.scheduleEntries.map(e => e.taskId));
@@ -1111,7 +1111,7 @@ function GanttView(props: CalendarViewProps) {
               <div className="space-y-2 p-3">
                 {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-8 w-full" />)}
               </div>
-            ) : projectEntries.length === 0 && totalUnscheduled === 0 ? (
+            ) : projectEntries.length === 0 ? (
               <div className="p-4 text-center text-sm text-muted-foreground">No scheduled tasks</div>
             ) : (
               projectEntries.map(({ project, entries }) => (
@@ -1189,51 +1189,6 @@ function GanttView(props: CalendarViewProps) {
               ))
             )}
 
-            {totalUnscheduled > 0 && (
-              <div data-testid="unscheduled-tasks-panel">
-                <div
-                  className="px-3 text-xs font-bold uppercase text-muted-foreground bg-muted/50 border-y border-border flex items-center justify-between cursor-pointer hover-elevate"
-                  style={{ height: ROW_HEIGHT }}
-                  onClick={() => setUnscheduledExpanded(!unscheduledExpanded)}
-                  data-testid="unscheduled-tasks-toggle"
-                >
-                  <span className="flex items-center gap-1.5">
-                    <ChevronDown className={cn("w-3.5 h-3.5 transition-transform", !unscheduledExpanded && "-rotate-90")} />
-                    Unscheduled ({totalUnscheduled})
-                  </span>
-                </div>
-                {unscheduledExpanded && unscheduledByProject.map(({ project, tasks: uTasks }) => (
-                  <div key={project?.id || 0}>
-                    <div
-                      className="px-3 text-[10px] font-semibold uppercase text-muted-foreground bg-muted/30 border-b border-border truncate flex items-center"
-                      style={{ height: ROW_HEIGHT - 4, ...(project?.color ? { borderLeftColor: project.color, borderLeftWidth: 3 } : {}) }}
-                    >
-                      {project?.name || "Unknown Project"}
-                    </div>
-                    {uTasks.map(task => (
-                      <div
-                        key={task.id}
-                        className="group flex items-center gap-1 px-3 border-b border-border hover-elevate"
-                        style={{ height: ROW_HEIGHT }}
-                        data-testid={`unscheduled-task-${task.id}`}
-                      >
-                        <span className="flex-1 text-xs truncate text-muted-foreground">{task.title}</span>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="invisible group-hover:visible flex-shrink-0"
-                          onClick={() => props.onScheduleUnscheduledTask(task)}
-                          data-testid={`button-schedule-task-${task.id}`}
-                          title="Schedule this task"
-                        >
-                          <Plus className="w-3.5 h-3.5" />
-                        </Button>
-                      </div>
-                    ))}
-                  </div>
-                ))}
-              </div>
-            )}
           </div>
 
           <div className="flex-1 min-w-0 overflow-x-auto" ref={bodyScrollRef} onScroll={(e) => {
@@ -1385,6 +1340,69 @@ function GanttView(props: CalendarViewProps) {
           onDragEnd={() => setResourceDragItem(null)}
           onDirectAllocate={(item) => handleResourceDrop(selectedEntry, item)}
         />
+      )}
+
+      {totalUnscheduled > 0 && (
+        <div
+          className={cn(
+            "flex-shrink-0 border-l border-border flex flex-col min-h-0 transition-all duration-200",
+            unscheduledExpanded ? "w-[220px]" : "w-[36px]"
+          )}
+          data-testid="unscheduled-tasks-panel"
+        >
+          <div
+            className="p-2 border-b border-border flex items-center justify-center cursor-pointer hover-elevate"
+            onClick={() => setUnscheduledExpanded(!unscheduledExpanded)}
+            data-testid="unscheduled-tasks-toggle"
+            title={unscheduledExpanded ? "Collapse unscheduled tasks" : `Show ${totalUnscheduled} unscheduled tasks`}
+          >
+            {unscheduledExpanded ? (
+              <div className="flex items-center justify-between w-full gap-1">
+                <span className="text-xs font-semibold truncate">Unscheduled ({totalUnscheduled})</span>
+                <ChevronRight className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
+              </div>
+            ) : (
+              <div className="flex flex-col items-center gap-1">
+                <ListChecks className="w-4 h-4 text-muted-foreground" />
+                <Badge variant="secondary" className="text-[9px] px-1 py-0">{totalUnscheduled}</Badge>
+              </div>
+            )}
+          </div>
+          {unscheduledExpanded && (
+            <div className="flex-1 overflow-y-auto">
+              {unscheduledByProject.map(({ project, tasks: uTasks }) => (
+                <div key={project?.id || 0}>
+                  <div
+                    className="px-2 text-[10px] font-semibold uppercase text-muted-foreground bg-muted/30 border-b border-border truncate flex items-center"
+                    style={{ height: ROW_HEIGHT - 4, ...(project?.color ? { borderLeftColor: project.color, borderLeftWidth: 3 } : {}) }}
+                  >
+                    {project?.name || "Unknown Project"}
+                  </div>
+                  {uTasks.map(task => (
+                    <div
+                      key={task.id}
+                      className="group flex items-center gap-1 px-2 border-b border-border hover-elevate"
+                      style={{ height: ROW_HEIGHT }}
+                      data-testid={`unscheduled-task-${task.id}`}
+                    >
+                      <span className="flex-1 text-xs truncate text-muted-foreground">{task.title}</span>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="invisible group-hover:visible flex-shrink-0"
+                        onClick={() => props.onScheduleUnscheduledTask(task)}
+                        data-testid={`button-schedule-task-${task.id}`}
+                        title="Schedule this task"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       )}
       </div>
 
