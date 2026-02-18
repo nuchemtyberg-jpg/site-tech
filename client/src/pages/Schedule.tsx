@@ -1,7 +1,7 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { format, startOfWeek, addDays, parseISO, startOfMonth, endOfMonth, eachDayOfInterval, getDay, addMonths, subMonths, isSameMonth, isToday, differenceInCalendarDays, isBefore, isAfter, max, min } from "date-fns";
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
-import { ChevronLeft, ChevronRight, Plus, Clock, Users, Wrench, Trash2, Edit, X, CalendarDays, CalendarRange, GanttChart } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, Clock, Users, Wrench, Trash2, Edit, X, CalendarDays, CalendarRange, GanttChart, GripVertical, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -912,6 +912,7 @@ function MonthView(props: CalendarViewProps) {
 }
 
 function GanttView(props: CalendarViewProps) {
+  const { toast } = useToast();
   const monthStart = startOfMonth(props.currentDate);
   const monthEnd = endOfMonth(props.currentDate);
   const allDays = eachDayOfInterval({ start: monthStart, end: monthEnd });
@@ -944,6 +945,94 @@ function GanttView(props: CalendarViewProps) {
   const dragRef = useRef(dragState);
   dragRef.current = dragState;
   const wasDragged = useRef(false);
+
+  const [selectedEntry, setSelectedEntry] = useState<ScheduleEntry | null>(null);
+  const [resourceDragItem, setResourceDragItem] = useState<{
+    type: "crew" | "equipment";
+    employee?: FingercheckEmployee;
+    equipment?: Equipment;
+  } | null>(null);
+  const [dropTargetEntryId, setDropTargetEntryId] = useState<number | null>(null);
+  const dragCounterRef = useRef<Map<number, number>>(new Map());
+
+  const availableResources = useMemo(() => {
+    if (!selectedEntry) return { employees: [], equipment: [] };
+    const entryWorkingDays = getWorkingDays(selectedEntry.startDate, selectedEntry.duration, selectedEntry.includeSunday);
+    const entryEndDate = entryWorkingDays[entryWorkingDays.length - 1] || selectedEntry.startDate;
+    const entryStartDate = selectedEntry.startDate;
+
+    const availableEmployees = props.employees.filter(emp => {
+      if (emp.status !== "active") return false;
+      return !props.allocations.some(alloc => {
+        if (alloc.deletedAt) return false;
+        if (alloc.allocationType !== "crew") return false;
+        if (alloc.employeeId !== emp.employeeId) return false;
+        return alloc.startDate <= entryEndDate && alloc.endDate >= entryStartDate;
+      });
+    });
+
+    const availableEquipment = props.equipmentList.filter(eq => {
+      if (eq.deletedAt) return false;
+      return !props.allocations.some(alloc => {
+        if (alloc.deletedAt) return false;
+        if (alloc.allocationType !== "equipment") return false;
+        if (alloc.equipmentId !== eq.id) return false;
+        return alloc.startDate <= entryEndDate && alloc.endDate >= entryStartDate;
+      });
+    });
+
+    return { employees: availableEmployees, equipment: availableEquipment };
+  }, [selectedEntry, props.employees, props.equipmentList, props.allocations]);
+
+  const createAllocationMutation = useMutation({
+    mutationFn: async (data: any) => {
+      const res = await apiRequest("POST", "/api/allocations", data);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/allocations"] });
+      toast({ title: "Resource allocated" });
+    },
+    onError: (err: Error) => {
+      let description = err.message;
+      try {
+        const jsonPart = description.substring(description.indexOf("{"));
+        const parsed = JSON.parse(jsonPart);
+        if (parsed.message) description = parsed.message;
+      } catch {}
+      toast({ title: "Failed to allocate", description, variant: "destructive" });
+    },
+  });
+
+  const handleResourceDrop = useCallback((targetEntry: ScheduleEntry, item: typeof resourceDragItem) => {
+    if (!item) return;
+    const workingDays = getWorkingDays(targetEntry.startDate, targetEntry.duration, targetEntry.includeSunday);
+    const endDate = workingDays[workingDays.length - 1] || targetEntry.startDate;
+
+    if (item.type === "crew" && item.employee) {
+      createAllocationMutation.mutate({
+        scheduleEntryId: targetEntry.id,
+        taskId: targetEntry.taskId,
+        projectId: targetEntry.projectId,
+        allocationType: "crew",
+        employeeId: item.employee.employeeId,
+        crewMember: `${item.employee.firstName} ${item.employee.lastName}`,
+        startDate: targetEntry.startDate,
+        endDate,
+      });
+    } else if (item.type === "equipment" && item.equipment) {
+      createAllocationMutation.mutate({
+        scheduleEntryId: targetEntry.id,
+        taskId: targetEntry.taskId,
+        projectId: targetEntry.projectId,
+        allocationType: "equipment",
+        equipmentId: item.equipment.id,
+        crewMember: item.equipment.name,
+        startDate: targetEntry.startDate,
+        endDate,
+      });
+    }
+  }, [createAllocationMutation]);
 
   useEffect(() => {
     if (bodyScrollRef.current) {
@@ -1031,7 +1120,8 @@ function GanttView(props: CalendarViewProps) {
         isMobile={props.isMobile}
       />
 
-      <div className="flex-1 flex flex-col min-h-0 bg-card border border-border rounded-md overflow-hidden">
+      <div className="flex-1 flex min-h-0 border border-border rounded-md overflow-hidden bg-card">
+      <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
         <div className="flex border-b border-border">
           <div className="w-[200px] flex-shrink-0 border-r border-border bg-muted/20">
             <div className="h-[52px] flex items-center px-3">
@@ -1090,12 +1180,45 @@ function GanttView(props: CalendarViewProps) {
                     const task = props.getTaskById(entry.taskId);
                     const entryAllocations = props.allocations.filter(a => a.scheduleEntryId === entry.id);
                     const crewCount = entryAllocations.filter(a => a.allocationType === "crew").length;
+                    const isSelected = selectedEntry?.id === entry.id;
                     return (
                       <div
                         key={entry.id}
-                        className="group flex items-center gap-1 px-3 border-b border-border cursor-pointer hover-elevate"
+                        className={cn(
+                          "group flex items-center gap-1 px-3 border-b border-border cursor-pointer hover-elevate",
+                          isSelected && "bg-primary/10 border-l-2 border-l-primary",
+                          dropTargetEntryId === entry.id && "bg-primary/20"
+                        )}
                         style={{ height: ROW_HEIGHT }}
-                        onClick={() => props.onEditEntry(entry)}
+                        onClick={() => setSelectedEntry(isSelected ? null : entry)}
+                        onDragEnter={(e) => {
+                          if (resourceDragItem) {
+                            e.preventDefault();
+                            const c = (dragCounterRef.current.get(entry.id) || 0) + 1;
+                            dragCounterRef.current.set(entry.id, c);
+                            setDropTargetEntryId(entry.id);
+                          }
+                        }}
+                        onDragOver={(e) => {
+                          if (resourceDragItem) e.preventDefault();
+                        }}
+                        onDragLeave={() => {
+                          const c = (dragCounterRef.current.get(entry.id) || 0) - 1;
+                          dragCounterRef.current.set(entry.id, c);
+                          if (c <= 0) {
+                            dragCounterRef.current.delete(entry.id);
+                            if (dropTargetEntryId === entry.id) setDropTargetEntryId(null);
+                          }
+                        }}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          dragCounterRef.current.delete(entry.id);
+                          setDropTargetEntryId(null);
+                          if (resourceDragItem) {
+                            handleResourceDrop(entry, resourceDragItem);
+                            setResourceDragItem(null);
+                          }
+                        }}
                         data-testid={`gantt-task-label-${entry.id}`}
                       >
                         <span className="flex-1 text-xs truncate">{task?.title || "Unknown"}</span>
@@ -1105,8 +1228,8 @@ function GanttView(props: CalendarViewProps) {
                           </span>
                         )}
                         <div className="invisible group-hover:visible flex items-center gap-0.5 flex-shrink-0">
-                          <Button size="icon" variant="ghost" onClick={(e) => { e.stopPropagation(); props.onManageResources(entry); }} data-testid={`gantt-button-resources-${entry.id}`}>
-                            <Users className="w-3 h-3" />
+                          <Button size="icon" variant="ghost" onClick={(e) => { e.stopPropagation(); props.onEditEntry(entry); }} data-testid={`gantt-button-edit-${entry.id}`}>
+                            <Edit className="w-3 h-3" />
                           </Button>
                           <Button size="icon" variant="ghost" onClick={(e) => { e.stopPropagation(); props.onDeleteEntry(entry); }} data-testid={`gantt-button-delete-${entry.id}`}>
                             <Trash2 className="w-3 h-3" />
@@ -1178,7 +1301,42 @@ function GanttView(props: CalendarViewProps) {
                           const isDragging = dragState?.entryId === entry.id;
                           const dragOffset = isDragging ? dragState.currentDelta : 0;
                           return (
-                            <div key={entry.id} className="relative border-b border-border" style={{ height: ROW_HEIGHT }}>
+                            <div
+                              key={entry.id}
+                              className={cn(
+                                "relative border-b border-border",
+                                dropTargetEntryId === entry.id && "bg-primary/10"
+                              )}
+                              style={{ height: ROW_HEIGHT }}
+                              onDragEnter={(e) => {
+                                if (resourceDragItem) {
+                                  e.preventDefault();
+                                  const c = (dragCounterRef.current.get(entry.id) || 0) + 1;
+                                  dragCounterRef.current.set(entry.id, c);
+                                  setDropTargetEntryId(entry.id);
+                                }
+                              }}
+                              onDragOver={(e) => {
+                                if (resourceDragItem) e.preventDefault();
+                              }}
+                              onDragLeave={() => {
+                                const c = (dragCounterRef.current.get(entry.id) || 0) - 1;
+                                dragCounterRef.current.set(entry.id, c);
+                                if (c <= 0) {
+                                  dragCounterRef.current.delete(entry.id);
+                                  if (dropTargetEntryId === entry.id) setDropTargetEntryId(null);
+                                }
+                              }}
+                              onDrop={(e) => {
+                                e.preventDefault();
+                                dragCounterRef.current.delete(entry.id);
+                                setDropTargetEntryId(null);
+                                if (resourceDragItem) {
+                                  handleResourceDrop(entry, resourceDragItem);
+                                  setResourceDragItem(null);
+                                }
+                              }}
+                            >
                               <div
                                 className={cn(
                                   "absolute top-1 text-[10px] font-medium flex items-center px-1.5 truncate z-10 select-none",
@@ -1218,7 +1376,195 @@ function GanttView(props: CalendarViewProps) {
         </div>
       </div>
 
+      {selectedEntry && (
+        <GanttResourcePanel
+          entry={selectedEntry}
+          task={props.getTaskById(selectedEntry.taskId)}
+          project={props.getProjectById(selectedEntry.projectId)}
+          availableEmployees={availableResources.employees}
+          availableEquipment={availableResources.equipment}
+          allocations={props.allocations.filter(a => a.scheduleEntryId === selectedEntry.id)}
+          onClose={() => setSelectedEntry(null)}
+          onDragStart={setResourceDragItem}
+          onDragEnd={() => setResourceDragItem(null)}
+          onDirectAllocate={(item) => handleResourceDrop(selectedEntry, item)}
+        />
+      )}
+      </div>
+
       <SharedDialogs {...props} />
+    </div>
+  );
+}
+
+function GanttResourcePanel({
+  entry,
+  task,
+  project,
+  availableEmployees,
+  availableEquipment,
+  allocations,
+  onClose,
+  onDragStart,
+  onDragEnd,
+  onDirectAllocate,
+}: {
+  entry: ScheduleEntry;
+  task: Task | undefined;
+  project: Project | undefined;
+  availableEmployees: FingercheckEmployee[];
+  availableEquipment: Equipment[];
+  allocations: Allocation[];
+  onClose: () => void;
+  onDragStart: (item: { type: "crew" | "equipment"; employee?: FingercheckEmployee; equipment?: Equipment }) => void;
+  onDragEnd: () => void;
+  onDirectAllocate: (item: { type: "crew" | "equipment"; employee?: FingercheckEmployee; equipment?: Equipment }) => void;
+}) {
+  const { toast } = useToast();
+  const deleteAllocationMutation = useMutation({
+    mutationFn: async (id: number) => {
+      await apiRequest("DELETE", `/api/allocations/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/allocations"] });
+      toast({ title: "Resource removed" });
+    },
+  });
+
+  const workingDays = getWorkingDays(entry.startDate, entry.duration, entry.includeSunday);
+  const endDate = workingDays[workingDays.length - 1] || entry.startDate;
+  const crewAllocations = allocations.filter(a => a.allocationType === "crew");
+  const equipAllocations = allocations.filter(a => a.allocationType === "equipment");
+
+  return (
+    <div
+      className="w-[240px] flex-shrink-0 border-l border-border flex flex-col min-h-0"
+      data-testid="gantt-resource-panel"
+    >
+      <div className="p-3 border-b border-border flex items-center justify-between gap-2">
+        <div className="min-w-0">
+          <h3 className="text-xs font-bold truncate">{task?.title || "Task"}</h3>
+          <p className="text-[10px] text-muted-foreground truncate">{project?.name}</p>
+          <p className="text-[10px] text-muted-foreground">{format(parseISO(entry.startDate), "MMM d")} - {format(parseISO(endDate), "MMM d")}</p>
+        </div>
+        <Button size="icon" variant="ghost" onClick={onClose} data-testid="button-close-resource-panel">
+          <X className="w-4 h-4" />
+        </Button>
+      </div>
+
+      <div className="flex-1 overflow-y-auto p-3 space-y-4">
+        {(crewAllocations.length > 0 || equipAllocations.length > 0) && (
+          <div className="space-y-2">
+            <h4 className="text-[10px] font-bold uppercase text-muted-foreground">Assigned</h4>
+            {crewAllocations.map(alloc => (
+              <div key={alloc.id} className="flex items-center justify-between gap-1 py-1" data-testid={`panel-allocation-${alloc.id}`}>
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <Users className="w-3 h-3 text-muted-foreground flex-shrink-0" />
+                  <span className="text-xs truncate">{alloc.crewMember}</span>
+                </div>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  onClick={() => deleteAllocationMutation.mutate(alloc.id)}
+                  disabled={deleteAllocationMutation.isPending}
+                  data-testid={`panel-remove-allocation-${alloc.id}`}
+                >
+                  <X className="w-3 h-3 text-destructive" />
+                </Button>
+              </div>
+            ))}
+            {equipAllocations.map(alloc => (
+              <div key={alloc.id} className="flex items-center justify-between gap-1 py-1" data-testid={`panel-allocation-${alloc.id}`}>
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <Wrench className="w-3 h-3 text-muted-foreground flex-shrink-0" />
+                  <span className="text-xs truncate">{alloc.crewMember}</span>
+                </div>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  onClick={() => deleteAllocationMutation.mutate(alloc.id)}
+                  disabled={deleteAllocationMutation.isPending}
+                  data-testid={`panel-remove-allocation-${alloc.id}`}
+                >
+                  <X className="w-3 h-3 text-destructive" />
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="space-y-2">
+          <h4 className="text-[10px] font-bold uppercase text-muted-foreground">Available Employees</h4>
+          {availableEmployees.length === 0 ? (
+            <p className="text-[10px] text-muted-foreground py-1">No available employees for these dates</p>
+          ) : (
+            availableEmployees.map(emp => (
+              <div
+                key={emp.id}
+                draggable
+                onDragStart={(e) => {
+                  e.dataTransfer.effectAllowed = "copy";
+                  onDragStart({ type: "crew", employee: emp });
+                }}
+                onDragEnd={onDragEnd}
+                className="flex items-center gap-1.5 py-1.5 px-2 rounded-md border border-border cursor-grab active:cursor-grabbing hover-elevate select-none"
+                data-testid={`resource-employee-${emp.id}`}
+              >
+                <GripVertical className="w-3 h-3 text-muted-foreground flex-shrink-0" />
+                <Users className="w-3 h-3 text-muted-foreground flex-shrink-0" />
+                <span className="text-xs truncate flex-1">{emp.firstName} {emp.lastName}</span>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDirectAllocate({ type: "crew", employee: emp });
+                  }}
+                  data-testid={`button-allocate-employee-${emp.id}`}
+                >
+                  <Plus className="w-3 h-3" />
+                </Button>
+              </div>
+            ))
+          )}
+        </div>
+
+        <div className="space-y-2">
+          <h4 className="text-[10px] font-bold uppercase text-muted-foreground">Available Equipment</h4>
+          {availableEquipment.length === 0 ? (
+            <p className="text-[10px] text-muted-foreground py-1">No available equipment for these dates</p>
+          ) : (
+            availableEquipment.map(eq => (
+              <div
+                key={eq.id}
+                draggable
+                onDragStart={(e) => {
+                  e.dataTransfer.effectAllowed = "copy";
+                  onDragStart({ type: "equipment", equipment: eq });
+                }}
+                onDragEnd={onDragEnd}
+                className="flex items-center gap-1.5 py-1.5 px-2 rounded-md border border-border cursor-grab active:cursor-grabbing hover-elevate select-none"
+                data-testid={`resource-equipment-${eq.id}`}
+              >
+                <GripVertical className="w-3 h-3 text-muted-foreground flex-shrink-0" />
+                <Wrench className="w-3 h-3 text-muted-foreground flex-shrink-0" />
+                <span className="text-xs truncate flex-1">{eq.name}</span>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDirectAllocate({ type: "equipment", equipment: eq });
+                  }}
+                  data-testid={`button-allocate-equipment-${eq.id}`}
+                >
+                  <Plus className="w-3 h-3" />
+                </Button>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
     </div>
   );
 }
