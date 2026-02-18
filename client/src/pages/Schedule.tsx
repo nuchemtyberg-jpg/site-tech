@@ -1,7 +1,7 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { format, startOfWeek, addDays, parseISO, startOfMonth, endOfMonth, eachDayOfInterval, getDay, addMonths, subMonths, isSameMonth, isToday, differenceInCalendarDays, isBefore, isAfter, max, min } from "date-fns";
+import { format, startOfWeek, addDays, parseISO, startOfMonth, endOfMonth, eachDayOfInterval, getDay, addMonths, subMonths, isToday, differenceInCalendarDays, isBefore, isAfter, max, min } from "date-fns";
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
-import { ChevronLeft, ChevronRight, Plus, Clock, Users, Wrench, Trash2, Edit, X, CalendarDays, CalendarRange, GanttChart, GripVertical, ChevronDown } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, Clock, Users, Wrench, Trash2, Edit, X, CalendarRange, GanttChart, GripVertical, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -539,7 +539,7 @@ export default function Schedule() {
   const isMobile = useIsMobile();
 
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [viewMode, setViewMode] = useState<ViewMode>("month");
+  const [viewMode, setViewMode] = useState<ViewMode>("gantt");
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [addDialogDate, setAddDialogDate] = useState(format(new Date(), "yyyy-MM-dd"));
   const [editEntry, setEditEntry] = useState<ScheduleEntry | null>(null);
@@ -624,8 +624,8 @@ export default function Schedule() {
   const prevWeek = () => setCurrentDate(addDays(currentDate, -7));
   const goToday = () => setCurrentDate(new Date());
 
-  const onPrev = activeView === "month" ? prevMonth : activeView === "gantt" ? prevMonth : prevWeek;
-  const onNext = activeView === "month" ? nextMonth : activeView === "gantt" ? nextMonth : nextWeek;
+  const onPrev = activeView === "gantt" ? prevMonth : prevWeek;
+  const onNext = activeView === "gantt" ? nextMonth : nextWeek;
 
   const commonProps: CalendarViewProps = {
     currentDate,
@@ -661,9 +661,8 @@ export default function Schedule() {
     isMobile,
   };
 
-  if (activeView === "gantt") return <GanttView {...commonProps} />;
   if (activeView === "week") return <WeekView {...commonProps} />;
-  return <MonthView {...commonProps} />;
+  return <GanttView {...commonProps} />;
 }
 
 interface CalendarViewProps {
@@ -700,7 +699,7 @@ interface CalendarViewProps {
   isMobile: boolean;
 }
 
-type ViewMode = "month" | "week" | "gantt";
+type ViewMode = "week" | "gantt";
 
 function CalendarHeader({ title, onPrev, onNext, onToday, onAdd, viewMode, onViewModeChange, isMobile }: {
   title: string;
@@ -721,9 +720,6 @@ function CalendarHeader({ title, onPrev, onNext, onToday, onAdd, viewMode, onVie
       <div className="flex items-center gap-2 flex-wrap">
         {viewMode && onViewModeChange && !isMobile && (
           <div className="flex items-center gap-0.5 bg-card border border-border p-1 rounded-md" data-testid="view-mode-toggle">
-            <Button variant={viewMode === "month" ? "default" : "ghost"} size="icon" onClick={() => onViewModeChange("month")} data-testid="button-view-month" title="Month view">
-              <CalendarDays className="w-4 h-4" />
-            </Button>
             <Button variant={viewMode === "week" ? "default" : "ghost"} size="icon" onClick={() => onViewModeChange("week")} data-testid="button-view-week" title="Week view">
               <CalendarRange className="w-4 h-4" />
             </Button>
@@ -799,118 +795,6 @@ function SharedDialogs(props: CalendarViewProps) {
   );
 }
 
-function MonthView(props: CalendarViewProps) {
-  const monthStart = startOfMonth(props.currentDate);
-  const monthEnd = endOfMonth(props.currentDate);
-  const calendarStart = startOfWeek(monthStart, { weekStartsOn: 1 });
-  const calendarEnd = addDays(startOfWeek(addDays(monthEnd, 6), { weekStartsOn: 1 }), -1);
-  const allDays = eachDayOfInterval({ start: calendarStart, end: calendarEnd });
-
-  const weeks: Date[][] = [];
-  for (let i = 0; i < allDays.length; i += 7) {
-    weeks.push(allDays.slice(i, i + 7));
-  }
-
-  const title = format(props.currentDate, "MMMM yyyy");
-
-  return (
-    <div className="space-y-4 flex-1 flex flex-col min-h-0">
-      <CalendarHeader
-        title={title}
-        onPrev={props.onPrev}
-        onNext={props.onNext}
-        onToday={props.onToday}
-        onAdd={() => props.onAddToDate(format(new Date(), "yyyy-MM-dd"))}
-        viewMode={props.viewMode}
-        onViewModeChange={props.onViewModeChange}
-        isMobile={props.isMobile}
-      />
-
-      <div className="flex-1 bg-card border border-border rounded-md overflow-hidden flex flex-col min-h-0">
-        <div className="grid grid-cols-7 border-b border-border bg-muted/30">
-          {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map(day => (
-            <div key={day} className="p-2 text-center text-xs uppercase text-muted-foreground font-semibold border-r border-border last:border-r-0">
-              {day}
-            </div>
-          ))}
-        </div>
-
-        <div className="flex-1 overflow-y-auto">
-          {props.isLoading ? (
-            <div className="grid grid-cols-7 gap-0 p-0">
-              {Array.from({ length: 35 }).map((_, i) => (
-                <div key={i} className="p-2 border-r border-b border-border min-h-[100px]">
-                  <Skeleton className="h-4 w-6 mb-2" />
-                  <Skeleton className="h-5 w-full" />
-                </div>
-              ))}
-            </div>
-          ) : (
-            weeks.map((week, wi) => (
-              <div key={wi} className="grid grid-cols-7 border-b border-border last:border-b-0">
-                {week.map(day => {
-                  const dateStr = format(day, "yyyy-MM-dd");
-                  const dayEntries = props.entriesByDay.get(dateStr) || [];
-                  const inMonth = isSameMonth(day, props.currentDate);
-                  const isSaturday = getDay(day) === 6;
-
-                  return (
-                    <div
-                      key={dateStr}
-                      className={cn(
-                        "border-r border-border last:border-r-0 p-1.5 min-h-[100px] relative group transition-colors",
-                        !inMonth && "bg-muted/20",
-                        isSaturday && "bg-muted/10",
-                        isToday(day) && "bg-primary/5"
-                      )}
-                      data-testid={`calendar-day-${dateStr}`}
-                    >
-                      <div className="flex items-center justify-between mb-1">
-                        <span className={cn(
-                          "text-xs font-medium w-6 h-6 flex items-center justify-center rounded-full",
-                          isToday(day) ? "bg-primary text-primary-foreground" : !inMonth ? "text-muted-foreground/50" : "text-foreground"
-                        )}>
-                          {format(day, "d")}
-                        </span>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="h-5 w-5 invisible group-hover:visible"
-                          onClick={() => props.onAddToDate(dateStr)}
-                          data-testid={`button-add-day-${dateStr}`}
-                        >
-                          <Plus className="w-3 h-3" />
-                        </Button>
-                      </div>
-                      <div className="space-y-1">
-                        {dayEntries.map(entry => (
-                          <ScheduleEntryCard
-                            key={entry.id}
-                            entry={entry}
-                            task={props.getTaskById(entry.taskId)}
-                            project={props.getProjectById(entry.projectId)}
-                            allocations={props.allocations}
-                            onEdit={() => props.onEditEntry(entry)}
-                            onDelete={() => props.onDeleteEntry(entry)}
-                            onManageResources={() => props.onManageResources(entry)}
-                            compact
-                          />
-                        ))}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            ))
-          )}
-        </div>
-      </div>
-
-      <SharedDialogs {...props} />
-    </div>
-  );
-}
-
 function GanttView(props: CalendarViewProps) {
   const { toast } = useToast();
   const monthStart = startOfMonth(props.currentDate);
@@ -933,6 +817,8 @@ function GanttView(props: CalendarViewProps) {
 
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const bodyScrollRef = useRef<HTMLDivElement>(null);
+  const topScrollRef = useRef<HTMLDivElement>(null);
+  const scrollSyncLock = useRef(false);
   const COL_WIDTH = 40;
 
   const [dragState, setDragState] = useState<{
@@ -1122,6 +1008,24 @@ function GanttView(props: CalendarViewProps) {
 
       <div className="flex-1 flex min-h-0 border border-border rounded-md overflow-hidden bg-card">
       <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+        <div className="flex border-b border-border bg-muted/10">
+          <div className="w-[200px] flex-shrink-0" />
+          <div
+            className="flex-1 overflow-x-auto"
+            ref={topScrollRef}
+            style={{ scrollbarWidth: "thin" }}
+            onScroll={(e) => {
+              if (scrollSyncLock.current) return;
+              scrollSyncLock.current = true;
+              const sl = (e.target as HTMLElement).scrollLeft;
+              if (scrollContainerRef.current) scrollContainerRef.current.scrollLeft = sl;
+              if (bodyScrollRef.current) bodyScrollRef.current.scrollLeft = sl;
+              requestAnimationFrame(() => { scrollSyncLock.current = false; });
+            }}
+          >
+            <div style={{ width: allDays.length * COL_WIDTH, height: 1 }} />
+          </div>
+        </div>
         <div className="flex border-b border-border">
           <div className="w-[200px] flex-shrink-0 border-r border-border bg-muted/20">
             <div className="h-[52px] flex items-center px-3">
@@ -1244,9 +1148,12 @@ function GanttView(props: CalendarViewProps) {
           </div>
 
           <div className="flex-1 min-w-0 overflow-x-auto" ref={bodyScrollRef} onScroll={(e) => {
-            if (scrollContainerRef.current) {
-              scrollContainerRef.current.scrollLeft = (e.target as HTMLElement).scrollLeft;
-            }
+            if (scrollSyncLock.current) return;
+            scrollSyncLock.current = true;
+            const sl = (e.target as HTMLElement).scrollLeft;
+            if (scrollContainerRef.current) scrollContainerRef.current.scrollLeft = sl;
+            if (topScrollRef.current) topScrollRef.current.scrollLeft = sl;
+            requestAnimationFrame(() => { scrollSyncLock.current = false; });
           }}>
             {(() => {
               const totalRows = projectEntries.reduce((sum, g) => sum + g.entries.length + 1, 0);
@@ -1354,7 +1261,7 @@ function GanttView(props: CalendarViewProps) {
                                 onMouseDown={(e) => handleDragStart(e, entry, barPos.left)}
                                 onClick={(e) => {
                                   if (!wasDragged.current) {
-                                    props.onEditEntry(entry);
+                                    setSelectedEntry(selectedEntry?.id === entry.id ? null : entry);
                                   }
                                 }}
                                 title={`${task?.title || "Unknown"} (${entry.duration}d) - Drag to reschedule`}
