@@ -53,8 +53,17 @@ SiteTech is a comprehensive web-based sitework management platform designed for 
 - [x] Progress tracking (0-100% in 5% increments)
 - [x] Automatic status updates based on progress
 - [x] Task status history with user attribution
-- [x] Calendar-based schedule view
 - [x] Priority levels (Low, Medium, High)
+- [x] Gantt chart schedule view with fixed 40px column widths and 280px sidebar
+- [x] Schedule entries with working-day durations (Mon-Fri, optional Sunday)
+- [x] Multi-day task bar rendering spanning working days (skips weekends)
+- [x] Project color coding on scheduled task bars
+- [x] Resource allocation (Fingercheck employees and equipment) per schedule entry
+- [x] Drag-and-drop to move scheduled tasks
+- [x] Collapsible unscheduled tasks panel (right side)
+- [x] Weekly list view alternative
+- [x] Full page width layout for schedule route
+- [x] Horizontal scrolling with synchronized header/body scroll
 
 #### Phase 6: Equipment Management
 - [x] Equipment inventory tracking
@@ -716,7 +725,95 @@ Integrate Mailgun-based inbound email routing for SiteTech projects. Each projec
 
 ---
 
+## Schedule Feature (Gantt Chart) - Progress Log
+
+### Goal
+Build a full-featured schedule system where users can schedule unfinished project tasks on specific dates with durations, allocate employees (from Fingercheck) and equipment resources, and manage the project timeline via a Gantt chart and weekly list view.
+
+### Completed Steps
+
+#### 1. Database Schema - DONE
+- **`schedule_entries` table**: `id`, `taskId` (FK to tasks), `projectId` (FK to projects), `startDate`, `duration` (working days), `includeSunday` (boolean), `notes`, `createdBy`, soft delete (`deletedAt`)
+- **Updated `allocations` table**: Added `scheduleEntryId` (FK to schedule_entries) and `employeeId` (FK to fingercheck_employees) columns to link allocations to schedule entries and Fingercheck employees
+
+#### 2. API Routes - DONE
+- `GET /api/schedule-entries` - List all schedule entries (with optional project filter)
+- `POST /api/schedule-entries` - Create a new schedule entry
+- `PATCH /api/schedule-entries/:id` - Update a schedule entry
+- `DELETE /api/schedule-entries/:id` - Soft delete a schedule entry
+- `GET /api/schedule-entries/:id/allocations` - Get allocations for a schedule entry
+- `POST /api/schedule-entries/:id/allocations` - Add allocation to a schedule entry
+- `DELETE /api/allocations/:id` - Remove an allocation
+
+#### 3. Gantt Chart View - DONE
+- **Fixed 40px column widths** for consistent day columns
+- **280px sidebar** showing project names and task names with good readability
+- **Horizontal scrolling** with synchronized header/body scroll for narrower screens
+- **Full page width** on desktop (Layout removes max-w-7xl constraint for /schedule route, uses minimal padding)
+- **Multi-day task bars** spanning working days (Mon-Fri by default, optionally including Sunday), skipping Saturdays
+- **Project color coding** on task bars matching project colors
+- **Weekend columns** visually distinguished (muted background for Saturdays/Sundays)
+- **Today indicator** with vertical line and auto-scroll-to-today on load
+- **Month/day headers** with two-row header (month names on top, day numbers below)
+
+#### 4. Unscheduled Tasks Panel - DONE
+- **Collapsible right-side panel** (collapsed by default)
+- When collapsed: shows ListChecks icon with badge count of unscheduled tasks
+- When expanded: 220px wide panel showing unscheduled tasks grouped by project
+- Tasks can be scheduled from this panel
+
+#### 5. Task Interaction - DONE
+- **Drag-and-drop** to move scheduled tasks to different dates
+- **Drag-and-drop resource allocation** via contextual side panel
+- **Delete schedule entries** with confirmation dialog
+- **Edit schedule entries** (duration, notes, includeSunday)
+
+#### 6. Resource Management - DONE
+- **Resource allocation dialog** for assigning employees and equipment to schedule entries
+- Employees sourced from Fingercheck integration
+- Equipment sourced from equipment inventory
+
+#### 7. Weekly List View - DONE
+- Alternative to Gantt view for mobile/tablet
+- Shows scheduled tasks in a weekly list format
+
+#### 8. Layout Optimizations - DONE
+- Schedule page uses full page width (no max-w-7xl constraint)
+- Reduced padding (`p-3 md:p-4`) on schedule route for maximum space utilization
+- Sidebar widened to 280px for readability
+- Horizontal scroll with header/body sync for smaller screens
+
+### Key Files
+| File | Purpose |
+|------|---------|
+| `shared/schema.ts` | `scheduleEntries` table, updated `allocations` table |
+| `server/routes.ts` | Schedule entry CRUD, allocation endpoints |
+| `server/storage.ts` | Schedule entry and allocation storage operations |
+| `client/src/pages/Schedule.tsx` | Gantt chart, weekly list view, unscheduled panel, dialogs |
+| `client/src/components/Layout.tsx` | Full-width layout for /schedule route |
+
+### Design Decisions
+- **Fixed 40px column width**: Provides consistent sizing; more columns visible on wide screens, horizontal scroll on narrow screens
+- **280px sidebar**: Wide enough to read project and task names without excessive truncation
+- **Collapsed unscheduled panel**: Keeps the main Gantt view uncluttered; expands on demand
+- **Working-day spans**: Task bars skip Saturdays (and Sundays unless includeSunday is true), reflecting actual construction work schedules
+- **Project color coding**: Each project's tasks use the project's assigned color for quick visual identification
+
+---
+
 ## Changelog
+
+### February 18, 2026
+- **Schedule Feature - Gantt Chart**: Full-featured project scheduling with Gantt chart view
+  - Created `schedule_entries` table with task/project linking, working-day duration, optional Sunday inclusion
+  - Updated `allocations` table with `scheduleEntryId` and `employeeId` for resource assignment
+  - Built Gantt chart with fixed 40px column widths, 280px sidebar, horizontal scrolling with header/body sync
+  - Multi-day task bars that span working days (skip weekends), with project color coding
+  - Collapsible right-side unscheduled tasks panel with badge count
+  - Drag-and-drop to move tasks, resource allocation dialog, delete with confirmation
+  - Weekly list view alternative for mobile
+  - Full page width layout for schedule route (no max-w-7xl, minimal padding)
+  - Today indicator with auto-scroll on load
 
 ### February 10, 2026
 - **Daily Report Labor - Fingercheck Time Tracking Integration**: Replaced generic labor tracking with employee-specific entries linked to Fingercheck time tracking
