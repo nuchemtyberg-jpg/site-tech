@@ -170,7 +170,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
                  backgroundSize: '40px 40px' 
                }} 
           />
-          <div className="relative z-10 w-full max-w-7xl mx-auto p-4 md:p-8 overflow-x-hidden flex-1 flex flex-col">
+          <div className={cn(
+            "relative z-10 w-full overflow-x-hidden flex-1 flex flex-col",
+            location === "/schedule" ? "p-3 md:p-4" : "max-w-7xl mx-auto p-4 md:p-8"
+          )}>
             {children}
           </div>
         </main>
