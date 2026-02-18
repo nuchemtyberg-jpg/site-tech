@@ -862,7 +862,27 @@ function GanttView(props: CalendarViewProps) {
   const bodyScrollRef = useRef<HTMLDivElement>(null);
   const topScrollRef = useRef<HTMLDivElement>(null);
   const scrollSyncLock = useRef(false);
-  const COL_WIDTH = 40;
+  const ganttBodyContainerRef = useRef<HTMLDivElement>(null);
+  const [ganttBodyWidth, setGanttBodyWidth] = useState(0);
+
+  useEffect(() => {
+    const el = ganttBodyContainerRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        setGanttBodyWidth(entry.contentRect.width);
+      }
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  const SIDEBAR_WIDTH = 200;
+  const MIN_COL_WIDTH = 40;
+  const availableChartWidth = ganttBodyWidth > SIDEBAR_WIDTH ? ganttBodyWidth - SIDEBAR_WIDTH : 0;
+  const COL_WIDTH = availableChartWidth > 0 && allDays.length > 0
+    ? Math.max(MIN_COL_WIDTH, Math.floor(availableChartWidth / allDays.length))
+    : MIN_COL_WIDTH;
 
   const [dragState, setDragState] = useState<{
     entryId: number;
@@ -963,14 +983,20 @@ function GanttView(props: CalendarViewProps) {
     }
   }, [createAllocationMutation]);
 
+  const initialScrollDone = useRef(false);
   useEffect(() => {
-    if (bodyScrollRef.current) {
+    initialScrollDone.current = false;
+  }, [props.currentDate]);
+  useEffect(() => {
+    if (initialScrollDone.current) return;
+    if (bodyScrollRef.current && COL_WIDTH > MIN_COL_WIDTH) {
       const todayIndex = allDays.findIndex(d => isToday(d));
       if (todayIndex >= 0) {
         bodyScrollRef.current.scrollLeft = Math.max(0, todayIndex * COL_WIDTH - 200);
       }
+      initialScrollDone.current = true;
     }
-  }, [props.currentDate]);
+  }, [props.currentDate, COL_WIDTH]);
 
   const handleDragStart = useCallback((e: React.MouseEvent, entry: ScheduleEntry, barLeft: number) => {
     e.preventDefault();
@@ -1050,7 +1076,7 @@ function GanttView(props: CalendarViewProps) {
       />
 
       <div className="flex-1 flex min-h-0 border border-border rounded-md overflow-hidden bg-card">
-      <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+      <div className="flex-1 flex flex-col min-h-0 overflow-hidden" ref={ganttBodyContainerRef}>
         <div className="flex border-b border-border bg-muted/10">
           <div className="w-[200px] flex-shrink-0" />
           <div
