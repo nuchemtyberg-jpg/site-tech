@@ -878,11 +878,10 @@ function GanttView(props: CalendarViewProps) {
   }, []);
 
   const SIDEBAR_WIDTH = 200;
-  const MIN_COL_WIDTH = 40;
   const availableChartWidth = ganttBodyWidth > SIDEBAR_WIDTH ? ganttBodyWidth - SIDEBAR_WIDTH : 0;
   const COL_WIDTH = availableChartWidth > 0 && allDays.length > 0
-    ? Math.max(MIN_COL_WIDTH, Math.floor(availableChartWidth / allDays.length))
-    : MIN_COL_WIDTH;
+    ? availableChartWidth / allDays.length
+    : 30;
 
   const [dragState, setDragState] = useState<{
     entryId: number;
@@ -989,7 +988,7 @@ function GanttView(props: CalendarViewProps) {
   }, [props.currentDate]);
   useEffect(() => {
     if (initialScrollDone.current) return;
-    if (bodyScrollRef.current && COL_WIDTH > MIN_COL_WIDTH) {
+    if (bodyScrollRef.current && ganttBodyWidth > 0) {
       const todayIndex = allDays.findIndex(d => isToday(d));
       if (todayIndex >= 0) {
         bodyScrollRef.current.scrollLeft = Math.max(0, todayIndex * COL_WIDTH - 200);
@@ -1077,24 +1076,6 @@ function GanttView(props: CalendarViewProps) {
 
       <div className="flex-1 flex min-h-0 border border-border rounded-md overflow-hidden bg-card">
       <div className="flex-1 flex flex-col min-h-0 overflow-hidden" ref={ganttBodyContainerRef}>
-        <div className="flex border-b border-border bg-muted/10">
-          <div className="w-[200px] flex-shrink-0" />
-          <div
-            className="flex-1 overflow-x-auto"
-            ref={topScrollRef}
-            style={{ scrollbarWidth: "thin" }}
-            onScroll={(e) => {
-              if (scrollSyncLock.current) return;
-              scrollSyncLock.current = true;
-              const sl = (e.target as HTMLElement).scrollLeft;
-              if (scrollContainerRef.current) scrollContainerRef.current.scrollLeft = sl;
-              if (bodyScrollRef.current) bodyScrollRef.current.scrollLeft = sl;
-              requestAnimationFrame(() => { scrollSyncLock.current = false; });
-            }}
-          >
-            <div style={{ width: allDays.length * COL_WIDTH, height: 1 }} />
-          </div>
-        </div>
         <div className="flex border-b border-border">
           <div className="w-[200px] flex-shrink-0 border-r border-border bg-muted/20">
             <div className="h-[52px] flex items-center px-3">
@@ -1102,7 +1083,7 @@ function GanttView(props: CalendarViewProps) {
             </div>
           </div>
           <div className="flex-1 overflow-hidden" ref={scrollContainerRef}>
-            <div className="flex" style={{ minWidth: allDays.length * COL_WIDTH }}>
+            <div className="flex" style={{ width: allDays.length * COL_WIDTH }}>
               {allDays.map(day => {
                 const isSat = getDay(day) === 6;
                 const isSun = getDay(day) === 0;
@@ -1217,19 +1198,12 @@ function GanttView(props: CalendarViewProps) {
 
           </div>
 
-          <div className="flex-1 min-w-0 overflow-x-auto" ref={bodyScrollRef} onScroll={(e) => {
-            if (scrollSyncLock.current) return;
-            scrollSyncLock.current = true;
-            const sl = (e.target as HTMLElement).scrollLeft;
-            if (scrollContainerRef.current) scrollContainerRef.current.scrollLeft = sl;
-            if (topScrollRef.current) topScrollRef.current.scrollLeft = sl;
-            requestAnimationFrame(() => { scrollSyncLock.current = false; });
-          }}>
+          <div className="flex-1 min-w-0 overflow-x-hidden" ref={bodyScrollRef}>
             {(() => {
               const totalRows = projectEntries.reduce((sum, g) => sum + g.entries.length + 1, 0);
               const bodyHeight = Math.max(totalRows * ROW_HEIGHT, 100);
               return (
-                <div className="relative" style={{ minWidth: allDays.length * COL_WIDTH, height: bodyHeight }}>
+                <div className="relative" style={{ width: allDays.length * COL_WIDTH, height: bodyHeight }}>
                   {allDays.map(day => {
                     const isSat = getDay(day) === 6;
                     const isSun = getDay(day) === 0;
