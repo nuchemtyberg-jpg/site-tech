@@ -704,3 +704,34 @@ export const projectDailyReportRecipients = pgTable("project_daily_report_recipi
 export const insertProjectDailyReportRecipientSchema = createInsertSchema(projectDailyReportRecipients).omit({ id: true, createdAt: true, deletedAt: true });
 export type ProjectDailyReportRecipient = typeof projectDailyReportRecipients.$inferSelect;
 export type InsertProjectDailyReportRecipient = z.infer<typeof insertProjectDailyReportRecipientSchema>;
+
+// Company Folders (for company-wide document organization, no projectId)
+export const companyFolders = pgTable("company_folders", {
+  id: serial("id").primaryKey(),
+  parentId: integer("parent_id"),
+  name: text("name").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+  deletedAt: timestamp("deleted_at"),
+});
+
+export const insertCompanyFolderSchema = createInsertSchema(companyFolders).omit({ id: true, createdAt: true, deletedAt: true });
+export type CompanyFolder = typeof companyFolders.$inferSelect;
+export type InsertCompanyFolder = z.infer<typeof insertCompanyFolderSchema>;
+
+// Company Files (company-wide documents, no projectId)
+export const companyFiles = pgTable("company_files", {
+  id: serial("id").primaryKey(),
+  folderId: integer("folder_id"),
+  name: text("name").notNull(),
+  objectPath: text("object_path").notNull(),
+  contentType: text("content_type"),
+  size: integer("size"),
+  tags: text("tags").array(),
+  starred: boolean("starred").default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+  deletedAt: timestamp("deleted_at"),
+});
+
+export const insertCompanyFileSchema = createInsertSchema(companyFiles).omit({ id: true, createdAt: true, deletedAt: true });
+export type CompanyFile = typeof companyFiles.$inferSelect;
+export type InsertCompanyFile = z.infer<typeof insertCompanyFileSchema>;

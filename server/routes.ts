@@ -2446,6 +2446,131 @@ export async function registerRoutes(
     }
   });
 
+  // ===== Company Documents =====
+
+  // Company Folders
+  app.get('/api/company-documents/folders', isAuthenticated, isAuthorizedUser, async (req, res) => {
+    const list = await storage.getCompanyFolders();
+    res.json(list);
+  });
+
+  app.post('/api/company-documents/folders', isAuthenticated, isAuthorizedUser, async (req, res) => {
+    try {
+      const { name, parentId } = req.body;
+      if (!name) return res.status(400).json({ message: "name is required" });
+      const folder = await storage.createCompanyFolder({ name, parentId: parentId ?? null });
+      res.status(201).json(folder);
+    } catch (err) {
+      throw err;
+    }
+  });
+
+  app.put('/api/company-documents/folders/:id', isAuthenticated, isAuthorizedUser, async (req, res) => {
+    try {
+      const folder = await storage.updateCompanyFolder(Number(req.params.id), req.body);
+      res.json(folder);
+    } catch (err) {
+      throw err;
+    }
+  });
+
+  app.delete('/api/company-documents/folders/:id', isAuthenticated, isAuthorizedUser, async (req, res) => {
+    await storage.deleteCompanyFolder(Number(req.params.id));
+    res.status(204).send();
+  });
+
+  app.get('/api/company-documents/folders/children', isAuthenticated, isAuthorizedUser, async (req, res) => {
+    const parentId = req.query.parentId === 'null' || req.query.parentId === undefined 
+      ? null 
+      : Number(req.query.parentId);
+    
+    const childFolders = await storage.getCompanyChildFolders(parentId);
+    
+    const foldersWithChildren = await Promise.all(
+      childFolders.map(async (folder) => {
+        const children = await storage.getCompanyChildFolders(folder.id);
+        return {
+          ...folder,
+          hasChildren: children.length > 0
+        };
+      })
+    );
+    
+    foldersWithChildren.sort((a, b) => a.name.localeCompare(b.name));
+    res.json(foldersWithChildren);
+  });
+
+  app.get('/api/company-documents/folders/:id/path', isAuthenticated, isAuthorizedUser, async (req, res) => {
+    const folderId = Number(req.params.id);
+    const path = await storage.getCompanyFolderPath(folderId);
+    res.json(path);
+  });
+
+  app.get('/api/company-documents/folders/:id', isAuthenticated, isAuthorizedUser, async (req, res) => {
+    const folder = await storage.getCompanyFolder(Number(req.params.id));
+    if (!folder) {
+      return res.status(404).json({ message: "Folder not found" });
+    }
+    res.json(folder);
+  });
+
+  // Company Files
+  app.get('/api/company-documents/files', isAuthenticated, isAuthorizedUser, async (req, res) => {
+    const list = await storage.getCompanyFiles();
+    res.json(list);
+  });
+
+  app.post('/api/company-documents/files', isAuthenticated, isAuthorizedUser, async (req, res) => {
+    try {
+      const { name, objectPath, folderId, contentType, size } = req.body;
+      if (!name || !objectPath) {
+        return res.status(400).json({ message: "name and objectPath are required" });
+      }
+      const file = await storage.createCompanyFile({
+        name,
+        objectPath,
+        folderId: folderId ?? null,
+        contentType: contentType || null,
+        size: size || null,
+      });
+      res.status(201).json(file);
+    } catch (err) {
+      throw err;
+    }
+  });
+
+  app.put('/api/company-documents/files/:id', isAuthenticated, isAuthorizedUser, async (req, res) => {
+    try {
+      const file = await storage.updateCompanyFile(Number(req.params.id), req.body);
+      res.json(file);
+    } catch (err) {
+      throw err;
+    }
+  });
+
+  app.delete('/api/company-documents/files/:id', isAuthenticated, isAuthorizedUser, async (req, res) => {
+    await storage.deleteCompanyFile(Number(req.params.id));
+    res.status(204).send();
+  });
+
+  app.post('/api/company-documents/files/batch-delete', isAuthenticated, isAuthorizedUser, async (req, res) => {
+    const { ids } = req.body;
+    if (!ids || !Array.isArray(ids)) {
+      return res.status(400).json({ message: "ids array is required" });
+    }
+    await storage.batchDeleteCompanyFiles(ids.map(Number));
+    res.status(204).send();
+  });
+
+  app.post('/api/company-documents/files/batch-move', isAuthenticated, isAuthorizedUser, async (req, res) => {
+    const { ids, folderId } = req.body;
+    if (!ids || !Array.isArray(ids)) {
+      return res.status(400).json({ message: "ids array is required" });
+    }
+    await storage.batchMoveCompanyFiles(ids.map(Number), folderId === null ? null : Number(folderId));
+    res.json({ success: true });
+  });
+
   // Check if report exists for a specific date
   app.get('/api/projects/:projectId/reports/by-date/:date', isAuthenticated, isAuthorizedUser, async (req, res) => {
     const report = await storage.getDailyReportByDate(Number(req.params.projectId), req.params.date);

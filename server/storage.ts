@@ -5,7 +5,7 @@ import {
   authorizedUsers, scheduleEntries,
   projectEmailConnections, projectEmails, projectEmailAttachments,
   fingercheckEmployees, fingercheckTimePunches, fingercheckProjectMappings,
-  rfis, rfiResponses, userOutlookConnections, projectDailyReportRecipients,
+  rfis, rfiResponses, userOutlookConnections, projectDailyReportRecipients, companyFolders, companyFiles,
   type InsertProject, type InsertTask, type InsertEquipment, type InsertAllocation, type InsertFolder, type InsertFileMetadata, type InsertPhoto,
   type InsertCustomer, type InsertDailyReport, type InsertMaintenanceLog, type InsertCommunication, type InsertTaskStatusHistory, type InsertPhotoAlbum,
   type InsertReportTask, type InsertLaborEntry, type InsertEquipmentEntry, type InsertReportTaskPhoto, type InsertDelivery, type InsertDeliveryPhoto,
@@ -13,14 +13,14 @@ import {
   type InsertAuthorizedUser, type InsertScheduleEntry,
   type InsertProjectEmailConnection, type InsertProjectEmail, type InsertProjectEmailAttachment,
   type InsertFingercheckEmployee, type InsertFingercheckTimePunch, type InsertFingercheckProjectMapping,
-  type InsertRfi, type InsertRfiResponse, type InsertProjectDailyReportRecipient,
+  type InsertRfi, type InsertRfiResponse, type InsertProjectDailyReportRecipient, type InsertCompanyFolder, type InsertCompanyFile,
   type Project, type Task, type Equipment, type Allocation, type Folder, type FileMetadata, type Photo,
   type Customer, type DailyReport, type MaintenanceLog, type Communication, type TaskStatusHistory, type PhotoAlbum,
   type ReportTask, type LaborEntry, type EquipmentEntry, type ReportTaskPhoto, type Delivery, type DeliveryPhoto,
   type DailyReportTaskEntry, type DailyReportLaborLine, type DailyReportEquipmentLine, type DailyReportDeliveryEntry, type DailyReportInspectionEntry, type DailyReportPhoto,
   type ProjectEmailConnection, type ProjectEmail, type ProjectEmailAttachment,
   type FingercheckEmployee, type FingercheckTimePunch, type FingercheckProjectMapping,
-  type Rfi, type RfiResponse, type UserOutlookConnection, type ProjectDailyReportRecipient,
+  type Rfi, type RfiResponse, type UserOutlookConnection, type ProjectDailyReportRecipient, type CompanyFolder, type CompanyFile,
   type ScheduleEntry,
   type User, type UpsertUser, type AuthorizedUser
 } from "@shared/schema";
@@ -300,6 +300,23 @@ export interface IStorage {
   getProjectDailyReportRecipients(projectId: number): Promise<ProjectDailyReportRecipient[]>;
   createProjectDailyReportRecipient(recipient: InsertProjectDailyReportRecipient): Promise<ProjectDailyReportRecipient>;
   deleteProjectDailyReportRecipient(id: number): Promise<void>;
+
+  // Company Folders & Files
+  getCompanyFolders(): Promise<CompanyFolder[]>;
+  getCompanyFolder(id: number): Promise<CompanyFolder | undefined>;
+  getCompanyChildFolders(parentId: number | null): Promise<CompanyFolder[]>;
+  getCompanyFolderPath(folderId: number): Promise<Array<{ id: number; name: string }>>;
+  createCompanyFolder(folder: InsertCompanyFolder): Promise<CompanyFolder>;
+  updateCompanyFolder(id: number, folder: Partial<InsertCompanyFolder>): Promise<CompanyFolder>;
+  deleteCompanyFolder(id: number): Promise<void>;
+
+  getCompanyFiles(): Promise<CompanyFile[]>;
+  getCompanyFile(id: number): Promise<CompanyFile | undefined>;
+  createCompanyFile(file: InsertCompanyFile): Promise<CompanyFile>;
+  updateCompanyFile(id: number, file: Partial<InsertCompanyFile>): Promise<CompanyFile>;
+  deleteCompanyFile(id: number): Promise<void>;
+  batchDeleteCompanyFiles(ids: number[]): Promise<void>;
+  batchMoveCompanyFiles(ids: number[], folderId: number | null): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -856,6 +873,77 @@ export class DatabaseStorage implements IStorage {
   async batchMoveFiles(ids: number[], folderId: number | null): Promise<void> {
     for (const id of ids) {
       await db.update(files).set({ folderId }).where(eq(files.id, id));
+    }
+  }
+
+  // Company Folders (with soft delete)
+  async getCompanyFolders(): Promise<CompanyFolder[]> {
+    return await db.select().from(companyFolders).where(isNull(companyFolders.deletedAt)).orderBy(asc(companyFolders.id));
+  }
+  async getCompanyFolder(id: number): Promise<CompanyFolder | undefined> {
+    const [folder] = await db.select().from(companyFolders).where(and(eq(companyFolders.id, id), isNull(companyFolders.deletedAt)));
+    return folder;
+  }
+  async getCompanyChildFolders(parentId: number | null): Promise<CompanyFolder[]> {
+    if (parentId === null) {
+      return await db.select().from(companyFolders).where(
+        and(isNull(companyFolders.parentId), isNull(companyFolders.deletedAt))
+      ).orderBy(asc(companyFolders.id));
+    }
+    return await db.select().from(companyFolders).where(
+      and(eq(companyFolders.parentId, parentId), isNull(companyFolders.deletedAt))
+    ).orderBy(asc(companyFolders.id));
+  }
+  async getCompanyFolderPath(folderId: number): Promise<Array<{ id: number; name: string }>> {
+    const path: Array<{ id: number; name: string }> = [];
+    let currentId: number | null = folderId;
+    while (currentId !== null) {
+      const folder = await this.getCompanyFolder(currentId);
+      if (!folder) break;
+      path.unshift({ id: folder.id, name: folder.name });
+      currentId = folder.parentId;
+    }
+    return path;
+  }
+  async createCompanyFolder(insertFolder: InsertCompanyFolder): Promise<CompanyFolder> {
+    const [folder] = await db.insert(companyFolders).values(insertFolder).returning();
+    return folder;
+  }
+  async updateCompanyFolder(id: number, updates: Partial<InsertCompanyFolder>): Promise<CompanyFolder> {
+    const [folder] = await db.update(companyFolders).set(updates).where(eq(companyFolders.id, id)).returning();
+    return folder;
+  }
+  async deleteCompanyFolder(id: number): Promise<void> {
+    await db.update(companyFolders).set({ deletedAt: new Date() }).where(eq(companyFolders.id, id));
+  }
+
+  // Company Files (with soft delete)
+  async getCompanyFiles(): Promise<CompanyFile[]> {
+    return await db.select().from(companyFiles).where(isNull(companyFiles.deletedAt)).orderBy(asc(companyFiles.id));
+  }
+  async getCompanyFile(id: number): Promise<CompanyFile | undefined> {
+    const [file] = await db.select().from(companyFiles).where(and(eq(companyFiles.id, id), isNull(companyFiles.deletedAt)));
+    return file;
+  }
+  async createCompanyFile(insertFile: InsertCompanyFile): Promise<CompanyFile> {
+    const [file] = await db.insert(companyFiles).values(insertFile).returning();
+    return file;
+  }
+  async updateCompanyFile(id: number, updates: Partial<InsertCompanyFile>): Promise<CompanyFile> {
+    const [file] = await db.update(companyFiles).set(updates).where(eq(companyFiles.id, id)).returning();
+    return file;
+  }
+  async deleteCompanyFile(id: number): Promise<void> {
+    await db.update(companyFiles).set({ deletedAt: new Date() }).where(eq(companyFiles.id, id));
+  }
+  async batchDeleteCompanyFiles(ids: number[]): Promise<void> {
+    for (const id of ids) {
+      await db.update(companyFiles).set({ deletedAt: new Date() }).where(eq(companyFiles.id, id));
+    }
+  }
+  async batchMoveCompanyFiles(ids: number[], folderId: number | null): Promise<void> {
+    for (const id of ids) {
+      await db.update(companyFiles).set({ folderId }).where(eq(companyFiles.id, id));
     }
   }
 
