@@ -127,6 +127,8 @@ function AddScheduleEntryDialog({
   editEntry,
   tasks,
   projects,
+  prefilledTaskId,
+  prefilledProjectId,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -134,6 +136,8 @@ function AddScheduleEntryDialog({
   editEntry?: ScheduleEntry | null;
   tasks: Task[];
   projects: Project[];
+  prefilledTaskId?: number | null;
+  prefilledProjectId?: number | null;
 }) {
   const { toast } = useToast();
   const [selectedProjectId, setSelectedProjectId] = useState<string>("");
@@ -146,13 +150,13 @@ function AddScheduleEntryDialog({
   const isEdit = !!editEntry;
 
   const resetForm = useCallback(() => {
-    setSelectedProjectId("");
-    setSelectedTaskId("");
+    setSelectedProjectId(prefilledProjectId ? String(prefilledProjectId) : "");
+    setSelectedTaskId(prefilledTaskId ? String(prefilledTaskId) : "");
     setStartDate(defaultDate);
     setDuration(1);
     setIncludeSunday(false);
     setNotes("");
-  }, [defaultDate]);
+  }, [defaultDate, prefilledTaskId, prefilledProjectId]);
 
   const populateEdit = useCallback(() => {
     if (editEntry) {
@@ -545,6 +549,8 @@ export default function Schedule() {
   const [editEntry, setEditEntry] = useState<ScheduleEntry | null>(null);
   const [deleteEntry, setDeleteEntry] = useState<ScheduleEntry | null>(null);
   const [resourceEntry, setResourceEntry] = useState<ScheduleEntry | null>(null);
+  const [prefilledTaskId, setPrefilledTaskId] = useState<number | null>(null);
+  const [prefilledProjectId, setPrefilledProjectId] = useState<number | null>(null);
 
   const deleteMutation = useMutation({
     mutationFn: async (id: number) => {
@@ -604,13 +610,25 @@ export default function Schedule() {
 
   const handleAddToDate = (dateStr: string) => {
     setEditEntry(null);
+    setPrefilledTaskId(null);
+    setPrefilledProjectId(null);
     setAddDialogDate(dateStr);
     setAddDialogOpen(true);
   };
 
   const handleEditEntry = (entry: ScheduleEntry) => {
     setEditEntry(entry);
+    setPrefilledTaskId(null);
+    setPrefilledProjectId(null);
     setAddDialogDate(entry.startDate);
+    setAddDialogOpen(true);
+  };
+
+  const handleScheduleUnscheduledTask = (task: Task) => {
+    setEditEntry(null);
+    setPrefilledTaskId(task.id);
+    setPrefilledProjectId(task.projectId);
+    setAddDialogDate(format(new Date(), "yyyy-MM-dd"));
     setAddDialogOpen(true);
   };
 
@@ -659,6 +677,9 @@ export default function Schedule() {
     viewMode,
     onViewModeChange: setViewMode,
     isMobile,
+    prefilledTaskId,
+    prefilledProjectId,
+    onScheduleUnscheduledTask: handleScheduleUnscheduledTask,
   };
 
   if (activeView === "week") return <WeekView {...commonProps} />;
@@ -697,6 +718,9 @@ interface CalendarViewProps {
   viewMode: ViewMode;
   onViewModeChange: (mode: ViewMode) => void;
   isMobile: boolean;
+  prefilledTaskId: number | null;
+  prefilledProjectId: number | null;
+  onScheduleUnscheduledTask: (task: Task) => void;
 }
 
 type ViewMode = "week" | "gantt";
@@ -760,6 +784,8 @@ function SharedDialogs(props: CalendarViewProps) {
         editEntry={props.editEntry}
         tasks={props.tasks}
         projects={props.projects}
+        prefilledTaskId={props.prefilledTaskId}
+        prefilledProjectId={props.prefilledProjectId}
       />
       <AlertDialog open={!!props.deleteEntry} onOpenChange={(v) => { if (!v) props.setDeleteEntry(null); }}>
         <AlertDialogContent>
@@ -814,6 +840,23 @@ function GanttView(props: CalendarViewProps) {
     grouped.forEach(g => g.entries.sort((a, b) => a.startDate.localeCompare(b.startDate)));
     return Array.from(grouped.values()).sort((a, b) => (a.project?.name || "").localeCompare(b.project?.name || ""));
   }, [props.scheduleEntries, props.getProjectById]);
+
+  const [unscheduledExpanded, setUnscheduledExpanded] = useState(true);
+
+  const unscheduledByProject = useMemo(() => {
+    const scheduledTaskIds = new Set(props.scheduleEntries.map(e => e.taskId));
+    const unscheduled = props.tasks.filter(t => t.status !== "completed" && !t.deletedAt && !scheduledTaskIds.has(t.id));
+    const grouped = new Map<number, { project: Project | undefined; tasks: Task[] }>();
+    for (const t of unscheduled) {
+      if (!grouped.has(t.projectId)) {
+        grouped.set(t.projectId, { project: props.getProjectById(t.projectId), tasks: [] });
+      }
+      grouped.get(t.projectId)!.tasks.push(t);
+    }
+    return Array.from(grouped.values()).sort((a, b) => (a.project?.name || "").localeCompare(b.project?.name || ""));
+  }, [props.tasks, props.scheduleEntries, props.getProjectById]);
+
+  const totalUnscheduled = useMemo(() => unscheduledByProject.reduce((sum, g) => sum + g.tasks.length, 0), [unscheduledByProject]);
 
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const bodyScrollRef = useRef<HTMLDivElement>(null);
@@ -1068,7 +1111,7 @@ function GanttView(props: CalendarViewProps) {
               <div className="space-y-2 p-3">
                 {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-8 w-full" />)}
               </div>
-            ) : projectEntries.length === 0 ? (
+            ) : projectEntries.length === 0 && totalUnscheduled === 0 ? (
               <div className="p-4 text-center text-sm text-muted-foreground">No scheduled tasks</div>
             ) : (
               projectEntries.map(({ project, entries }) => (
@@ -1144,6 +1187,52 @@ function GanttView(props: CalendarViewProps) {
                   })}
                 </div>
               ))
+            )}
+
+            {totalUnscheduled > 0 && (
+              <div data-testid="unscheduled-tasks-panel">
+                <div
+                  className="px-3 text-xs font-bold uppercase text-muted-foreground bg-muted/50 border-y border-border flex items-center justify-between cursor-pointer hover-elevate"
+                  style={{ height: ROW_HEIGHT }}
+                  onClick={() => setUnscheduledExpanded(!unscheduledExpanded)}
+                  data-testid="unscheduled-tasks-toggle"
+                >
+                  <span className="flex items-center gap-1.5">
+                    <ChevronDown className={cn("w-3.5 h-3.5 transition-transform", !unscheduledExpanded && "-rotate-90")} />
+                    Unscheduled ({totalUnscheduled})
+                  </span>
+                </div>
+                {unscheduledExpanded && unscheduledByProject.map(({ project, tasks: uTasks }) => (
+                  <div key={project?.id || 0}>
+                    <div
+                      className="px-3 text-[10px] font-semibold uppercase text-muted-foreground bg-muted/30 border-b border-border truncate flex items-center"
+                      style={{ height: ROW_HEIGHT - 4, ...(project?.color ? { borderLeftColor: project.color, borderLeftWidth: 3 } : {}) }}
+                    >
+                      {project?.name || "Unknown Project"}
+                    </div>
+                    {uTasks.map(task => (
+                      <div
+                        key={task.id}
+                        className="group flex items-center gap-1 px-3 border-b border-border hover-elevate"
+                        style={{ height: ROW_HEIGHT }}
+                        data-testid={`unscheduled-task-${task.id}`}
+                      >
+                        <span className="flex-1 text-xs truncate text-muted-foreground">{task.title}</span>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="invisible group-hover:visible flex-shrink-0"
+                          onClick={() => props.onScheduleUnscheduledTask(task)}
+                          data-testid={`button-schedule-task-${task.id}`}
+                          title="Schedule this task"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </div>
             )}
           </div>
 
