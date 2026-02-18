@@ -554,6 +554,33 @@ export default function Schedule() {
     },
   });
 
+  const moveMutation = useMutation({
+    mutationFn: async ({ entryId, newStartDate }: { entryId: number; newStartDate: string }) => {
+      const entry = scheduleEntries.find(e => e.id === entryId);
+      if (!entry) throw new Error("Entry not found");
+      const res = await apiRequest("PUT", `/api/schedule-entries/${entryId}`, {
+        taskId: entry.taskId,
+        projectId: entry.projectId,
+        startDate: newStartDate,
+        duration: entry.duration,
+        includeSunday: entry.includeSunday,
+        notes: entry.notes,
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/schedule-entries"] });
+      toast({ title: "Task moved successfully" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Failed to move task", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const handleMoveEntry = useCallback((entryId: number, newStartDate: string) => {
+    moveMutation.mutate({ entryId, newStartDate });
+  }, [moveMutation]);
+
   const entriesByDay = useMemo(() => {
     const map = new Map<string, ScheduleEntry[]>();
     for (const entry of scheduleEntries) {
@@ -609,6 +636,7 @@ export default function Schedule() {
     onEditEntry: handleEditEntry,
     onDeleteEntry: setDeleteEntry,
     onManageResources: setResourceEntry,
+    onMoveEntry: handleMoveEntry,
     addDialogOpen,
     setAddDialogOpen,
     addDialogDate,
@@ -647,6 +675,7 @@ interface CalendarViewProps {
   onEditEntry: (entry: ScheduleEntry) => void;
   onDeleteEntry: (entry: ScheduleEntry) => void;
   onManageResources: (entry: ScheduleEntry) => void;
+  onMoveEntry: (entryId: number, newStartDate: string) => void;
   addDialogOpen: boolean;
   setAddDialogOpen: (open: boolean) => void;
   addDialogDate: string;
@@ -899,6 +928,17 @@ function GanttView(props: CalendarViewProps) {
   const bodyScrollRef = useRef<HTMLDivElement>(null);
   const COL_WIDTH = 40;
 
+  const [dragState, setDragState] = useState<{
+    entryId: number;
+    startX: number;
+    originalLeft: number;
+    currentDelta: number;
+  } | null>(null);
+
+  const dragRef = useRef(dragState);
+  dragRef.current = dragState;
+  const wasDragged = useRef(false);
+
   useEffect(() => {
     if (bodyScrollRef.current) {
       const todayIndex = allDays.findIndex(d => isToday(d));
@@ -907,6 +947,50 @@ function GanttView(props: CalendarViewProps) {
       }
     }
   }, [props.currentDate]);
+
+  const handleDragStart = useCallback((e: React.MouseEvent, entry: ScheduleEntry, barLeft: number) => {
+    e.preventDefault();
+    e.stopPropagation();
+    wasDragged.current = false;
+    setDragState({
+      entryId: entry.id,
+      startX: e.clientX,
+      originalLeft: barLeft,
+      currentDelta: 0,
+    });
+
+    const handleMouseMove = (ev: MouseEvent) => {
+      const ds = dragRef.current;
+      if (!ds) return;
+      const delta = ev.clientX - ds.startX;
+      if (Math.abs(delta) > 3) wasDragged.current = true;
+      setDragState(prev => prev ? { ...prev, currentDelta: delta } : null);
+    };
+
+    const handleMouseUp = (ev: MouseEvent) => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+      const ds = dragRef.current;
+      if (!ds) return;
+
+      const delta = ev.clientX - ds.startX;
+      const daysMoved = Math.round(delta / COL_WIDTH);
+
+      setDragState(null);
+
+      if (daysMoved === 0) return;
+
+      wasDragged.current = true;
+      const movedEntry = props.scheduleEntries.find(se => se.id === ds.entryId);
+      if (!movedEntry) return;
+
+      const newStart = addDays(parseISO(movedEntry.startDate), daysMoved);
+      props.onMoveEntry(movedEntry.id, format(newStart, "yyyy-MM-dd"));
+    };
+
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleMouseUp);
+  }, [props.scheduleEntries, props.onMoveEntry]);
 
   const getBarPosition = (entry: ScheduleEntry) => {
     const workingDays = getWorkingDays(entry.startDate, entry.duration, entry.includeSunday);
@@ -1085,20 +1169,31 @@ function GanttView(props: CalendarViewProps) {
                           const barPos = getBarPosition(entry);
                           const task = props.getTaskById(entry.taskId);
                           if (!barPos) return <div key={entry.id} className="border-b border-border" style={{ height: ROW_HEIGHT }} />;
+                          const isDragging = dragState?.entryId === entry.id;
+                          const dragOffset = isDragging ? dragState.currentDelta : 0;
                           return (
                             <div key={entry.id} className="relative border-b border-border" style={{ height: ROW_HEIGHT }}>
                               <div
-                                className="absolute top-1 cursor-pointer text-[10px] font-medium flex items-center px-1.5 truncate transition-opacity hover:opacity-90 z-10"
+                                className={cn(
+                                  "absolute top-1 text-[10px] font-medium flex items-center px-1.5 truncate z-10 select-none",
+                                  isDragging ? "opacity-80 cursor-grabbing shadow-lg" : "cursor-grab hover:opacity-90"
+                                )}
                                 style={{
-                                  left: barPos.left,
+                                  left: barPos.left + dragOffset,
                                   width: Math.max(barPos.width, 20),
                                   height: ROW_HEIGHT - 8,
                                   backgroundColor: project?.color || "hsl(var(--primary))",
                                   color: "white",
                                   borderRadius: barPos.startsBeforeMonth ? "0 4px 4px 0" : barPos.endsAfterMonth ? "4px 0 0 4px" : "4px",
+                                  transition: isDragging ? "none" : "opacity 150ms",
                                 }}
-                                onClick={() => props.onEditEntry(entry)}
-                                title={`${task?.title || "Unknown"} (${entry.duration}d)`}
+                                onMouseDown={(e) => handleDragStart(e, entry, barPos.left)}
+                                onClick={(e) => {
+                                  if (!wasDragged.current) {
+                                    props.onEditEntry(entry);
+                                  }
+                                }}
+                                title={`${task?.title || "Unknown"} (${entry.duration}d) - Drag to reschedule`}
                                 data-testid={`gantt-bar-${entry.id}`}
                               >
                                 <span className="truncate">{barPos.width > 60 ? (task?.title || "Unknown") : ""}</span>
