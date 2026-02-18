@@ -15,7 +15,8 @@ import {
   Mail,
   Receipt,
   Settings,
-  ChevronRight
+  ChevronRight,
+  Files
 } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -40,6 +41,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     { href: "/admin/users", label: "User Management", icon: Shield },
     { href: "/admin/email-setup", label: "Email Setup", icon: Mail },
     { href: "/admin/billing", label: "Billing", icon: Receipt },
+    { href: "/admin/documents", label: "Documents", icon: Files },
     { href: "/employees", label: "Employees", icon: HardHat },
   ];
 

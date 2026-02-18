@@ -41,7 +41,7 @@ Core entities, utilizing soft deletes with a `deletedAt` timestamp, include Proj
 ### Specific Features
 - **Address Autocomplete**: Utilizes OpenStreetMap's Nominatim API.
 - **PDF Viewer**: iframe and canvas overlay for viewing and annotating PDFs.
-- **Document Management**: Supports grid/list views, automatic project folder generation, tagging, search, starring, multi-select batch operations, and drag-and-drop uploads.
+- **Document Management**: Supports grid/list views, automatic project folder generation, tagging, search, starring, multi-select batch operations, and drag-and-drop uploads. Includes a separate **Company Documents** manager (Admin > Documents at `/admin/documents`) that operates independently of projects, using `company_folders` and `company_files` tables with API routes under `/api/company-documents/`.
 - **Photo Management**: Organizes photos into albums, offers variable tile sizes, multi-select for bulk actions, and date-based grouping with EXIF data. Includes virtualized scrolling, cursor-based pagination, background image processing (thumbnails, WebP), BlurHash LQIP placeholders, client-side IndexedDB caching, and prefetching. Features tab-gated loading and smart thumbnail fallback for performance.
 - **Daily Report Weather Integration**: Open-Meteo geocoding and weather APIs provide local weather conditions.
 - **Daily Report Labor Integration**: Links to Fingercheck time tracking, allowing employees who punched into a project to be added to daily report tasks with role selection and hours input, validated against actual tracked hours.
