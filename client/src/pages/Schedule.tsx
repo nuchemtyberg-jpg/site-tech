@@ -1074,7 +1074,7 @@ function GanttView(props: CalendarViewProps) {
               projectEntries.map(({ project, entries }) => (
                 <div key={project?.id || 0}>
                   <div
-                    className="px-3 text-xs font-bold uppercase text-muted-foreground bg-muted/40 border-b border-border truncate flex items-center"
+                    className="px-3 text-xs font-bold uppercase text-muted-foreground bg-muted/70 border-b border-border truncate flex items-center"
                     style={{ height: ROW_HEIGHT, ...(project?.color ? { borderLeftColor: project.color, borderLeftWidth: 3 } : {}) }}
                     data-testid={`gantt-project-header-${project?.id}`}
                   >
@@ -1164,7 +1164,7 @@ function GanttView(props: CalendarViewProps) {
                     }
                     return (
                       <div key={project?.id || 0}>
-                        <div className="border-b border-border bg-muted/40" style={{ height: ROW_HEIGHT }} />
+                        <div className="border-b border-border bg-muted/70" style={{ height: ROW_HEIGHT }} />
                         {entries.map((entry, idx) => {
                           const barPos = getBarPosition(entry);
                           const task = props.getTaskById(entry.taskId);
