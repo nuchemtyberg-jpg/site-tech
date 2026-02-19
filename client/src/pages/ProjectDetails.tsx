@@ -240,6 +240,7 @@ export default function ProjectDetails() {
   const [editTaskStatus, setEditTaskStatus] = useState("pending");
   const [editTaskPriority, setEditTaskPriority] = useState("medium");
   const [editTaskPercentComplete, setEditTaskPercentComplete] = useState(0);
+  const [editTaskScheduledValue, setEditTaskScheduledValue] = useState<string>("");
   const [selectedFingercheckJob, setSelectedFingercheckJob] = useState<string>("none");
   
   // Task status history
@@ -1032,6 +1033,7 @@ export default function ProjectDetails() {
     setEditTaskStatus(task.status);
     setEditTaskPriority(task.priority);
     setEditTaskPercentComplete(task.percentComplete || 0);
+    setEditTaskScheduledValue(task.scheduledValue != null ? String(task.scheduledValue) : "");
   };
 
   const handlePercentCompleteChange = (value: number[]) => {
@@ -1069,6 +1071,7 @@ export default function ProjectDetails() {
       status: editTaskStatus,
       priority: editTaskPriority,
       percentComplete: editTaskPercentComplete,
+      scheduledValue: editTaskScheduledValue ? parseInt(editTaskScheduledValue, 10) : null,
     }, {
       onSuccess: () => {
         setEditingTask(null);
@@ -1915,9 +1918,24 @@ export default function ProjectDetails() {
                     <Input id="description" {...form.register("description")} placeholder="Details..." data-testid="input-task-description" className="bg-white dark:bg-zinc-900 text-black dark:text-white" />
                   </div>
 
-                  <div className="grid gap-2">
-                    <Label htmlFor="dueDate">Scheduled Date</Label>
-                    <Input id="dueDate" type="date" {...form.register("dueDate")} data-testid="input-task-due" className="bg-white dark:bg-zinc-900 text-black dark:text-white" />
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="grid gap-2">
+                      <Label htmlFor="dueDate">Scheduled Date</Label>
+                      <Input id="dueDate" type="date" {...form.register("dueDate")} data-testid="input-task-due" className="bg-white dark:bg-zinc-900 text-black dark:text-white" />
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="scheduledValue">Scheduled Value ($)</Label>
+                      <Input
+                        id="scheduledValue"
+                        type="number"
+                        min="0"
+                        step="1"
+                        placeholder="0"
+                        {...form.register("scheduledValue", { valueAsNumber: true })}
+                        data-testid="input-task-scheduled-value"
+                        className="bg-white dark:bg-zinc-900 text-black dark:text-white"
+                      />
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -3052,16 +3070,32 @@ export default function ProjectDetails() {
               />
             </div>
 
-            <div className="grid gap-2">
-              <Label htmlFor="edit-scheduled-date">Scheduled Date</Label>
-              <Input
-                id="edit-scheduled-date"
-                type="date"
-                value={editTaskScheduledDate}
-                onChange={(e) => setEditTaskScheduledDate(e.target.value)}
-                className="bg-white dark:bg-zinc-900 text-black dark:text-white"
-                data-testid="input-edit-task-scheduled-date"
-              />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid gap-2">
+                <Label htmlFor="edit-scheduled-date">Scheduled Date</Label>
+                <Input
+                  id="edit-scheduled-date"
+                  type="date"
+                  value={editTaskScheduledDate}
+                  onChange={(e) => setEditTaskScheduledDate(e.target.value)}
+                  className="bg-white dark:bg-zinc-900 text-black dark:text-white"
+                  data-testid="input-edit-task-scheduled-date"
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="edit-scheduled-value">Scheduled Value ($)</Label>
+                <Input
+                  id="edit-scheduled-value"
+                  type="number"
+                  min="0"
+                  step="1"
+                  placeholder="0"
+                  value={editTaskScheduledValue}
+                  onChange={(e) => setEditTaskScheduledValue(e.target.value)}
+                  className="bg-white dark:bg-zinc-900 text-black dark:text-white"
+                  data-testid="input-edit-task-scheduled-value"
+                />
+              </div>
             </div>
 
             <div className="grid gap-2">

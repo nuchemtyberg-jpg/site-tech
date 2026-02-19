@@ -93,6 +93,13 @@ Core entities, utilizing soft deletes with a `deletedAt` timestamp, include Proj
 
 - **Schedule Feature**: Full-featured project scheduling with `schedule_entries` table. Users can schedule unfinished tasks to dates with working-day duration (Mon-Fri, optionally including Sunday). Responsive calendar views: monthly on desktop, weekly on mobile. Resource allocation (Fingercheck employees and equipment) per schedule entry via updated `allocations` table with `scheduleEntryId` and `employeeId` fields. CRUD operations with delete confirmations. Multi-day task span rendering across working days (skips Saturday, optionally includes Sunday). Project color coding on entries.
 
+- **Progress Billing (G702/G703)**: AIA G702-style progress billing workflow in the admin Billing page, accessible via a "Progress Billing (G702)" tab alongside the existing task billing. Features include:
+    - **Pay Applications**: Create, edit, delete, submit, and approve pay applications per project with auto-incrementing application numbers.
+    - **G703 Continuation Sheet**: Line items editor that pulls tasks as schedule of values entries, tracking scheduled value, previously completed work, this period's work, and materials stored.
+    - **G702 Summary Calculations**: Auto-calculates original contract sum, change orders, contract sum to date, total completed, retainage, total earned less retainage, previous certificates, current payment due, balance to finish, and percent complete.
+    - **PDF Export**: Generates G702/G703 PDF documents via PDFKit (`/api/pay-application/:id/pdf`).
+    - **Schema**: `pay_applications` table (applicationNumber, periodTo, contractDate, retainagePercent, status: draft/submitted/approved, etc.), `pay_application_items` table (taskId, scheduledValue, previouslyCompleted, thisPeriodsWork, materialsStored), `scheduledValue` field on tasks, `retainagePercent` field on projects.
+
 ## Recent Changes
 
 ### 2026-02-17: Schedule Feature

@@ -241,6 +241,346 @@ export async function registerRoutes(
     }
   });
 
+  // Pay Applications (G702 Progress Billing)
+  app.get("/api/pay-applications/:projectId", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const projectId = Number(req.params.projectId);
+      const apps = await storage.getPayApplications(projectId);
+      res.json(apps);
+    } catch (err) {
+      console.error("Error fetching pay applications:", err);
+      res.status(500).json({ message: "Failed to fetch pay applications" });
+    }
+  });
+
+  app.get("/api/pay-applications/:projectId/next-number", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const projectId = Number(req.params.projectId);
+      const nextNumber = await storage.getNextPayApplicationNumber(projectId);
+      res.json({ nextNumber });
+    } catch (err) {
+      console.error("Error fetching next pay application number:", err);
+      res.status(500).json({ message: "Failed to fetch next number" });
+    }
+  });
+
+  app.get("/api/pay-application/:id", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const id = Number(req.params.id);
+      const app = await storage.getPayApplication(id);
+      if (!app) return res.status(404).json({ message: "Pay application not found" });
+      res.json(app);
+    } catch (err) {
+      console.error("Error fetching pay application:", err);
+      res.status(500).json({ message: "Failed to fetch pay application" });
+    }
+  });
+
+  app.post("/api/pay-applications", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const { insertPayApplicationSchema } = await import("@shared/schema");
+      const validated = insertPayApplicationSchema.parse(req.body);
+      const user = req.user as User;
+      const app = await storage.createPayApplication({
+        ...validated,
+        createdBy: user.id,
+        createdByName: [user.firstName, user.lastName].filter(Boolean).join(' ') || user.email || 'Admin',
+      });
+      res.status(201).json(app);
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0].message });
+      }
+      console.error("Error creating pay application:", err);
+      res.status(500).json({ message: "Failed to create pay application" });
+    }
+  });
+
+  app.patch("/api/pay-application/:id", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const id = Number(req.params.id);
+      const updateSchema = z.object({
+        periodTo: z.string().optional(),
+        contractDate: z.string().nullable().optional(),
+        originalContractSum: z.number().int().min(0).nullable().optional(),
+        netChangeByChangeOrders: z.number().int().nullable().optional(),
+        retainagePercent: z.number().min(0).max(100).nullable().optional(),
+        notes: z.string().nullable().optional(),
+        status: z.enum(["draft", "submitted", "approved"]).optional(),
+      });
+      const validated = updateSchema.parse(req.body);
+      const app = await storage.updatePayApplication(id, validated);
+      res.json(app);
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0].message });
+      }
+      console.error("Error updating pay application:", err);
+      res.status(500).json({ message: "Failed to update pay application" });
+    }
+  });
+
+  app.delete("/api/pay-application/:id", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const id = Number(req.params.id);
+      await storage.deletePayApplication(id);
+      res.status(204).end();
+    } catch (err) {
+      console.error("Error deleting pay application:", err);
+      res.status(500).json({ message: "Failed to delete pay application" });
+    }
+  });
+
+  // Pay Application Items (G703 line items)
+  app.get("/api/pay-application/:id/items", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const payApplicationId = Number(req.params.id);
+      const items = await storage.getPayApplicationItems(payApplicationId);
+      res.json(items);
+    } catch (err) {
+      console.error("Error fetching pay application items:", err);
+      res.status(500).json({ message: "Failed to fetch items" });
+    }
+  });
+
+  app.post("/api/pay-application/:id/items", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const payApplicationId = Number(req.params.id);
+      const itemsSchema = z.array(z.object({
+        taskId: z.number().int(),
+        itemNumber: z.number().int(),
+        description: z.string(),
+        scheduledValue: z.number().int().min(0),
+        previouslyCompleted: z.number().int().min(0),
+        thisPeriodsWork: z.number().int().min(0),
+        materialsStored: z.number().int().min(0),
+      }));
+      const items = itemsSchema.parse(req.body);
+      const results = await storage.bulkUpsertPayApplicationItems(payApplicationId, items.map(item => ({
+        ...item,
+        payApplicationId,
+      })));
+      res.json(results);
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0].message });
+      }
+      console.error("Error saving pay application items:", err);
+      res.status(500).json({ message: "Failed to save items" });
+    }
+  });
+
+  // Generate G702/G703 PDF for a pay application
+  app.get("/api/pay-application/:id/pdf", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const id = Number(req.params.id);
+      const payApp = await storage.getPayApplication(id);
+      if (!payApp) return res.status(404).json({ message: "Pay application not found" });
+
+      const items = await storage.getPayApplicationItems(id);
+      const project = await storage.getProject(payApp.projectId);
+      if (!project) return res.status(404).json({ message: "Project not found" });
+
+      const PDFDocument = (await import("pdfkit")).default;
+      const doc = new PDFDocument({ size: "LETTER", margins: { top: 40, bottom: 40, left: 40, right: 40 } });
+
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `attachment; filename="G702_App${payApp.applicationNumber}_${project.name.replace(/[^a-zA-Z0-9]/g, "_")}.pdf"`);
+      doc.pipe(res);
+
+      const originalContractSum = payApp.originalContractSum || 0;
+      const netChange = payApp.netChangeByChangeOrders || 0;
+      const contractSumToDate = originalContractSum + netChange;
+      const retainagePercent = payApp.retainagePercent || 0;
+      const totalCompleted = items.reduce((sum, item) => sum + (item.previouslyCompleted || 0) + (item.thisPeriodsWork || 0) + (item.materialsStored || 0), 0);
+      const totalScheduledValue = items.reduce((sum, item) => sum + (item.scheduledValue || 0), 0);
+      const percentComplete = totalScheduledValue > 0 ? (totalCompleted / totalScheduledValue) * 100 : 0;
+      const retainageAmount = Math.round(totalCompleted * (retainagePercent / 100));
+      const totalEarnedLessRetainage = totalCompleted - retainageAmount;
+      const previousItems = items.reduce((sum, item) => sum + (item.previouslyCompleted || 0), 0);
+      const previousRetainage = Math.round(previousItems * (retainagePercent / 100));
+      const previousCertificates = previousItems - previousRetainage;
+      const currentPaymentDue = totalEarnedLessRetainage - previousCertificates;
+      const balanceToFinish = contractSumToDate - totalCompleted;
+
+      const fmtCurrency = (n: number) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 0 }).format(n);
+      const fmtDate = (d: string) => { try { return new Date(d + "T00:00:00").toLocaleDateString("en-US"); } catch { return d; } };
+
+      // G702 - Application and Certificate for Payment
+      doc.fontSize(14).font("Helvetica-Bold").text("AIA DOCUMENT G702", { align: "center" });
+      doc.fontSize(11).text("APPLICATION AND CERTIFICATE FOR PAYMENT", { align: "center" });
+      doc.moveDown(0.5);
+
+      doc.fontSize(9).font("Helvetica");
+      const leftCol = 40;
+      const rightCol = 320;
+      let y = doc.y;
+
+      let ownerName = "";
+      if (project.customerId) {
+        const customer = await storage.getCustomer(project.customerId);
+        if (customer) ownerName = customer.name;
+      }
+      doc.text(`TO OWNER: ${ownerName}`, leftCol, y);
+      doc.text(`APPLICATION NO: ${payApp.applicationNumber}`, rightCol, y);
+      y += 14;
+      doc.text(`PROJECT: ${project.name}`, leftCol, y);
+      doc.text(`PERIOD TO: ${fmtDate(payApp.periodTo)}`, rightCol, y);
+      y += 14;
+      doc.text(`FROM CONTRACTOR:`, leftCol, y);
+      if (payApp.contractDate) doc.text(`CONTRACT DATE: ${fmtDate(payApp.contractDate)}`, rightCol, y);
+      y += 28;
+
+      doc.font("Helvetica-Bold").fontSize(10);
+      doc.text("CONTRACTOR'S APPLICATION FOR PAYMENT", leftCol, y);
+      y += 18;
+      doc.font("Helvetica").fontSize(9);
+
+      const summaryItems = [
+        ["1. ORIGINAL CONTRACT SUM", fmtCurrency(originalContractSum)],
+        ["2. NET CHANGE BY CHANGE ORDERS", fmtCurrency(netChange)],
+        ["3. CONTRACT SUM TO DATE (Line 1 + 2)", fmtCurrency(contractSumToDate)],
+        ["4. TOTAL COMPLETED & STORED TO DATE", fmtCurrency(totalCompleted)],
+        ["5. RETAINAGE (" + retainagePercent + "%)", fmtCurrency(retainageAmount)],
+        ["6. TOTAL EARNED LESS RETAINAGE (Line 4 - 5)", fmtCurrency(totalEarnedLessRetainage)],
+        ["7. LESS PREVIOUS CERTIFICATES FOR PAYMENT", fmtCurrency(previousCertificates)],
+        ["8. CURRENT PAYMENT DUE", fmtCurrency(currentPaymentDue)],
+        ["9. BALANCE TO FINISH (Line 3 - 4)", fmtCurrency(balanceToFinish)],
+      ];
+
+      summaryItems.forEach(([label, value]) => {
+        doc.text(label as string, leftCol, y);
+        doc.text(value as string, rightCol + 100, y, { align: "right", width: 100 });
+        y += 16;
+      });
+
+      y += 10;
+      doc.text(`PERCENT COMPLETE: ${percentComplete.toFixed(1)}%`, leftCol, y);
+      y += 16;
+      doc.text(`STATUS: ${payApp.status.toUpperCase()}`, leftCol, y);
+
+      if (payApp.notes) {
+        y += 20;
+        doc.font("Helvetica-Bold").text("NOTES:", leftCol, y);
+        y += 14;
+        doc.font("Helvetica").text(payApp.notes, leftCol, y, { width: 530 });
+      }
+
+      // G703 - Continuation Sheet (only if items exist)
+      if (items.length > 0) {
+        doc.addPage();
+        doc.fontSize(14).font("Helvetica-Bold").text("AIA DOCUMENT G703", { align: "center" });
+        doc.fontSize(11).text("CONTINUATION SHEET", { align: "center" });
+        doc.moveDown(0.5);
+        doc.fontSize(8).font("Helvetica").text(`Application No: ${payApp.applicationNumber}    Period To: ${fmtDate(payApp.periodTo)}    Project: ${project.name}`);
+        doc.moveDown(0.5);
+
+        const colWidths = [30, 130, 70, 70, 70, 70, 70, 45, 70];
+        const colHeaders = ["#", "Description of Work", "Scheduled Value", "From Previous", "This Period", "Materials Stored", "Total Completed", "%", "Balance"];
+        const tableLeft = 25;
+        y = doc.y;
+
+        doc.font("Helvetica-Bold").fontSize(7);
+        let x = tableLeft;
+        colHeaders.forEach((header, i) => {
+          doc.text(header, x, y, { width: colWidths[i], align: i >= 2 ? "right" : "left" });
+          x += colWidths[i] + 3;
+        });
+
+        y += 14;
+        doc.moveTo(tableLeft, y).lineTo(tableLeft + colWidths.reduce((a, b) => a + b, 0) + colWidths.length * 3, y).stroke();
+        y += 4;
+
+        doc.font("Helvetica").fontSize(7);
+        items.forEach(item => {
+          if (y > 720) {
+            doc.addPage();
+            y = 40;
+          }
+          const totalComp = (item.previouslyCompleted || 0) + (item.thisPeriodsWork || 0) + (item.materialsStored || 0);
+          const pct = item.scheduledValue > 0 ? ((totalComp / item.scheduledValue) * 100).toFixed(1) + "%" : "0.0%";
+          const balance = item.scheduledValue - totalComp;
+
+          x = tableLeft;
+          const rowData = [
+            String(item.itemNumber),
+            item.description,
+            fmtCurrency(item.scheduledValue),
+            fmtCurrency(item.previouslyCompleted),
+            fmtCurrency(item.thisPeriodsWork),
+            fmtCurrency(item.materialsStored),
+            fmtCurrency(totalComp),
+            pct,
+            fmtCurrency(balance),
+          ];
+          rowData.forEach((val, i) => {
+            doc.text(val, x, y, { width: colWidths[i], align: i >= 2 ? "right" : "left" });
+            x += colWidths[i] + 3;
+          });
+          y += 12;
+        });
+
+        // Totals row
+        y += 4;
+        doc.moveTo(tableLeft, y).lineTo(tableLeft + colWidths.reduce((a, b) => a + b, 0) + colWidths.length * 3, y).stroke();
+        y += 4;
+        doc.font("Helvetica-Bold").fontSize(7);
+        x = tableLeft;
+        const totals = [
+          "",
+          "TOTALS",
+          fmtCurrency(totalScheduledValue),
+          fmtCurrency(previousItems),
+          fmtCurrency(items.reduce((s, i) => s + (i.thisPeriodsWork || 0), 0)),
+          fmtCurrency(items.reduce((s, i) => s + (i.materialsStored || 0), 0)),
+          fmtCurrency(totalCompleted),
+          percentComplete.toFixed(1) + "%",
+          fmtCurrency(balanceToFinish),
+        ];
+        totals.forEach((val, i) => {
+          doc.text(val, x, y, { width: colWidths[i], align: i >= 2 ? "right" : "left" });
+          x += colWidths[i] + 3;
+        });
+      }
+
+      doc.end();
+    } catch (err) {
+      console.error("Error generating PDF:", err);
+      res.status(500).json({ message: "Failed to generate PDF" });
+    }
+  });
+
+  // Get all pay applications across all projects (for billing page)
+  app.get("/api/admin/pay-applications", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const projectsData = await storage.getProjects();
+      const allApps: any[] = [];
+      for (const project of projectsData) {
+        const apps = await storage.getPayApplications(project.id);
+        for (const app of apps) {
+          const items = await storage.getPayApplicationItems(app.id);
+          allApps.push({ ...app, projectName: project.name, items });
+        }
+      }
+      res.json(allApps);
+    } catch (err) {
+      console.error("Error fetching all pay applications:", err);
+      res.status(500).json({ message: "Failed to fetch pay applications" });
+    }
+  });
+
+  // Get tasks with scheduled values for a project (for progress billing)
+  app.get("/api/projects/:projectId/tasks-with-values", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const projectId = Number(req.params.projectId);
+      const projectTasks = await storage.getTasks(projectId);
+      res.json(projectTasks);
+    } catch (err) {
+      console.error("Error fetching project tasks for billing:", err);
+      res.status(500).json({ message: "Failed to fetch project tasks" });
+    }
+  });
+
   // Customers - all routes protected by authorization
   app.get(api.customers.list.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
     const customers = await storage.getCustomers();

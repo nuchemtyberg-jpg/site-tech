@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
@@ -24,6 +25,7 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 import type { Task } from "@shared/schema";
+import ProgressBilling from "@/components/ProgressBilling";
 
 type BillingTask = Task & { projectName: string };
 
@@ -204,6 +206,16 @@ export default function Billing() {
           <h1 className="text-xl sm:text-2xl font-bold tracking-tight" data-testid="text-billing-title">Billing</h1>
           <p className="text-xs sm:text-sm text-muted-foreground mt-1">Manage billing for completed tasks</p>
         </div>
+      </div>
+
+      <Tabs defaultValue="task-billing" className="space-y-4">
+        <TabsList data-testid="billing-tabs">
+          <TabsTrigger value="task-billing" data-testid="tab-task-billing">Task Billing</TabsTrigger>
+          <TabsTrigger value="progress-billing" data-testid="tab-progress-billing">Progress Billing (G702)</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="task-billing" className="space-y-4 sm:space-y-6">
+      <div className="flex justify-end">
         <Button variant="outline" size="sm" onClick={exportCSV} data-testid="button-export-csv">
           <Download className="w-4 h-4 mr-2" />
           Export CSV
@@ -566,6 +578,12 @@ export default function Billing() {
           )}
         </CardContent>
       </Card>
+        </TabsContent>
+
+        <TabsContent value="progress-billing">
+          <ProgressBilling />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

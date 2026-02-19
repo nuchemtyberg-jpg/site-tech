@@ -6,6 +6,7 @@ import {
   projectEmailConnections, projectEmails, projectEmailAttachments,
   fingercheckEmployees, fingercheckTimePunches, fingercheckProjectMappings,
   rfis, rfiResponses, userOutlookConnections, projectDailyReportRecipients, companyFolders, companyFiles,
+  payApplications, payApplicationItems,
   type InsertProject, type InsertTask, type InsertEquipment, type InsertAllocation, type InsertFolder, type InsertFileMetadata, type InsertPhoto,
   type InsertCustomer, type InsertDailyReport, type InsertMaintenanceLog, type InsertCommunication, type InsertTaskStatusHistory, type InsertPhotoAlbum,
   type InsertReportTask, type InsertLaborEntry, type InsertEquipmentEntry, type InsertReportTaskPhoto, type InsertDelivery, type InsertDeliveryPhoto,
@@ -14,6 +15,7 @@ import {
   type InsertProjectEmailConnection, type InsertProjectEmail, type InsertProjectEmailAttachment,
   type InsertFingercheckEmployee, type InsertFingercheckTimePunch, type InsertFingercheckProjectMapping,
   type InsertRfi, type InsertRfiResponse, type InsertProjectDailyReportRecipient, type InsertCompanyFolder, type InsertCompanyFile,
+  type InsertPayApplication, type InsertPayApplicationItem,
   type Project, type Task, type Equipment, type Allocation, type Folder, type FileMetadata, type Photo,
   type Customer, type DailyReport, type MaintenanceLog, type Communication, type TaskStatusHistory, type PhotoAlbum,
   type ReportTask, type LaborEntry, type EquipmentEntry, type ReportTaskPhoto, type Delivery, type DeliveryPhoto,
@@ -21,6 +23,7 @@ import {
   type ProjectEmailConnection, type ProjectEmail, type ProjectEmailAttachment,
   type FingercheckEmployee, type FingercheckTimePunch, type FingercheckProjectMapping,
   type Rfi, type RfiResponse, type UserOutlookConnection, type ProjectDailyReportRecipient, type CompanyFolder, type CompanyFile,
+  type PayApplication, type PayApplicationItem,
   type ScheduleEntry,
   type User, type UpsertUser, type AuthorizedUser
 } from "@shared/schema";
@@ -317,6 +320,21 @@ export interface IStorage {
   deleteCompanyFile(id: number): Promise<void>;
   batchDeleteCompanyFiles(ids: number[]): Promise<void>;
   batchMoveCompanyFiles(ids: number[], folderId: number | null): Promise<void>;
+
+  // Pay Applications (G702 Progress Billing)
+  getPayApplications(projectId: number): Promise<PayApplication[]>;
+  getPayApplication(id: number): Promise<PayApplication | undefined>;
+  getNextPayApplicationNumber(projectId: number): Promise<number>;
+  createPayApplication(app: InsertPayApplication): Promise<PayApplication>;
+  updatePayApplication(id: number, app: Partial<InsertPayApplication>): Promise<PayApplication>;
+  deletePayApplication(id: number): Promise<void>;
+
+  // Pay Application Items (G703 line items)
+  getPayApplicationItems(payApplicationId: number): Promise<PayApplicationItem[]>;
+  createPayApplicationItem(item: InsertPayApplicationItem): Promise<PayApplicationItem>;
+  updatePayApplicationItem(id: number, item: Partial<InsertPayApplicationItem>): Promise<PayApplicationItem>;
+  deletePayApplicationItem(id: number): Promise<void>;
+  bulkUpsertPayApplicationItems(payApplicationId: number, items: InsertPayApplicationItem[]): Promise<PayApplicationItem[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -563,6 +581,7 @@ export class DatabaseStorage implements IStorage {
         priority: tasks.priority,
         percentComplete: tasks.percentComplete,
         estimatedHours: tasks.estimatedHours,
+        scheduledValue: tasks.scheduledValue,
         assignedTo: tasks.assignedTo,
         completedAt: tasks.completedAt,
         billedAt: tasks.billedAt,
@@ -1569,6 +1588,61 @@ export class DatabaseStorage implements IStorage {
   }
   async deleteProjectDailyReportRecipient(id: number): Promise<void> {
     await db.update(projectDailyReportRecipients).set({ deletedAt: new Date() }).where(eq(projectDailyReportRecipients.id, id));
+  }
+
+  // Pay Applications (G702 Progress Billing)
+  async getPayApplications(projectId: number): Promise<PayApplication[]> {
+    return db.select().from(payApplications).where(and(eq(payApplications.projectId, projectId), isNull(payApplications.deletedAt))).orderBy(asc(payApplications.applicationNumber));
+  }
+
+  async getPayApplication(id: number): Promise<PayApplication | undefined> {
+    const [result] = await db.select().from(payApplications).where(and(eq(payApplications.id, id), isNull(payApplications.deletedAt)));
+    return result;
+  }
+
+  async getNextPayApplicationNumber(projectId: number): Promise<number> {
+    const [result] = await db.select({ max: sql<number>`COALESCE(MAX(${payApplications.applicationNumber}), 0)` }).from(payApplications).where(and(eq(payApplications.projectId, projectId), isNull(payApplications.deletedAt)));
+    return (result?.max || 0) + 1;
+  }
+
+  async createPayApplication(app: InsertPayApplication): Promise<PayApplication> {
+    const [result] = await db.insert(payApplications).values(app).returning();
+    return result;
+  }
+
+  async updatePayApplication(id: number, app: Partial<InsertPayApplication>): Promise<PayApplication> {
+    const [result] = await db.update(payApplications).set(app).where(eq(payApplications.id, id)).returning();
+    return result;
+  }
+
+  async deletePayApplication(id: number): Promise<void> {
+    await db.update(payApplications).set({ deletedAt: new Date() }).where(eq(payApplications.id, id));
+  }
+
+  // Pay Application Items (G703 line items)
+  async getPayApplicationItems(payApplicationId: number): Promise<PayApplicationItem[]> {
+    return db.select().from(payApplicationItems).where(eq(payApplicationItems.payApplicationId, payApplicationId)).orderBy(asc(payApplicationItems.itemNumber));
+  }
+
+  async createPayApplicationItem(item: InsertPayApplicationItem): Promise<PayApplicationItem> {
+    const [result] = await db.insert(payApplicationItems).values(item).returning();
+    return result;
+  }
+
+  async updatePayApplicationItem(id: number, item: Partial<InsertPayApplicationItem>): Promise<PayApplicationItem> {
+    const [result] = await db.update(payApplicationItems).set(item).where(eq(payApplicationItems.id, id)).returning();
+    return result;
+  }
+
+  async deletePayApplicationItem(id: number): Promise<void> {
+    await db.delete(payApplicationItems).where(eq(payApplicationItems.id, id));
+  }
+
+  async bulkUpsertPayApplicationItems(payApplicationId: number, items: InsertPayApplicationItem[]): Promise<PayApplicationItem[]> {
+    await db.delete(payApplicationItems).where(eq(payApplicationItems.payApplicationId, payApplicationId));
+    if (items.length === 0) return [];
+    const results = await db.insert(payApplicationItems).values(items.map(item => ({ ...item, payApplicationId }))).returning();
+    return results;
   }
 }
 

@@ -44,11 +44,14 @@ export const projects = pgTable("projects", {
   notes: text("notes"),
   color: text("color").notNull().default("#f97316"),
   projectEmail: text("project_email"),
+  retainagePercent: real("retainage_percent"), // G702 retainage percentage (e.g. 5, 10)
   createdAt: timestamp("created_at").defaultNow(),
   deletedAt: timestamp("deleted_at"), // Soft delete support
 });
 
-export const insertProjectSchema = createInsertSchema(projects).omit({ id: true, projectNumber: true, projectEmail: true, createdAt: true, deletedAt: true });
+export const insertProjectSchema = createInsertSchema(projects).omit({ id: true, projectNumber: true, projectEmail: true, createdAt: true, deletedAt: true }).extend({
+  retainagePercent: z.number().min(0).max(100).optional().nullable(),
+});
 export type Project = typeof projects.$inferSelect;
 export type InsertProject = z.infer<typeof insertProjectSchema>;
 
@@ -64,6 +67,7 @@ export const tasks = pgTable("tasks", {
   priority: text("priority").notNull().default("medium"), // low, medium, high, urgent
   percentComplete: integer("percent_complete").notNull().default(0), // 0-100
   estimatedHours: integer("estimated_hours"),
+  scheduledValue: integer("scheduled_value"), // Dollar amount for G702 schedule of values
   assignedTo: text("assigned_to"),
   completedAt: timestamp("completed_at"),
   billedAt: timestamp("billed_at"),
@@ -77,6 +81,7 @@ export const insertTaskSchema = createInsertSchema(tasks).omit({ id: true, creat
   dueDate: z.string().optional().nullable(),
   scheduledDate: z.string().optional().nullable(),
   description: z.string().optional().nullable(),
+  scheduledValue: z.number().int().min(0).optional().nullable(),
 });
 export type Task = typeof tasks.$inferSelect;
 export type InsertTask = z.infer<typeof insertTaskSchema>;
@@ -735,3 +740,59 @@ export const companyFiles = pgTable("company_files", {
 export const insertCompanyFileSchema = createInsertSchema(companyFiles).omit({ id: true, createdAt: true, deletedAt: true });
 export type CompanyFile = typeof companyFiles.$inferSelect;
 export type InsertCompanyFile = z.infer<typeof insertCompanyFileSchema>;
+
+// Pay Applications (G702 Progress Billing)
+export const payApplications = pgTable("pay_applications", {
+  id: serial("id").primaryKey(),
+  projectId: integer("project_id").notNull(),
+  applicationNumber: integer("application_number").notNull(),
+  periodTo: date("period_to").notNull(),
+  contractDate: date("contract_date"),
+  originalContractSum: integer("original_contract_sum"),
+  netChangeByChangeOrders: integer("net_change_by_change_orders").default(0),
+  retainagePercent: real("retainage_percent").default(0),
+  status: text("status").notNull().default("draft"), // draft, submitted, approved
+  notes: text("notes"),
+  createdBy: text("created_by"),
+  createdByName: text("created_by_name"),
+  submittedAt: timestamp("submitted_at"),
+  approvedAt: timestamp("approved_at"),
+  approvedBy: text("approved_by"),
+  approvedByName: text("approved_by_name"),
+  createdAt: timestamp("created_at").defaultNow(),
+  deletedAt: timestamp("deleted_at"),
+});
+
+export const insertPayApplicationSchema = createInsertSchema(payApplications).omit({ id: true, createdAt: true, deletedAt: true, submittedAt: true, approvedAt: true, approvedBy: true, approvedByName: true }).extend({
+  periodTo: z.string().min(1, "Period to date is required"),
+  applicationNumber: z.number().int().min(1),
+  contractDate: z.string().optional().nullable(),
+  originalContractSum: z.number().int().min(0).optional().nullable(),
+  netChangeByChangeOrders: z.number().int().optional().nullable(),
+  retainagePercent: z.number().min(0).max(100).optional().nullable(),
+});
+export type PayApplication = typeof payApplications.$inferSelect;
+export type InsertPayApplication = z.infer<typeof insertPayApplicationSchema>;
+
+// Pay Application Line Items (G703 Continuation Sheet)
+export const payApplicationItems = pgTable("pay_application_items", {
+  id: serial("id").primaryKey(),
+  payApplicationId: integer("pay_application_id").notNull(),
+  taskId: integer("task_id").notNull(),
+  itemNumber: integer("item_number").notNull(),
+  description: text("description").notNull(),
+  scheduledValue: integer("scheduled_value").notNull().default(0),
+  previouslyCompleted: integer("previously_completed").notNull().default(0),
+  thisPeriodsWork: integer("this_periods_work").notNull().default(0),
+  materialsStored: integer("materials_stored").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertPayApplicationItemSchema = createInsertSchema(payApplicationItems).omit({ id: true, createdAt: true }).extend({
+  scheduledValue: z.number().int().min(0),
+  previouslyCompleted: z.number().int().min(0),
+  thisPeriodsWork: z.number().int().min(0),
+  materialsStored: z.number().int().min(0),
+});
+export type PayApplicationItem = typeof payApplicationItems.$inferSelect;
+export type InsertPayApplicationItem = z.infer<typeof insertPayApplicationItemSchema>;
