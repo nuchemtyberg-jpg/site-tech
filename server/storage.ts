@@ -28,7 +28,7 @@ import {
   type User, type UpsertUser, type AuthorizedUser
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, asc, and, or, isNull, sql, lt, ilike } from "drizzle-orm";
+import { eq, desc, asc, and, or, isNull, sql, lt, ilike, inArray } from "drizzle-orm";
 
 const PROJECT_EMAIL_DOMAIN = "updates.sitetechnj.com";
 
@@ -617,7 +617,7 @@ export class DatabaseStorage implements IStorage {
     if (taskIds.length === 0) return;
     await db.update(tasks).set({ billedAt: new Date(), billedBy }).where(
       and(
-        sql`${tasks.id} = ANY(${taskIds})`,
+        inArray(tasks.id, taskIds),
         isNull(tasks.billedAt)
       )
     );
