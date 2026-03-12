@@ -39,7 +39,7 @@ export const projects = pgTable("projects", {
   location: text("location"), // kept for backward compatibility
   startDate: date("start_date"),
   endDate: date("end_date"),
-  status: text("status").notNull().default("new"), // new, bidding, takeoff_done, proposal_sent, active, completed, bid_lost, archive
+  status: text("status").notNull().default("new"), // new, bidding, takeoff_done, takeoff_reviewed, proposal_sent, active, completed, bid_lost, archive
   estimatedValue: integer("estimated_value"),
   notes: text("notes"),
   color: text("color").notNull().default("#f97316"),

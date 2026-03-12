@@ -57,6 +57,7 @@ const PROJECT_STATUSES = [
   { value: "new", label: "New", color: "#3b82f6" },
   { value: "bidding", label: "Bidding", color: "#6366f1" },
   { value: "takeoff_done", label: "Takeoff Done", color: "#8b5cf6" },
+  { value: "takeoff_reviewed", label: "Takeoff Reviewed", color: "#a855f7" },
   { value: "proposal_sent", label: "Proposal Sent", color: "#06b6d4" },
   { value: "active", label: "Active", color: "#f97316" },
   { value: "completed", label: "Completed", color: "#22c55e" },
@@ -204,6 +205,8 @@ export default function Projects() {
         return "bg-indigo-500/10 text-indigo-500";
       case "takeoff_done":
         return "bg-purple-500/10 text-purple-500";
+      case "takeoff_reviewed":
+        return "bg-violet-500/10 text-violet-500";
       case "proposal_sent":
         return "bg-cyan-500/10 text-cyan-500";
       case "active":
