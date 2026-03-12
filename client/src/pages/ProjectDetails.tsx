@@ -469,6 +469,7 @@ export default function ProjectDetails() {
   const [isDragOver, setIsDragOver] = useState(false);
   const [isUploadingDragDrop, setIsUploadingDragDrop] = useState(false);
   const [dragDropProgress, setDragDropProgress] = useState({ current: 0, total: 0 });
+  const dragCounter = useRef(0);
   
   
   // Keep ref in sync with state for use in callbacks
@@ -539,17 +540,27 @@ export default function ProjectDetails() {
     return contentType === 'application/pdf';
   };
 
-  // Handle drag and drop file upload
+  const handleDragEnter = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounter.current++;
+    if (dragCounter.current === 1) {
+      setIsDragOver(true);
+    }
+  };
+
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    setIsDragOver(true);
   };
 
   const handleDragLeave = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    setIsDragOver(false);
+    dragCounter.current--;
+    if (dragCounter.current === 0) {
+      setIsDragOver(false);
+    }
   };
 
   // Helper to recursively read files from a directory entry
@@ -600,6 +611,7 @@ export default function ProjectDetails() {
   const handleDrop = async (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    dragCounter.current = 0;
     setIsDragOver(false);
 
     // Collect all files with their relative paths (for folder structure preservation)
@@ -2111,6 +2123,7 @@ export default function ProjectDetails() {
           <div className="flex flex-col h-[calc(100vh-180px)] overflow-hidden">
           {/* Drag and Drop Zone Wrapper */}
           <div
+            onDragEnter={handleDragEnter}
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
@@ -2119,9 +2132,8 @@ export default function ProjectDetails() {
               isDragOver && "ring-2 ring-primary ring-offset-2 bg-primary/5"
             )}
           >
-            {/* Drag overlay - pointer-events-auto ensures overlay captures all events */}
             {isDragOver && (
-              <div className="absolute inset-0 z-50 flex items-center justify-center bg-primary/10 backdrop-blur-sm rounded-lg border-2 border-dashed border-primary pointer-events-auto">
+              <div className="absolute inset-0 z-50 flex items-center justify-center bg-primary/10 backdrop-blur-sm rounded-lg border-2 border-dashed border-primary pointer-events-none">
                 <div className="text-center pointer-events-none">
                   <Upload className="w-12 h-12 mx-auto text-primary mb-2" />
                   <p className="text-lg font-medium text-primary">Drop files here to upload</p>

@@ -137,6 +137,7 @@ export default function CompanyDocuments() {
   const [isDragOver, setIsDragOver] = useState(false);
   const [isUploadingDragDrop, setIsUploadingDragDrop] = useState(false);
   const [dragDropProgress, setDragDropProgress] = useState({ current: 0, total: 0 });
+  const dragCounter = useRef(0);
   const [isFolderOpen, setIsFolderOpen] = useState(false);
   const [folderName, setFolderName] = useState("");
   const [deleteFolderId, setDeleteFolderId] = useState<number | null>(null);
@@ -188,16 +189,27 @@ export default function CompanyDocuments() {
     }
   };
 
+  const handleDragEnter = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounter.current++;
+    if (dragCounter.current === 1) {
+      setIsDragOver(true);
+    }
+  };
+
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    setIsDragOver(true);
   };
 
   const handleDragLeave = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    setIsDragOver(false);
+    dragCounter.current--;
+    if (dragCounter.current === 0) {
+      setIsDragOver(false);
+    }
   };
 
   type FileWithPath = { file: File; relativePath: string };
@@ -245,6 +257,7 @@ export default function CompanyDocuments() {
   const handleDrop = async (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    dragCounter.current = 0;
     setIsDragOver(false);
 
     const allFilesWithPaths: FileWithPath[] = [];
@@ -905,6 +918,7 @@ export default function CompanyDocuments() {
 
       <div className="flex flex-col h-[calc(100vh-200px)] overflow-hidden">
         <div
+          onDragEnter={handleDragEnter}
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
@@ -914,7 +928,7 @@ export default function CompanyDocuments() {
           )}
         >
           {isDragOver && (
-            <div className="absolute inset-0 z-50 flex items-center justify-center bg-primary/10 backdrop-blur-sm rounded-lg border-2 border-dashed border-primary pointer-events-auto">
+            <div className="absolute inset-0 z-50 flex items-center justify-center bg-primary/10 backdrop-blur-sm rounded-lg border-2 border-dashed border-primary pointer-events-none">
               <div className="text-center pointer-events-none">
                 <Upload className="w-12 h-12 mx-auto text-primary mb-2" />
                 <p className="text-lg font-medium text-primary">Drop files here to upload</p>
