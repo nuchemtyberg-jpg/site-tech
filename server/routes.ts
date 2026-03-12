@@ -2725,7 +2725,9 @@ export async function registerRoutes(
     try {
       const { folder, resourceType } = req.body;
       const signature = generateUploadSignature({ folder: folder || 'sitetech/photos' });
-      res.json({ ...signature, resourceType: resourceType === 'video' ? 'video' : 'image' });
+      const validResourceTypes = ['image', 'video', 'raw'];
+      const resolvedResourceType = validResourceTypes.includes(resourceType) ? resourceType : 'image';
+      res.json({ ...signature, resourceType: resolvedResourceType });
     } catch (err) {
       console.error("Error generating Cloudinary signature:", err);
       res.status(500).json({ error: "Failed to generate upload signature" });

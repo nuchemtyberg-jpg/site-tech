@@ -197,7 +197,7 @@ export function NativeFileUploader({
             type: uploadFile.type,
             takenAt: uploadFile.takenAt,
             relativePath: uploadFile.relativePath,
-            mediaType: uploadFile.type.startsWith('video/') ? 'video' : 'image',
+            mediaType: uploadFile.type.startsWith('video/') ? 'video' : uploadFile.type.startsWith('image/') ? 'image' : 'raw',
           });
         }
         continue;
@@ -209,7 +209,8 @@ export function NativeFileUploader({
 
       try {
         const isVideo = uploadFile.type.startsWith('video/');
-        const resourceType = isVideo ? 'video' : 'image';
+        const isImage = uploadFile.type.startsWith('image/');
+        const resourceType = isVideo ? 'video' : isImage ? 'image' : 'raw';
 
         const signatureRes = await fetch("/api/cloudinary/signature", {
           method: "POST",
@@ -265,7 +266,7 @@ export function NativeFileUploader({
           height,
           takenAt: uploadFile.takenAt,
           relativePath: uploadFile.relativePath,
-          mediaType: isVideo ? 'video' : 'image',
+          mediaType: isVideo ? 'video' : isImage ? 'image' : 'raw',
         });
       } catch (error) {
         setFiles(prev => prev.map(f => 
