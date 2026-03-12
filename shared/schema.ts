@@ -644,6 +644,7 @@ export const photos = pgTable("photos", {
   displayDate: timestamp("display_date").notNull().defaultNow(), // Normalized date for sorting (takenAt or createdAt)
   width: integer("width"), // Original image width
   height: integer("height"), // Original image height
+  mediaType: text("media_type").notNull().default("image"), // "image" or "video"
   createdAt: timestamp("created_at").defaultNow(),
   deletedAt: timestamp("deleted_at"), // Soft delete support
 });

@@ -2723,9 +2723,9 @@ export async function registerRoutes(
 
   app.post('/api/cloudinary/signature', isAuthenticated, isAuthorizedUser, async (req, res) => {
     try {
-      const { folder } = req.body;
+      const { folder, resourceType } = req.body;
       const signature = generateUploadSignature({ folder: folder || 'sitetech/photos' });
-      res.json(signature);
+      res.json({ ...signature, resourceType: resourceType === 'video' ? 'video' : 'image' });
     } catch (err) {
       console.error("Error generating Cloudinary signature:", err);
       res.status(500).json({ error: "Failed to generate upload signature" });
@@ -2737,12 +2737,14 @@ export async function registerRoutes(
       const projectId = Number(req.params.projectId);
       const generalAlbum = await storage.getOrCreateGeneralAlbum(projectId);
       const takenAt = req.body.takenAt ? new Date(req.body.takenAt) : null;
+      const mediaType = req.body.mediaType === 'video' ? 'video' : 'image';
       const photo = await storage.createPhoto({
         ...req.body,
         projectId,
         albumId: req.body.albumId || generalAlbum.id,
         takenAt,
         displayDate: takenAt || new Date(),
+        mediaType,
       });
       
       res.status(201).json(photo);
@@ -2766,7 +2768,8 @@ export async function registerRoutes(
     try {
       const photo = await storage.getPhoto(Number(req.params.id));
       if (photo?.cloudinaryPublicId) {
-        await deleteFromCloudinary(photo.cloudinaryPublicId).catch(console.error);
+        const resourceType = photo.mediaType === 'video' ? 'video' : 'image';
+        await deleteFromCloudinary(photo.cloudinaryPublicId, resourceType).catch(console.error);
       }
       await storage.deletePhoto(Number(req.params.id));
       res.status(204).send();

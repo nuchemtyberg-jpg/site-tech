@@ -50,8 +50,8 @@ export async function uploadToCloudinary(
   });
 }
 
-export async function deleteFromCloudinary(publicId: string): Promise<void> {
-  await cloudinary.uploader.destroy(publicId);
+export async function deleteFromCloudinary(publicId: string, resourceType: string = 'image'): Promise<void> {
+  await cloudinary.uploader.destroy(publicId, { resource_type: resourceType });
 }
 
 export function getCloudinaryUrl(

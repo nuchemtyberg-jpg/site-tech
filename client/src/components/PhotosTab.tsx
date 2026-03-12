@@ -37,10 +37,13 @@ import {
   Download,
   Share2,
   Loader2,
+  X,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import { getCloudinaryFullUrl } from "@/components/OptimizedPhotoCard";
+import { getCloudinaryFullUrl, getCloudinaryVideoUrl } from "@/components/OptimizedPhotoCard";
 import { useScrollLock } from "@/hooks/use-scroll-lock";
 import { logViewerOpen, logViewerClose } from "@/lib/debugPerf";
 import type { Photo, PaginatedPhotosResponse } from "@shared/schema";
@@ -101,7 +104,7 @@ function useAllPhotosFlat(projectId: number, albumId?: number | null, enabled?: 
 
 function useCreatePhoto(projectId: number) {
   return useMutation({
-    mutationFn: async (photo: { name: string; objectPath: string; contentType?: string; size?: number; albumId?: number | null; takenAt?: string | null }) => {
+    mutationFn: async (photo: { name: string; objectPath?: string; cloudinaryPublicId?: string; cloudinaryUrl?: string; contentType?: string; size?: number; width?: number; height?: number; albumId?: number | null; takenAt?: string | null; mediaType?: string }) => {
       return apiRequest("POST", `/api/projects/${projectId}/photos`, photo);
     },
     onSuccess: () => {
@@ -183,7 +186,7 @@ export function PhotosTab({ projectId }: PhotosTabProps) {
     }
   }, [lightboxOpen]);
 
-  const handlePhotoUploadComplete = async (uploadedFiles: Array<{ name: string; cloudinaryPublicId: string; cloudinaryUrl: string; size: number; type: string; width?: number; height?: number; takenAt?: Date }>) => {
+  const handlePhotoUploadComplete = async (uploadedFiles: Array<{ name: string; cloudinaryPublicId: string; cloudinaryUrl: string; size: number; type: string; width?: number; height?: number; takenAt?: Date; mediaType?: string }>) => {
     let successCount = 0;
     let targetAlbumId = currentAlbumId;
     
@@ -221,6 +224,7 @@ export function PhotosTab({ projectId }: PhotosTabProps) {
           height: file.height,
           albumId: targetAlbumId,
           takenAt: file.takenAt?.toISOString(),
+          mediaType: file.mediaType || 'image',
         });
         successCount++;
       } catch (err) {
@@ -230,7 +234,7 @@ export function PhotosTab({ projectId }: PhotosTabProps) {
     }
     
     if (successCount > 0) {
-      toast({ title: "Upload Complete", description: `${successCount} photo(s) uploaded successfully.` });
+      toast({ title: "Upload Complete", description: `${successCount} file(s) uploaded successfully.` });
     }
   };
 
@@ -376,8 +380,8 @@ export function PhotosTab({ projectId }: PhotosTabProps) {
 
         <NativeFileUploader
           maxNumberOfFiles={50}
-          maxFileSize={52428800}
-          accept="image/*"
+          maxFileSize={104857600}
+          accept="image/*,video/*"
           buttonClassName="w-full sm:w-auto"
           onUploadComplete={handlePhotoUploadComplete}
         >
@@ -462,18 +466,78 @@ export function PhotosTab({ projectId }: PhotosTabProps) {
         onDeletePhoto={(id) => setDeletePhotoId(id)}
       />
 
-      <Lightbox
-        open={lightboxOpen}
-        close={() => setLightboxOpen(false)}
-        index={lightboxIndex}
-        slides={lightboxPhotos.map(photo => ({
-          src: getCloudinaryFullUrl(photo.cloudinaryPublicId) || '',
-          alt: photo.name,
-        }))}
-        on={{
-          view: ({ index }) => setLightboxIndex(index),
-        }}
-      />
+      {lightboxOpen && (() => {
+        const currentPhoto = lightboxPhotos[lightboxIndex];
+        const isCurrentVideo = currentPhoto?.mediaType === 'video';
+        
+        if (isCurrentVideo) {
+          return (
+            <div 
+              className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center"
+              onClick={() => setLightboxOpen(false)}
+              data-testid="video-player-overlay"
+            >
+              <button
+                className="absolute top-4 right-4 text-white hover:text-gray-300 z-50"
+                onClick={() => setLightboxOpen(false)}
+                data-testid="button-close-video"
+              >
+                <X className="w-8 h-8" />
+              </button>
+              {lightboxPhotos.length > 1 && (
+                <>
+                  <button
+                    className="absolute left-4 top-1/2 -translate-y-1/2 text-white hover:text-gray-300 z-50"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setLightboxIndex((prev) => (prev > 0 ? prev - 1 : lightboxPhotos.length - 1));
+                    }}
+                    data-testid="button-prev-media"
+                  >
+                    <ChevronLeft className="w-10 h-10" />
+                  </button>
+                  <button
+                    className="absolute right-4 top-1/2 -translate-y-1/2 text-white hover:text-gray-300 z-50"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setLightboxIndex((prev) => (prev < lightboxPhotos.length - 1 ? prev + 1 : 0));
+                    }}
+                    data-testid="button-next-media"
+                  >
+                    <ChevronRight className="w-10 h-10" />
+                  </button>
+                </>
+              )}
+              <video
+                key={currentPhoto.id}
+                src={getCloudinaryVideoUrl(currentPhoto.cloudinaryPublicId) || currentPhoto.cloudinaryUrl || ''}
+                controls
+                autoPlay
+                className="max-w-[90vw] max-h-[90vh] rounded-lg"
+                onClick={(e) => e.stopPropagation()}
+                data-testid="video-player"
+              />
+            </div>
+          );
+        }
+        
+        return (
+          <Lightbox
+            open={lightboxOpen}
+            close={() => setLightboxOpen(false)}
+            index={lightboxIndex}
+            slides={lightboxPhotos.map(photo => ({
+              src: photo.mediaType === 'video'
+                ? ''
+                : (getCloudinaryFullUrl(photo.cloudinaryPublicId) || ''),
+              alt: photo.name,
+            }))}
+            on={{
+              view: ({ index: idx }) => setLightboxIndex(idx),
+            }}
+          />
+        );
+      })()}
 
       <AlertDialog open={deleteAlbumId !== null} onOpenChange={() => setDeleteAlbumId(null)}>
         <AlertDialogContent>

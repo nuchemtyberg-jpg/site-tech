@@ -1,6 +1,6 @@
 import { useState, useCallback, memo } from "react";
 import { cn } from "@/lib/utils";
-import { Check, Trash2, Loader2 } from "lucide-react";
+import { Check, Trash2, Loader2, Play } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { Photo } from "@shared/schema";
 
@@ -14,14 +14,16 @@ interface OptimizedPhotoCardProps {
   tileSize: 'small' | 'medium' | 'large';
 }
 
-function getCloudinaryThumbnail(publicId: string | null, cloudName: string = 'dxzxzywpf'): string | null {
+function getCloudinaryThumbnail(publicId: string | null, cloudName: string = 'dxzxzywpf', mediaType?: string): string | null {
   if (!publicId) return null;
-  return `https://res.cloudinary.com/${cloudName}/image/upload/w_150,h_150,c_fill,q_auto,f_auto/${publicId}`;
+  const resourceType = mediaType === 'video' ? 'video' : 'image';
+  return `https://res.cloudinary.com/${cloudName}/${resourceType}/upload/w_150,h_150,c_fill,q_auto,f_jpg/${publicId}`;
 }
 
-function getCloudinaryMedium(publicId: string | null, cloudName: string = 'dxzxzywpf'): string | null {
+function getCloudinaryMedium(publicId: string | null, cloudName: string = 'dxzxzywpf', mediaType?: string): string | null {
   if (!publicId) return null;
-  return `https://res.cloudinary.com/${cloudName}/image/upload/w_600,c_limit,q_auto,f_auto/${publicId}`;
+  const resourceType = mediaType === 'video' ? 'video' : 'image';
+  return `https://res.cloudinary.com/${cloudName}/${resourceType}/upload/w_600,c_limit,q_auto,f_jpg/${publicId}`;
 }
 
 export const OptimizedPhotoCard = memo(function OptimizedPhotoCard({
@@ -35,7 +37,8 @@ export const OptimizedPhotoCard = memo(function OptimizedPhotoCard({
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
 
-  const thumbnailUrl = getCloudinaryThumbnail(photo.cloudinaryPublicId);
+  const isVideo = photo.mediaType === 'video';
+  const thumbnailUrl = getCloudinaryThumbnail(photo.cloudinaryPublicId, undefined, photo.mediaType);
   const hasDisplayImage = !!thumbnailUrl;
 
   const handleClick = useCallback(() => {
@@ -102,6 +105,14 @@ export const OptimizedPhotoCard = memo(function OptimizedPhotoCard({
         />
       )}
 
+      {isVideo && !isSelectMode && (
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+          <div className="w-10 h-10 rounded-full bg-black/60 flex items-center justify-center">
+            <Play className="w-5 h-5 text-white ml-0.5" />
+          </div>
+        </div>
+      )}
+
       {isSelectMode && (
         <div
           className={cn(
@@ -135,6 +146,11 @@ export const OptimizedPhotoCard = memo(function OptimizedPhotoCard({
 export function getCloudinaryFullUrl(publicId: string | null, cloudName: string = 'dxzxzywpf'): string | null {
   if (!publicId) return null;
   return `https://res.cloudinary.com/${cloudName}/image/upload/q_auto,f_auto/${publicId}`;
+}
+
+export function getCloudinaryVideoUrl(publicId: string | null, cloudName: string = 'dxzxzywpf'): string | null {
+  if (!publicId) return null;
+  return `https://res.cloudinary.com/${cloudName}/video/upload/q_auto/${publicId}`;
 }
 
 export { getCloudinaryThumbnail, getCloudinaryMedium };

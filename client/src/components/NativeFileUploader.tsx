@@ -31,7 +31,7 @@ interface NativeFileUploaderProps {
   maxFileSize?: number;
   accept?: string;
   allowFolders?: boolean;
-  onUploadComplete?: (files: Array<{ name: string; cloudinaryPublicId: string; cloudinaryUrl: string; size: number; type: string; width?: number; height?: number; takenAt?: Date; relativePath?: string }>) => void;
+  onUploadComplete?: (files: Array<{ name: string; cloudinaryPublicId: string; cloudinaryUrl: string; size: number; type: string; width?: number; height?: number; takenAt?: Date; relativePath?: string; mediaType?: string }>) => void;
   buttonClassName?: string;
   buttonVariant?: "default" | "destructive" | "outline" | "secondary" | "ghost" | "link";
   buttonSize?: "default" | "sm" | "lg" | "icon";
@@ -184,7 +184,7 @@ export function NativeFileUploader({
     if (files.length === 0) return;
 
     setIsUploading(true);
-    const uploadedFiles: Array<{ name: string; cloudinaryPublicId: string; cloudinaryUrl: string; size: number; type: string; width?: number; height?: number; takenAt?: Date; relativePath?: string }> = [];
+    const uploadedFiles: Array<{ name: string; cloudinaryPublicId: string; cloudinaryUrl: string; size: number; type: string; width?: number; height?: number; takenAt?: Date; relativePath?: string; mediaType?: string }> = [];
 
     for (const uploadFile of files) {
       if (uploadFile.status === 'success') {
@@ -197,6 +197,7 @@ export function NativeFileUploader({
             type: uploadFile.type,
             takenAt: uploadFile.takenAt,
             relativePath: uploadFile.relativePath,
+            mediaType: uploadFile.type.startsWith('video/') ? 'video' : 'image',
           });
         }
         continue;
@@ -207,10 +208,13 @@ export function NativeFileUploader({
       ));
 
       try {
+        const isVideo = uploadFile.type.startsWith('video/');
+        const resourceType = isVideo ? 'video' : 'image';
+
         const signatureRes = await fetch("/api/cloudinary/signature", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ folder: 'sitetech/photos' }),
+          body: JSON.stringify({ folder: 'sitetech/photos', resourceType }),
         });
 
         if (!signatureRes.ok) {
@@ -230,7 +234,7 @@ export function NativeFileUploader({
         formData.append('signature', signature);
         formData.append('folder', 'sitetech/photos');
 
-        const uploadRes = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
+        const uploadRes = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/${resourceType}/upload`, {
           method: "POST",
           body: formData,
         });
@@ -261,6 +265,7 @@ export function NativeFileUploader({
           height,
           takenAt: uploadFile.takenAt,
           relativePath: uploadFile.relativePath,
+          mediaType: isVideo ? 'video' : 'image',
         });
       } catch (error) {
         setFiles(prev => prev.map(f => 
