@@ -59,7 +59,9 @@ import {
   FileType,
   HardDrive,
   Settings,
-  Mail
+  Mail,
+  Play,
+  Video
 } from "lucide-react";
 import { 
   DropdownMenu, 
@@ -528,6 +530,10 @@ export default function ProjectDetails() {
     return contentType?.startsWith('image/') || false;
   };
 
+  const isVideoFile = (contentType: string | null) => {
+    return contentType?.startsWith('video/') || false;
+  };
+
   const isPdfFile = (contentType: string | null) => {
     return contentType === 'application/pdf';
   };
@@ -940,6 +946,8 @@ export default function ProjectDetails() {
   const getFileIcon = (file: FileMetadata) => {
     if (isImageFile(file.contentType)) {
       return <ImageIcon className="w-5 h-5 text-green-500" />;
+    } else if (isVideoFile(file.contentType)) {
+      return <Video className="w-5 h-5 text-blue-500" />;
     } else if (isPdfFile(file.contentType)) {
       return <FileText className="w-5 h-5 text-red-500" />;
     }
@@ -956,6 +964,17 @@ export default function ProjectDetails() {
           className="w-full h-full object-cover"
           loading="lazy"
         />
+      );
+    } else if (isVideoFile(file.contentType)) {
+      return (
+        <div className="relative w-full h-full flex items-center justify-center bg-black/10">
+          <Video className="w-10 h-10 text-blue-500" />
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="bg-black/60 rounded-full p-2">
+              <Play className="w-5 h-5 text-white fill-white" />
+            </div>
+          </div>
+        </div>
       );
     } else if (isPdfFile(file.contentType)) {
       return (
@@ -2880,8 +2899,47 @@ export default function ProjectDetails() {
         />
       )}
 
+      {/* Image Viewer */}
+      {viewingFile && isImageFile(viewingFile.contentType) && (
+        <div className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4" data-testid="image-viewer-modal" onClick={() => setViewingFile(null)}>
+          <button
+            className="absolute top-4 right-4 text-white hover:text-gray-300 z-10"
+            onClick={() => setViewingFile(null)}
+            data-testid="close-image-viewer"
+          >
+            <X className="w-6 h-6" />
+          </button>
+          <img
+            src={getProxyUrl(viewingFile.objectPath)}
+            alt={viewingFile.name}
+            className="max-w-full max-h-full object-contain"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
+
+      {/* Video Viewer */}
+      {viewingFile && isVideoFile(viewingFile.contentType) && (
+        <div className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4" data-testid="video-viewer-modal" onClick={() => setViewingFile(null)}>
+          <button
+            className="absolute top-4 right-4 text-white hover:text-gray-300 z-10"
+            onClick={() => setViewingFile(null)}
+            data-testid="close-video-viewer"
+          >
+            <X className="w-6 h-6" />
+          </button>
+          <video
+            src={getProxyUrl(viewingFile.objectPath)}
+            controls
+            autoPlay
+            className="max-w-full max-h-full"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
+
       {/* Other file types - download prompt */}
-      {viewingFile && !isPdfFile(viewingFile.contentType) && !isImageFile(viewingFile.contentType) && (
+      {viewingFile && !isPdfFile(viewingFile.contentType) && !isImageFile(viewingFile.contentType) && !isVideoFile(viewingFile.contentType) && (
         <div className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4" data-testid="document-viewer-modal">
           <div className="bg-card p-8 rounded-lg text-center max-w-md" onClick={(e) => e.stopPropagation()}>
             <File className="w-16 h-16 mx-auto text-muted-foreground mb-4" />
@@ -3502,6 +3560,12 @@ export default function ProjectDetails() {
                   <img 
                     src={getProxyUrl(fileDetailsPanel.objectPath)} 
                     alt={fileDetailsPanel.name}
+                    className="w-full h-full object-contain"
+                  />
+                ) : isVideoFile(fileDetailsPanel.contentType) ? (
+                  <video
+                    src={getProxyUrl(fileDetailsPanel.objectPath)}
+                    controls
                     className="w-full h-full object-contain"
                   />
                 ) : isPdfFile(fileDetailsPanel.contentType) ? (

@@ -26,7 +26,7 @@ import {
   Search, Upload, FolderPlus, LayoutGrid, List, Star, CheckSquare, Check,
   FolderInput, Trash2, Folder, Pencil, Info, Tags, Download, X, File, FileText,
   ChevronRight, Home, MoreVertical, ArrowLeft, Calendar, HardDrive, FileType,
-  Image as ImageIcon, Files
+  Image as ImageIcon, Files, Play, Video
 } from "lucide-react";
 
 export default function CompanyDocuments() {
@@ -146,6 +146,10 @@ export default function CompanyDocuments() {
 
   const isImageFile = (contentType: string | null) => {
     return contentType?.startsWith('image/') || false;
+  };
+
+  const isVideoFile = (contentType: string | null) => {
+    return contentType?.startsWith('video/') || false;
   };
 
   const isPdfFile = (contentType: string | null) => {
@@ -675,6 +679,8 @@ export default function CompanyDocuments() {
   const getFileIcon = (file: CompanyFile) => {
     if (isImageFile(file.contentType)) {
       return <ImageIcon className="w-5 h-5 text-green-500" />;
+    } else if (isVideoFile(file.contentType)) {
+      return <Video className="w-5 h-5 text-blue-500" />;
     } else if (isPdfFile(file.contentType)) {
       return <FileText className="w-5 h-5 text-red-500" />;
     }
@@ -690,6 +696,17 @@ export default function CompanyDocuments() {
           className="w-full h-full object-cover"
           loading="lazy"
         />
+      );
+    } else if (isVideoFile(file.contentType)) {
+      return (
+        <div className="relative w-full h-full flex items-center justify-center bg-black/10">
+          <Video className="w-10 h-10 text-blue-500" />
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="bg-black/60 rounded-full p-2">
+              <Play className="w-5 h-5 text-white fill-white" />
+            </div>
+          </div>
+        </div>
       );
     } else if (isPdfFile(file.contentType)) {
       return (
@@ -1519,7 +1536,26 @@ export default function CompanyDocuments() {
         />
       )}
 
-      {viewingFile && !isPdfFile(viewingFile.contentType) && !isImageFile(viewingFile.contentType) && (
+      {viewingFile && isVideoFile(viewingFile.contentType) && (
+        <div className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4" data-testid="cd-video-viewer-modal" onClick={() => setViewingFile(null)}>
+          <button
+            className="absolute top-4 right-4 text-white hover:text-gray-300 z-10"
+            onClick={() => setViewingFile(null)}
+            data-testid="cd-close-video-viewer"
+          >
+            <X className="w-6 h-6" />
+          </button>
+          <video
+            src={getProxyUrl(viewingFile.objectPath)}
+            controls
+            autoPlay
+            className="max-w-full max-h-full"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
+
+      {viewingFile && !isPdfFile(viewingFile.contentType) && !isImageFile(viewingFile.contentType) && !isVideoFile(viewingFile.contentType) && (
         <div className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4" data-testid="cd-document-viewer-modal">
           <div className="bg-card p-8 rounded-lg text-center max-w-md" onClick={(e) => e.stopPropagation()}>
             <File className="w-16 h-16 mx-auto text-muted-foreground mb-4" />
