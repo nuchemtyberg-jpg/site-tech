@@ -127,15 +127,15 @@ export const OptimizedPhotoCard = memo(function OptimizedPhotoCard({
       )}
 
       {!isSelectMode && (
-        <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+        <div className="absolute bottom-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity">
           <Button
             size="icon"
             variant="ghost"
-            className="text-white hover:bg-white/20"
+            className="h-7 w-7 text-white bg-black/60 hover:bg-black/80 rounded-full"
             onClick={handleDeleteClick}
             data-testid={`button-delete-photo-${photo.id}`}
           >
-            <Trash2 className="w-4 h-4" />
+            <Trash2 className="w-3.5 h-3.5" />
           </Button>
         </div>
       )}

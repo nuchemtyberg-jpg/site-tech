@@ -473,7 +473,7 @@ export function PhotosTab({ projectId }: PhotosTabProps) {
         if (isCurrentVideo) {
           return (
             <div 
-              className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center"
+              className="fixed inset-0 z-[60] bg-black/90 flex items-center justify-center"
               onClick={() => setLightboxOpen(false)}
               data-testid="video-player-overlay"
             >
