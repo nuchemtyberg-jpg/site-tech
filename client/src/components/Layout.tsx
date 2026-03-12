@@ -46,7 +46,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen bg-background flex flex-col">
       {/* Mobile Fixed Menu Button (Top Right) */}
-      <div className="md:hidden fixed top-4 right-4 z-50 flex items-center gap-2 pl-4 pb-4 safe-area-inset-top">
+      <div className="md:hidden fixed top-4 right-4 z-50 flex items-center gap-2 pl-4 pb-4 safe-area-inset-top" data-mobile-menu-container>
         <ThemeToggle />
         <Button 
           variant="default" 

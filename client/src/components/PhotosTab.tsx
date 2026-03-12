@@ -181,9 +181,14 @@ export function PhotosTab({ projectId }: PhotosTabProps) {
   useEffect(() => {
     if (lightboxOpen) {
       logViewerOpen('PhotosTabLightbox');
+      document.body.classList.add('media-overlay-open');
     } else {
       logViewerClose('PhotosTabLightbox');
+      document.body.classList.remove('media-overlay-open');
     }
+    return () => {
+      document.body.classList.remove('media-overlay-open');
+    };
   }, [lightboxOpen]);
 
   const handlePhotoUploadComplete = async (uploadedFiles: Array<{ name: string; cloudinaryPublicId: string; cloudinaryUrl: string; size: number; type: string; width?: number; height?: number; takenAt?: Date; mediaType?: string }>) => {

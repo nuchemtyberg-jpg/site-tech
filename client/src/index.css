@@ -451,3 +451,7 @@
     outline-offset: 2px;
   }
 }
+
+body.media-overlay-open [data-mobile-menu-container] {
+  display: none !important;
+}
