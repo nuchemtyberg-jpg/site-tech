@@ -43,6 +43,15 @@ export async function extractPhotoDate(file: File): Promise<string | null> {
   }
 }
 
+export function getProxyUrlWithFilename(url: string, filename: string, download?: boolean): string {
+  const base = getProxyUrl(url);
+  const params = new URLSearchParams();
+  params.set('filename', filename);
+  if (download) params.set('download', 'true');
+  const separator = base.includes('?') ? '&' : '?';
+  return `${base}${separator}${params.toString()}`;
+}
+
 export function getProxyUrl(url: string): string {
   if (!url) return url;
   

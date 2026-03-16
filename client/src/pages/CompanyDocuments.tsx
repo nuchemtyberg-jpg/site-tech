@@ -3,7 +3,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import type { CompanyFile, CompanyFolder } from "@shared/schema";
 import { format } from "date-fns";
-import { cn, getProxyUrl } from "@/lib/utils";
+import { cn, getProxyUrl, getProxyUrlWithFilename } from "@/lib/utils";
 import { NativeFileUploader } from "@/components/NativeFileUploader";
 import { PDFViewer } from "@/components/PDFViewer";
 import { TagInput } from "@/components/TagInput";
@@ -159,7 +159,7 @@ export default function CompanyDocuments() {
 
   const handleFileClick = (file: CompanyFile) => {
     if (isPdfFile(file.contentType)) {
-      window.open(getProxyUrl(file.objectPath), '_blank');
+      window.open(getProxyUrlWithFilename(file.objectPath, file.name), '_blank');
     } else {
       setViewingFile(file);
     }
@@ -167,7 +167,8 @@ export default function CompanyDocuments() {
 
   const handleDirectDownload = async (file: CompanyFile) => {
     try {
-      const response = await fetch(getProxyUrl(file.objectPath));
+      const downloadUrl = getProxyUrlWithFilename(file.objectPath, file.name, true);
+      const response = await fetch(downloadUrl);
       if (!response.ok) {
         throw new Error(`Download failed with status ${response.status}`);
       }
@@ -1544,7 +1545,7 @@ export default function CompanyDocuments() {
 
       {viewingFile && isPdfFile(viewingFile.contentType) && (
         <PDFViewer
-          url={getProxyUrl(viewingFile.objectPath)}
+          url={getProxyUrlWithFilename(viewingFile.objectPath, viewingFile.name)}
           fileName={viewingFile.name}
           onClose={() => setViewingFile(null)}
         />
@@ -1577,7 +1578,7 @@ export default function CompanyDocuments() {
             <p className="text-muted-foreground mb-4">This file type cannot be previewed.</p>
             <div className="flex gap-2 justify-center">
               <a
-                href={getProxyUrl(viewingFile.objectPath)}
+                href={getProxyUrlWithFilename(viewingFile.objectPath, viewingFile.name, true)}
                 download={viewingFile.name}
                 className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
                 data-testid="cd-link-download-file"

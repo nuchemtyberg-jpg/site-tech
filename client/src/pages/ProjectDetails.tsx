@@ -100,7 +100,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { insertTaskSchema, type InsertTask, type FileMetadata, type Task, type Photo } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
-import { cn, getProxyUrl } from "@/lib/utils";
+import { cn, getProxyUrl, getProxyUrlWithFilename } from "@/lib/utils";
 import { NativeFileUploader } from "@/components/NativeFileUploader";
 import { PDFViewer } from "@/components/PDFViewer";
 import { useQuery, useMutation } from "@tanstack/react-query";
@@ -487,7 +487,7 @@ export default function ProjectDetails() {
   const handleFileClick = (file: FileMetadata) => {
     if (isPdfFile(file.contentType)) {
       // Open PDF in browser's native PDF viewer
-      window.open(getProxyUrl(file.objectPath), '_blank');
+      window.open(getProxyUrlWithFilename(file.objectPath, file.name), '_blank');
     } else {
       setViewingFile(file);
     }
@@ -882,7 +882,8 @@ export default function ProjectDetails() {
   // Direct download helper
   const handleDirectDownload = async (file: FileMetadata) => {
     try {
-      const response = await fetch(getProxyUrl(file.objectPath));
+      const downloadUrl = getProxyUrlWithFilename(file.objectPath, file.name, true);
+      const response = await fetch(downloadUrl);
       if (!response.ok) {
         throw new Error(`Download failed with status ${response.status}`);
       }
@@ -2905,7 +2906,7 @@ export default function ProjectDetails() {
       {/* PDF Viewer with markup tools */}
       {viewingFile && isPdfFile(viewingFile.contentType) && (
         <PDFViewer 
-          url={getProxyUrl(viewingFile.objectPath)}
+          url={getProxyUrlWithFilename(viewingFile.objectPath, viewingFile.name)}
           fileName={viewingFile.name}
           onClose={() => setViewingFile(null)}
           onShare={() => handleShareFile(viewingFile)}
@@ -2960,7 +2961,7 @@ export default function ProjectDetails() {
             <p className="text-muted-foreground mb-4">This file type cannot be previewed.</p>
             <div className="flex gap-2 justify-center">
               <a
-                href={getProxyUrl(viewingFile.objectPath)}
+                href={getProxyUrlWithFilename(viewingFile.objectPath, viewingFile.name, true)}
                 download={viewingFile.name}
                 className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
               >
