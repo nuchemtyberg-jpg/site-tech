@@ -495,7 +495,7 @@ export default function CompanyDocuments() {
     }
   };
 
-  const handleUploadComplete = async (uploadedFiles: Array<{ name: string; cloudinaryPublicId: string; cloudinaryUrl: string; size: number; type: string; relativePath?: string }>) => {
+  const handleUploadComplete = async (uploadedFiles: Array<{ name: string; cloudinaryPublicId: string; cloudinaryUrl: string; objectPath?: string; size: number; type: string; relativePath?: string }>) => {
     let successCount = 0;
     const skippedFiles: string[] = [];
 
@@ -620,7 +620,7 @@ export default function CompanyDocuments() {
 
         await createFileMutation.mutateAsync({
           name: file.name,
-          objectPath: file.cloudinaryUrl,
+          objectPath: file.objectPath || file.cloudinaryUrl,
           contentType: file.type,
           size: file.size,
           folderId: targetFolderId,
@@ -1090,6 +1090,7 @@ export default function CompanyDocuments() {
                     maxNumberOfFiles={50}
                     maxFileSize={52428800}
                     allowFolders={true}
+                    uploadTarget="object-storage"
                     buttonVariant="outline"
                     onUploadComplete={handleUploadComplete}
                   >

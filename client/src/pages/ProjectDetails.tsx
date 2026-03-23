@@ -1281,7 +1281,7 @@ export default function ProjectDetails() {
     setMoveDialogOpen(false);
   };
 
-  const handleUploadComplete = async (uploadedFiles: Array<{ name: string; cloudinaryPublicId: string; cloudinaryUrl: string; size: number; type: string; relativePath?: string }>) => {
+  const handleUploadComplete = async (uploadedFiles: Array<{ name: string; cloudinaryPublicId: string; cloudinaryUrl: string; objectPath?: string; size: number; type: string; relativePath?: string }>) => {
     let successCount = 0;
     const skippedFiles: string[] = [];
     
@@ -1422,7 +1422,7 @@ export default function ProjectDetails() {
         
         await createFileMutation.mutateAsync({
           name: file.name,
-          objectPath: file.cloudinaryUrl,
+          objectPath: file.objectPath || file.cloudinaryUrl,
           contentType: file.type,
           size: file.size,
           folderId: targetFolderId,
@@ -2308,6 +2308,7 @@ export default function ProjectDetails() {
                     maxNumberOfFiles={50}
                     maxFileSize={52428800}
                     allowFolders={true}
+                    uploadTarget="object-storage"
                     buttonVariant="outline"
                     buttonClassName="h-11 w-11 p-0 sm:h-9 sm:w-auto sm:px-4 inline-flex items-center justify-center gap-2"
                     onUploadComplete={handleUploadComplete}

@@ -19,6 +19,7 @@ interface UploadedFile {
   file: File;
   cloudinaryPublicId?: string;
   cloudinaryUrl?: string;
+  objectPath?: string;
   takenAt?: Date;
   relativePath?: string;
   status: 'pending' | 'uploading' | 'success' | 'error';
@@ -31,7 +32,8 @@ interface NativeFileUploaderProps {
   maxFileSize?: number;
   accept?: string;
   allowFolders?: boolean;
-  onUploadComplete?: (files: Array<{ name: string; cloudinaryPublicId: string; cloudinaryUrl: string; size: number; type: string; width?: number; height?: number; takenAt?: Date; relativePath?: string; mediaType?: string }>) => void;
+  uploadTarget?: 'cloudinary' | 'object-storage';
+  onUploadComplete?: (files: Array<{ name: string; cloudinaryPublicId: string; cloudinaryUrl: string; objectPath?: string; size: number; type: string; width?: number; height?: number; takenAt?: Date; relativePath?: string; mediaType?: string }>) => void;
   buttonClassName?: string;
   buttonVariant?: "default" | "destructive" | "outline" | "secondary" | "ghost" | "link";
   buttonSize?: "default" | "sm" | "lg" | "icon";
@@ -106,6 +108,7 @@ export function NativeFileUploader({
   maxFileSize = 10485760,
   accept,
   allowFolders = false,
+  uploadTarget = 'cloudinary',
   onUploadComplete,
   buttonClassName,
   buttonVariant = "default",
@@ -180,15 +183,51 @@ export function NativeFileUploader({
     setFiles(prev => prev.filter(f => f.id !== id));
   };
 
+  const uploadToObjectStorage = useCallback(async (uploadFile: UploadedFile): Promise<{ objectPath: string }> => {
+    const res = await fetch("/api/uploads/request-url", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: uploadFile.name,
+        size: uploadFile.size,
+        contentType: uploadFile.type || 'application/octet-stream',
+      }),
+    });
+
+    if (!res.ok) throw new Error("Failed to get upload URL");
+    const { uploadURL, objectPath } = await res.json();
+
+    const uploadRes = await fetch(uploadURL, {
+      method: "PUT",
+      body: uploadFile.file,
+      headers: { "Content-Type": uploadFile.type || 'application/octet-stream' },
+    });
+
+    if (!uploadRes.ok) throw new Error("Upload failed");
+
+    return { objectPath };
+  }, []);
+
   const uploadFiles = useCallback(async () => {
     if (files.length === 0) return;
 
     setIsUploading(true);
-    const uploadedFiles: Array<{ name: string; cloudinaryPublicId: string; cloudinaryUrl: string; size: number; type: string; width?: number; height?: number; takenAt?: Date; relativePath?: string; mediaType?: string }> = [];
+    const uploadedFiles: Array<{ name: string; cloudinaryPublicId: string; cloudinaryUrl: string; objectPath?: string; size: number; type: string; width?: number; height?: number; takenAt?: Date; relativePath?: string; mediaType?: string }> = [];
 
     for (const uploadFile of files) {
       if (uploadFile.status === 'success') {
-        if (uploadFile.cloudinaryPublicId && uploadFile.cloudinaryUrl) {
+        if (uploadTarget === 'object-storage' && uploadFile.objectPath) {
+          uploadedFiles.push({
+            name: uploadFile.name,
+            cloudinaryPublicId: '',
+            cloudinaryUrl: '',
+            objectPath: uploadFile.objectPath,
+            size: uploadFile.size,
+            type: uploadFile.type,
+            takenAt: uploadFile.takenAt,
+            relativePath: uploadFile.relativePath,
+          });
+        } else if (uploadFile.cloudinaryPublicId && uploadFile.cloudinaryUrl) {
           uploadedFiles.push({
             name: uploadFile.name,
             cloudinaryPublicId: uploadFile.cloudinaryPublicId,
@@ -208,66 +247,89 @@ export function NativeFileUploader({
       ));
 
       try {
-        const isVideo = uploadFile.type.startsWith('video/');
-        const isImage = uploadFile.type.startsWith('image/');
-        const resourceType = isVideo ? 'video' : isImage ? 'image' : 'raw';
+        if (uploadTarget === 'object-storage') {
+          setFiles(prev => prev.map(f => 
+            f.id === uploadFile.id ? { ...f, progress: 30 } : f
+          ));
 
-        const signatureRes = await fetch("/api/cloudinary/signature", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ folder: 'sitetech/photos', resourceType }),
-        });
+          const { objectPath } = await uploadToObjectStorage(uploadFile);
 
-        if (!signatureRes.ok) {
-          throw new Error("Failed to get upload signature");
+          setFiles(prev => prev.map(f => 
+            f.id === uploadFile.id ? { ...f, status: 'success' as const, progress: 100, objectPath } : f
+          ));
+
+          uploadedFiles.push({
+            name: uploadFile.name,
+            cloudinaryPublicId: '',
+            cloudinaryUrl: '',
+            objectPath,
+            size: uploadFile.size,
+            type: uploadFile.type,
+            takenAt: uploadFile.takenAt,
+            relativePath: uploadFile.relativePath,
+          });
+        } else {
+          const isVideo = uploadFile.type.startsWith('video/');
+          const isImage = uploadFile.type.startsWith('image/');
+          const resourceType = isVideo ? 'video' : isImage ? 'image' : 'raw';
+
+          const signatureRes = await fetch("/api/cloudinary/signature", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ folder: 'sitetech/photos', resourceType }),
+          });
+
+          if (!signatureRes.ok) {
+            throw new Error("Failed to get upload signature");
+          }
+
+          const { signature, timestamp, apiKey, cloudName } = await signatureRes.json();
+
+          setFiles(prev => prev.map(f => 
+            f.id === uploadFile.id ? { ...f, progress: 30 } : f
+          ));
+
+          const formData = new FormData();
+          formData.append('file', uploadFile.file);
+          formData.append('api_key', apiKey);
+          formData.append('timestamp', timestamp.toString());
+          formData.append('signature', signature);
+          formData.append('folder', 'sitetech/photos');
+
+          const uploadRes = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/${resourceType}/upload`, {
+            method: "POST",
+            body: formData,
+          });
+
+          if (!uploadRes.ok) {
+            const errorData = await uploadRes.json().catch(() => ({}));
+            console.error("Cloudinary upload error:", errorData);
+            throw new Error(errorData.error?.message || "Failed to upload to Cloudinary");
+          }
+
+          const cloudinaryResult = await uploadRes.json();
+          const cloudinaryPublicId = cloudinaryResult.public_id;
+          const cloudinaryUrl = cloudinaryResult.secure_url;
+          const width = cloudinaryResult.width;
+          const height = cloudinaryResult.height;
+
+          setFiles(prev => prev.map(f => 
+            f.id === uploadFile.id ? { ...f, status: 'success' as const, progress: 100, cloudinaryPublicId, cloudinaryUrl } : f
+          ));
+
+          uploadedFiles.push({
+            name: uploadFile.name,
+            cloudinaryPublicId,
+            cloudinaryUrl,
+            size: uploadFile.size,
+            type: uploadFile.type,
+            width,
+            height,
+            takenAt: uploadFile.takenAt,
+            relativePath: uploadFile.relativePath,
+            mediaType: isVideo ? 'video' : isImage ? 'image' : 'raw',
+          });
         }
-
-        const { signature, timestamp, apiKey, cloudName } = await signatureRes.json();
-
-        setFiles(prev => prev.map(f => 
-          f.id === uploadFile.id ? { ...f, progress: 30 } : f
-        ));
-
-        const formData = new FormData();
-        formData.append('file', uploadFile.file);
-        formData.append('api_key', apiKey);
-        formData.append('timestamp', timestamp.toString());
-        formData.append('signature', signature);
-        formData.append('folder', 'sitetech/photos');
-
-        const uploadRes = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/${resourceType}/upload`, {
-          method: "POST",
-          body: formData,
-        });
-
-        if (!uploadRes.ok) {
-          const errorData = await uploadRes.json().catch(() => ({}));
-          console.error("Cloudinary upload error:", errorData);
-          throw new Error(errorData.error?.message || "Failed to upload to Cloudinary");
-        }
-
-        const cloudinaryResult = await uploadRes.json();
-        const cloudinaryPublicId = cloudinaryResult.public_id;
-        const cloudinaryUrl = cloudinaryResult.secure_url;
-        const width = cloudinaryResult.width;
-        const height = cloudinaryResult.height;
-
-        setFiles(prev => prev.map(f => 
-          f.id === uploadFile.id ? { ...f, status: 'success' as const, progress: 100, cloudinaryPublicId, cloudinaryUrl } : f
-        ));
-
-        uploadedFiles.push({
-          name: uploadFile.name,
-          cloudinaryPublicId,
-          cloudinaryUrl,
-          size: uploadFile.size,
-          type: uploadFile.type,
-          width,
-          height,
-          takenAt: uploadFile.takenAt,
-          relativePath: uploadFile.relativePath,
-          mediaType: isVideo ? 'video' : isImage ? 'image' : 'raw',
-        });
       } catch (error) {
         setFiles(prev => prev.map(f => 
           f.id === uploadFile.id ? { 
@@ -284,7 +346,7 @@ export function NativeFileUploader({
     if (uploadedFiles.length > 0) {
       onUploadComplete?.(uploadedFiles);
     }
-  }, [files, onUploadComplete]);
+  }, [files, onUploadComplete, uploadTarget, uploadToObjectStorage]);
 
   const handleClose = () => {
     if (!isUploading) {

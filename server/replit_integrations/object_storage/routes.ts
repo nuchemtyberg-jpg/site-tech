@@ -59,4 +59,45 @@ export function registerObjectStorageRoutes(app: Express): void {
         }
       });
   });
+
+  app.get("/api/proxy-file", isAuthenticated, isAuthorizedUser, async (req, res) => {
+    try {
+      const url = req.query.url as string;
+      const filename = req.query.filename as string | undefined;
+      const download = req.query.download === 'true';
+
+      if (!url || (!url.startsWith("https://res.cloudinary.com/") && !url.startsWith("https://storage.googleapis.com/"))) {
+        return res.status(400).json({ error: "Invalid or disallowed URL" });
+      }
+
+      const response = await fetch(url);
+      if (!response.ok) {
+        return res.status(response.status).json({ error: "Failed to fetch file" });
+      }
+
+      const contentType = response.headers.get("content-type") || "application/octet-stream";
+      const headers: Record<string, string> = {
+        "Content-Type": contentType,
+        "Cache-Control": "private, max-age=3600",
+      };
+      if (filename) {
+        const sanitized = filename.replace(/[^\w\s\-\.()]/g, '_');
+        const disposition = download ? 'attachment' : 'inline';
+        headers["Content-Disposition"] = `${disposition}; filename="${sanitized}"`;
+      }
+      const contentLength = response.headers.get("content-length");
+      if (contentLength) {
+        headers["Content-Length"] = contentLength;
+      }
+      res.set(headers);
+
+      const arrayBuffer = await response.arrayBuffer();
+      res.send(Buffer.from(arrayBuffer));
+    } catch (error) {
+      console.error("Error proxying file:", error);
+      if (!res.headersSent) {
+        res.status(500).json({ error: "Failed to proxy file" });
+      }
+    }
+  });
 }
