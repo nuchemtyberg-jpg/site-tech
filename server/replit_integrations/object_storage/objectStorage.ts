@@ -109,10 +109,15 @@ export class ObjectStorageService {
           isPublic ? "public" : "private"
         }, max-age=${cacheTtlSec}`,
       };
-      if (filename) {
-        const sanitized = filename.replace(/[^\w\s\-\.()]/g, '_');
+      if (filename || forceDownload) {
         const disposition = forceDownload ? 'attachment' : 'inline';
-        headers["Content-Disposition"] = `${disposition}; filename="${sanitized}"`;
+        if (filename) {
+          const sanitized = filename.replace(/[^\w\s\-\.()]/g, '_');
+          const encoded = encodeURIComponent(filename);
+          headers["Content-Disposition"] = `${disposition}; filename="${sanitized}"; filename*=UTF-8''${encoded}`;
+        } else {
+          headers["Content-Disposition"] = disposition;
+        }
       }
       res.set(headers);
 

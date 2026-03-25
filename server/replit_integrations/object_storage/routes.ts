@@ -80,10 +80,15 @@ export function registerObjectStorageRoutes(app: Express): void {
         "Content-Type": contentType,
         "Cache-Control": "private, max-age=3600",
       };
-      if (filename) {
-        const sanitized = filename.replace(/[^\w\s\-\.()]/g, '_');
+      if (filename || download) {
         const disposition = download ? 'attachment' : 'inline';
-        headers["Content-Disposition"] = `${disposition}; filename="${sanitized}"`;
+        if (filename) {
+          const sanitized = filename.replace(/[^\w\s\-\.()]/g, '_');
+          const encoded = encodeURIComponent(filename);
+          headers["Content-Disposition"] = `${disposition}; filename="${sanitized}"; filename*=UTF-8''${encoded}`;
+        } else {
+          headers["Content-Disposition"] = disposition;
+        }
       }
       const contentLength = response.headers.get("content-length");
       if (contentLength) {

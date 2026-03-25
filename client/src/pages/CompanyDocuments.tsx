@@ -168,19 +168,17 @@ export default function CompanyDocuments() {
   const handleDirectDownload = async (file: CompanyFile) => {
     try {
       const downloadUrl = getProxyUrlWithFilename(file.objectPath, file.name, true);
-      const response = await fetch(downloadUrl);
-      if (!response.ok) {
-        throw new Error(`Download failed with status ${response.status}`);
+      const check = await fetch(downloadUrl, { method: 'HEAD' });
+      if (!check.ok) {
+        throw new Error(`Download failed with status ${check.status}`);
       }
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
-      link.href = url;
+      link.href = downloadUrl;
       link.download = file.name;
+      link.style.display = 'none';
       document.body.appendChild(link);
       link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(url);
+      setTimeout(() => document.body.removeChild(link), 100);
     } catch (error) {
       toast({
         title: "Download failed",
