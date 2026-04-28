@@ -214,6 +214,16 @@ export default function DailyReportPage() {
   const [showLeaveDialog, setShowLeaveDialog] = useState(false);
   const [pendingNavigation, setPendingNavigation] = useState<string | null>(null);
 
+  // Custom inspection field dialog
+  const [customFieldDialog, setCustomFieldDialog] = useState<{
+    open: boolean;
+    inspectionId: number | null;
+    field: 'inspectionType' | 'inspectionAuthority' | null;
+    title: string;
+    label: string;
+  }>({ open: false, inspectionId: null, field: null, title: '', label: '' });
+  const [customFieldValue, setCustomFieldValue] = useState('');
+
   const { data: project } = useQuery<Project>({
     queryKey: ['/api/projects', projectId],
     enabled: !!projectId,
@@ -1784,8 +1794,14 @@ export default function DailyReportPage() {
                           disabled={isCompleted}
                           onValueChange={(value) => {
                             if (value === '__custom__') {
-                              const custom = prompt("Enter custom inspection type:");
-                              if (custom && custom.trim()) updateInspectionMutation.mutate({ id: inspection.id, data: { inspectionType: custom.trim() } });
+                              setCustomFieldValue('');
+                              setCustomFieldDialog({
+                                open: true,
+                                inspectionId: inspection.id,
+                                field: 'inspectionType',
+                                title: 'Add Custom Inspection Type',
+                                label: 'Inspection Type',
+                              });
                             } else {
                               updateInspectionMutation.mutate({ id: inspection.id, data: { inspectionType: value } });
                             }
@@ -1812,8 +1828,14 @@ export default function DailyReportPage() {
                           disabled={isCompleted}
                           onValueChange={(value) => {
                             if (value === '__custom__') {
-                              const custom = prompt("Enter custom authority:");
-                              if (custom && custom.trim()) updateInspectionMutation.mutate({ id: inspection.id, data: { inspectionAuthority: custom.trim() } });
+                              setCustomFieldValue('');
+                              setCustomFieldDialog({
+                                open: true,
+                                inspectionId: inspection.id,
+                                field: 'inspectionAuthority',
+                                title: 'Add Custom Inspection Authority',
+                                label: 'Inspection Authority',
+                              });
                             } else {
                               updateInspectionMutation.mutate({ id: inspection.id, data: { inspectionAuthority: value } });
                             }
@@ -2321,6 +2343,81 @@ export default function DailyReportPage() {
             </Button>
             <Button onClick={handleSaveAndLeave} className="w-full sm:w-auto" data-testid="button-save-and-exit">
               Save and Exit
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={customFieldDialog.open}
+        onOpenChange={(open) => {
+          if (!open) {
+            setCustomFieldDialog({ open: false, inspectionId: null, field: null, title: '', label: '' });
+            setCustomFieldValue('');
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{customFieldDialog.title}</DialogTitle>
+            <DialogDescription>
+              Enter a custom value. It will be saved to this inspection.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Label htmlFor="custom-field-input">{customFieldDialog.label}</Label>
+            <Input
+              id="custom-field-input"
+              autoFocus
+              value={customFieldValue}
+              onChange={(e) => setCustomFieldValue(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  const trimmed = customFieldValue.trim();
+                  if (trimmed && customFieldDialog.inspectionId && customFieldDialog.field) {
+                    updateInspectionMutation.mutate({
+                      id: customFieldDialog.inspectionId,
+                      data: { [customFieldDialog.field]: trimmed },
+                    });
+                    setCustomFieldDialog({ open: false, inspectionId: null, field: null, title: '', label: '' });
+                    setCustomFieldValue('');
+                  }
+                }
+              }}
+              placeholder={`Enter ${customFieldDialog.label.toLowerCase()}`}
+              data-testid="input-custom-inspection-field"
+            />
+          </div>
+          <DialogFooter className="flex-col sm:flex-row gap-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setCustomFieldDialog({ open: false, inspectionId: null, field: null, title: '', label: '' });
+                setCustomFieldValue('');
+              }}
+              className="w-full sm:w-auto"
+              data-testid="button-cancel-custom-field"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                const trimmed = customFieldValue.trim();
+                if (trimmed && customFieldDialog.inspectionId && customFieldDialog.field) {
+                  updateInspectionMutation.mutate({
+                    id: customFieldDialog.inspectionId,
+                    data: { [customFieldDialog.field]: trimmed },
+                  });
+                  setCustomFieldDialog({ open: false, inspectionId: null, field: null, title: '', label: '' });
+                  setCustomFieldValue('');
+                }
+              }}
+              disabled={!customFieldValue.trim()}
+              className="w-full sm:w-auto"
+              data-testid="button-save-custom-field"
+            >
+              Save
             </Button>
           </DialogFooter>
         </DialogContent>
