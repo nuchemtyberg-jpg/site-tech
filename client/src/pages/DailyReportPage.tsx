@@ -1780,12 +1780,12 @@ export default function DailyReportPage() {
                       <div className="space-y-2">
                         <Label>Inspection Type</Label>
                         <Select
-                          value={inspection.inspectionType || '__custom__'}
+                          value={inspection.inspectionType || undefined}
                           disabled={isCompleted}
                           onValueChange={(value) => {
                             if (value === '__custom__') {
                               const custom = prompt("Enter custom inspection type:");
-                              if (custom) updateInspectionMutation.mutate({ id: inspection.id, data: { inspectionType: custom } });
+                              if (custom && custom.trim()) updateInspectionMutation.mutate({ id: inspection.id, data: { inspectionType: custom.trim() } });
                             } else {
                               updateInspectionMutation.mutate({ id: inspection.id, data: { inspectionType: value } });
                             }
@@ -1808,12 +1808,12 @@ export default function DailyReportPage() {
                       <div className="space-y-2">
                         <Label>Inspection Authority</Label>
                         <Select
-                          value={inspection.inspectionAuthority || '__custom__'}
+                          value={inspection.inspectionAuthority || undefined}
                           disabled={isCompleted}
                           onValueChange={(value) => {
                             if (value === '__custom__') {
                               const custom = prompt("Enter custom authority:");
-                              if (custom) updateInspectionMutation.mutate({ id: inspection.id, data: { inspectionAuthority: custom } });
+                              if (custom && custom.trim()) updateInspectionMutation.mutate({ id: inspection.id, data: { inspectionAuthority: custom.trim() } });
                             } else {
                               updateInspectionMutation.mutate({ id: inspection.id, data: { inspectionAuthority: value } });
                             }
