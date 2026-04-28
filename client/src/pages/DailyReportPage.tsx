@@ -224,6 +224,16 @@ export default function DailyReportPage() {
   }>({ open: false, inspectionId: null, field: null, title: '', label: '' });
   const [customFieldValue, setCustomFieldValue] = useState('');
 
+  // Custom employee dialog (per-task ad-hoc employee, not saved for future use)
+  const [customEmployeeDialog, setCustomEmployeeDialog] = useState<{
+    open: boolean;
+    taskEntryId: number | null;
+  }>({ open: false, taskEntryId: null });
+  const [customEmployeeName, setCustomEmployeeName] = useState('');
+
+  // Tracks equipment lines currently in custom-typing mode (per equipment line id)
+  const [customEquipmentMode, setCustomEquipmentMode] = useState<Set<number>>(new Set());
+
   const { data: project } = useQuery<Project>({
     queryKey: ['/api/projects', projectId],
     enabled: !!projectId,
@@ -1258,7 +1268,7 @@ export default function DailyReportPage() {
                         <Label className="flex items-center gap-1">
                           <Users className="h-4 w-4" /> Labor
                         </Label>
-                        {!isCompleted && projectEmployees.length > 0 && (
+                        {!isCompleted && (
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                               <Button variant="outline" size="sm" data-testid={`button-add-employee-${taskEntry.id}`}>
@@ -1293,9 +1303,18 @@ export default function DailyReportPage() {
                                     </DropdownMenuItem>
                                   );
                                 })}
-                              {projectEmployees.filter(emp => !taskEntry.laborLines.some(l => l.employeeId === emp.employeeId)).length === 0 && (
+                              {projectEmployees.length > 0 && projectEmployees.filter(emp => !taskEntry.laborLines.some(l => l.employeeId === emp.employeeId)).length === 0 && (
                                 <DropdownMenuItem disabled>All employees already added</DropdownMenuItem>
                               )}
+                              <DropdownMenuItem
+                                onClick={() => {
+                                  setCustomEmployeeName('');
+                                  setCustomEmployeeDialog({ open: true, taskEntryId: taskEntry.id });
+                                }}
+                                data-testid={`menu-add-custom-employee-${taskEntry.id}`}
+                              >
+                                <Plus className="h-3 w-3 mr-1" /> Add custom employee...
+                              </DropdownMenuItem>
                             </DropdownMenuContent>
                           </DropdownMenu>
                         )}
@@ -1419,21 +1438,74 @@ export default function DailyReportPage() {
                           </Button>
                         )}
                       </div>
-                      {taskEntry.equipmentLines.map((equip) => (
+                      {taskEntry.equipmentLines.map((equip) => {
+                        const isCustomEquip =
+                          customEquipmentMode.has(equip.id) ||
+                          (!!equip.equipmentType && !EQUIPMENT_TYPES.includes(equip.equipmentType));
+                        return (
                         <div key={equip.id} className="space-y-2 p-3 bg-muted rounded">
                           <div className="flex items-center justify-between gap-2">
-                            <Select
-                              value={equip.equipmentType}
-                              disabled={isCompleted}
-                              onValueChange={(value) => updateEquipmentLineMutation.mutate({ id: equip.id, data: { equipmentType: value } })}
-                            >
-                              <SelectTrigger className="flex-1" data-testid={`select-equipment-type-${equip.id}`}>
-                                <SelectValue placeholder="Select type" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {EQUIPMENT_TYPES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
-                              </SelectContent>
-                            </Select>
+                            {isCustomEquip ? (
+                              <div className="flex-1 flex items-center gap-2">
+                                <Input
+                                  key={`equipment-type-${equip.id}-${equip.equipmentType}`}
+                                  defaultValue={equip.equipmentType || ''}
+                                  disabled={isCompleted}
+                                  autoFocus={!equip.equipmentType}
+                                  placeholder="Custom equipment name"
+                                  onBlur={(e) => {
+                                    const newValue = e.target.value.trim();
+                                    if (newValue && newValue !== equip.equipmentType) {
+                                      updateEquipmentLineMutation.mutate({ id: equip.id, data: { equipmentType: newValue } });
+                                    }
+                                  }}
+                                  data-testid={`input-equipment-type-${equip.id}`}
+                                />
+                                {!isCompleted && (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => {
+                                      setCustomEquipmentMode(prev => {
+                                        const next = new Set(prev);
+                                        next.delete(equip.id);
+                                        return next;
+                                      });
+                                      if (equip.equipmentType && !EQUIPMENT_TYPES.includes(equip.equipmentType)) {
+                                        updateEquipmentLineMutation.mutate({ id: equip.id, data: { equipmentType: '' } });
+                                      }
+                                    }}
+                                    data-testid={`button-equipment-use-preset-${equip.id}`}
+                                  >
+                                    Use preset
+                                  </Button>
+                                )}
+                              </div>
+                            ) : (
+                              <Select
+                                value={equip.equipmentType || undefined}
+                                disabled={isCompleted}
+                                onValueChange={(value) => {
+                                  if (value === '__custom__') {
+                                    setCustomEquipmentMode(prev => {
+                                      const next = new Set(prev);
+                                      next.add(equip.id);
+                                      return next;
+                                    });
+                                  } else {
+                                    updateEquipmentLineMutation.mutate({ id: equip.id, data: { equipmentType: value } });
+                                  }
+                                }}
+                              >
+                                <SelectTrigger className="flex-1" data-testid={`select-equipment-type-${equip.id}`}>
+                                  <SelectValue placeholder="Select type" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {EQUIPMENT_TYPES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                                  <SelectItem value="__custom__">+ Add custom equipment...</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            )}
                             {!isCompleted && (
                               <Button variant="ghost" size="icon" onClick={() => deleteEquipmentLineMutation.mutate(equip.id)} data-testid={`button-delete-equipment-${equip.id}`}>
                                 <Trash2 className="h-4 w-4 text-destructive" />
@@ -1482,7 +1554,8 @@ export default function DailyReportPage() {
                             </div>
                           </div>
                         </div>
-                      ))}
+                        );
+                      })}
                       {taskEntry.equipmentLines.length > 0 && (
                         <div className="flex items-center justify-end gap-4 text-sm text-muted-foreground pt-1 border-t">
                           <span>Total Units: <strong className="text-foreground">{taskEntry.equipmentLines.reduce((sum, e) => sum + (Number(localEquipmentQuantities[e.id]) || e.quantity), 0)}</strong></span>
@@ -2418,6 +2491,93 @@ export default function DailyReportPage() {
               data-testid="button-save-custom-field"
             >
               Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={customEmployeeDialog.open}
+        onOpenChange={(open) => {
+          if (!open) {
+            setCustomEmployeeDialog({ open: false, taskEntryId: null });
+            setCustomEmployeeName('');
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add Custom Employee</DialogTitle>
+            <DialogDescription>
+              Enter a name for this one-time employee. They will not be saved to your employee list.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Label htmlFor="custom-employee-input">Employee Name</Label>
+            <Input
+              id="custom-employee-input"
+              autoFocus
+              value={customEmployeeName}
+              onChange={(e) => setCustomEmployeeName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  const trimmed = customEmployeeName.trim();
+                  if (trimmed && customEmployeeDialog.taskEntryId) {
+                    createLaborLineMutation.mutate({
+                      taskEntryId: customEmployeeDialog.taskEntryId,
+                      data: {
+                        laborType: 'Laborer',
+                        quantity: 1,
+                        hours: 0,
+                        employeeId: null,
+                        employeeName: trimmed,
+                      },
+                    });
+                    setCustomEmployeeDialog({ open: false, taskEntryId: null });
+                    setCustomEmployeeName('');
+                  }
+                }
+              }}
+              placeholder="Enter employee name"
+              data-testid="input-custom-employee-name"
+            />
+          </div>
+          <DialogFooter className="flex-col sm:flex-row gap-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setCustomEmployeeDialog({ open: false, taskEntryId: null });
+                setCustomEmployeeName('');
+              }}
+              className="w-full sm:w-auto"
+              data-testid="button-cancel-custom-employee"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                const trimmed = customEmployeeName.trim();
+                if (trimmed && customEmployeeDialog.taskEntryId) {
+                  createLaborLineMutation.mutate({
+                    taskEntryId: customEmployeeDialog.taskEntryId,
+                    data: {
+                      laborType: 'Laborer',
+                      quantity: 1,
+                      hours: 0,
+                      employeeId: null,
+                      employeeName: trimmed,
+                    },
+                  });
+                  setCustomEmployeeDialog({ open: false, taskEntryId: null });
+                  setCustomEmployeeName('');
+                }
+              }}
+              disabled={!customEmployeeName.trim()}
+              className="w-full sm:w-auto"
+              data-testid="button-save-custom-employee"
+            >
+              Add Employee
             </Button>
           </DialogFooter>
         </DialogContent>
