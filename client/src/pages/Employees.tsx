@@ -608,10 +608,10 @@ function TimeTrackingTab() {
                   return (
                     <TableRow key={row.key} data-testid={`row-shift-${row.key}`}>
                       <TableCell className="font-medium whitespace-nowrap align-top">
-                        {isFirstOfDay ? formatDate(row.date) : ""}
+                        {formatDate(row.date)}
                       </TableCell>
                       <TableCell className="align-top" data-testid={`text-time-employee-${row.key}`}>
-                        {isFirstOfDay ? row.employeeName : ""}
+                        {row.employeeName}
                       </TableCell>
                       <TableCell className="text-muted-foreground align-top">
                         <div className="flex items-center gap-2 flex-wrap">
