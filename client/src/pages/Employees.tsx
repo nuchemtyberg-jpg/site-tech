@@ -28,10 +28,26 @@ interface DailyTimeSummary {
     hours: number | null;
     jobCode: string | null;
     jobDescription: string | null;
+    isTransferIn?: boolean;
+    isTransferOut?: boolean;
   }>;
   totalHours: number;
   jobCode: string | null;
   jobDescription: string | null;
+}
+
+interface ShiftRow {
+  key: string;
+  date: string;
+  employeeId: number;
+  employeeName: string;
+  jobCode: string | null;
+  jobDescription: string | null;
+  punchIn: string;
+  punchOut: string | null;
+  hours: number | null;
+  isTransferIn: boolean;
+  isTransferOut: boolean;
 }
 
 interface FingercheckJob {
@@ -430,6 +446,44 @@ function TimeTrackingTab() {
     return summaries.filter(s => s.employeeName.toLowerCase().includes(q));
   }, [summaries, searchQuery]);
 
+  // Flatten daily summaries into one row per punch in/out pair (or transfer
+  // segment). Each transfer creates its own row with the transfer time as the
+  // new punch-in time.
+  const shiftRows = useMemo<ShiftRow[]>(() => {
+    const rows: ShiftRow[] = [];
+    for (const s of filteredSummaries) {
+      s.shifts.forEach((shift, idx) => {
+        rows.push({
+          key: `${s.employeeId}-${s.date}-${idx}`,
+          date: s.date,
+          employeeId: s.employeeId,
+          employeeName: s.employeeName,
+          jobCode: shift.jobCode,
+          jobDescription: shift.jobDescription,
+          punchIn: shift.punchIn,
+          punchOut: shift.punchOut,
+          hours: shift.hours,
+          isTransferIn: !!shift.isTransferIn,
+          isTransferOut: !!shift.isTransferOut,
+        });
+      });
+    }
+    rows.sort((a, b) => {
+      if (a.date !== b.date) return b.date.localeCompare(a.date);
+      if (a.employeeName !== b.employeeName) return a.employeeName.localeCompare(b.employeeName);
+      return a.punchIn.localeCompare(b.punchIn);
+    });
+    return rows;
+  }, [filteredSummaries]);
+
+  const dailyTotals = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const s of filteredSummaries) {
+      map.set(`${s.employeeId}-${s.date}`, s.totalHours);
+    }
+    return map;
+  }, [filteredSummaries]);
+
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:flex lg:items-end gap-3">
@@ -540,37 +594,60 @@ function TimeTrackingTab() {
                   <TableHead>Date</TableHead>
                   <TableHead>Employee</TableHead>
                   <TableHead>Job</TableHead>
-                  <TableHead>Shifts</TableHead>
-                  <TableHead className="text-right">Total Hours</TableHead>
+                  <TableHead>Punch In</TableHead>
+                  <TableHead>Punch Out</TableHead>
+                  <TableHead className="text-right">Hours</TableHead>
+                  <TableHead className="text-right">Day Total</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredSummaries.map((summary) => (
-                  <TableRow key={`${summary.employeeId}-${summary.date}`} data-testid={`row-time-${summary.employeeId}-${summary.date}`}>
-                    <TableCell className="font-medium whitespace-nowrap">{formatDate(summary.date)}</TableCell>
-                    <TableCell data-testid={`text-time-employee-${summary.employeeId}`}>{summary.employeeName}</TableCell>
-                    <TableCell className="text-muted-foreground">{summary.jobDescription || summary.jobCode || "—"}</TableCell>
-                    <TableCell>
-                      <div className="space-y-1">
-                        {summary.shifts.map((shift, idx) => (
-                          <div key={idx} className="text-sm flex items-center gap-2">
-                            <span className="text-green-600 dark:text-green-400">{formatTime(shift.punchIn)}</span>
-                            <span className="text-muted-foreground">→</span>
-                            <span className={shift.punchOut ? "text-red-600 dark:text-red-400" : "text-muted-foreground"}>
-                              {shift.punchOut ? formatTime(shift.punchOut) : "Missing"}
-                            </span>
-                            {shift.hours !== null && (
-                              <span className="text-xs text-muted-foreground">({formatHours(shift.hours)})</span>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-right font-medium" data-testid={`text-total-hours-${summary.employeeId}-${summary.date}`}>
-                      {formatHours(summary.totalHours)}
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {shiftRows.map((row, idx) => {
+                  const prev = idx > 0 ? shiftRows[idx - 1] : null;
+                  const isFirstOfDay = !prev || prev.date !== row.date || prev.employeeId !== row.employeeId;
+                  const dayKey = `${row.employeeId}-${row.date}`;
+                  return (
+                    <TableRow key={row.key} data-testid={`row-shift-${row.key}`}>
+                      <TableCell className="font-medium whitespace-nowrap align-top">
+                        {isFirstOfDay ? formatDate(row.date) : ""}
+                      </TableCell>
+                      <TableCell className="align-top" data-testid={`text-time-employee-${row.key}`}>
+                        {isFirstOfDay ? row.employeeName : ""}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground align-top">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span>{row.jobDescription || row.jobCode || "—"}</span>
+                          {row.isTransferIn && (
+                            <Badge variant="secondary" className="text-[10px] px-1.5 py-0" data-testid={`badge-transfer-${row.key}`}>
+                              Transfer
+                            </Badge>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell className="align-top">
+                        <span className="text-green-600 dark:text-green-400 text-sm" data-testid={`text-punch-in-${row.key}`}>
+                          {formatTime(row.punchIn)}
+                        </span>
+                      </TableCell>
+                      <TableCell className="align-top">
+                        <span
+                          className={`text-sm ${row.punchOut ? "text-red-600 dark:text-red-400" : "text-muted-foreground"}`}
+                          data-testid={`text-punch-out-${row.key}`}
+                        >
+                          {row.punchOut ? formatTime(row.punchOut) : "Missing"}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-right text-sm align-top" data-testid={`text-shift-hours-${row.key}`}>
+                        {formatHours(row.hours)}
+                      </TableCell>
+                      <TableCell
+                        className="text-right font-medium align-top"
+                        {...(isFirstOfDay ? { "data-testid": `text-total-hours-${dayKey}` } : {})}
+                      >
+                        {isFirstOfDay ? formatHours(dailyTotals.get(dayKey) ?? 0) : ""}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           </Card>
@@ -588,20 +665,31 @@ function TimeTrackingTab() {
                       {formatHours(summary.totalHours)}
                     </Badge>
                   </div>
-                  {summary.jobDescription && (
-                    <p className="text-xs text-muted-foreground">{summary.jobDescription}</p>
-                  )}
-                  <div className="space-y-1.5">
+                  <div className="space-y-2">
                     {summary.shifts.map((shift, idx) => (
-                      <div key={idx} className="flex items-center gap-2 text-sm">
-                        <span className="text-green-600 dark:text-green-400">{formatTime(shift.punchIn)}</span>
-                        <span className="text-muted-foreground">→</span>
-                        <span className={shift.punchOut ? "text-red-600 dark:text-red-400" : "text-muted-foreground"}>
-                          {shift.punchOut ? formatTime(shift.punchOut) : "Missing"}
-                        </span>
-                        {shift.hours !== null && (
-                          <span className="text-xs text-muted-foreground">({formatHours(shift.hours)})</span>
-                        )}
+                      <div
+                        key={idx}
+                        className="rounded-md border p-2 space-y-1"
+                        data-testid={`card-shift-mobile-${summary.employeeId}-${summary.date}-${idx}`}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-xs text-muted-foreground truncate">
+                            {shift.jobDescription || shift.jobCode || "—"}
+                          </p>
+                          {shift.isTransferIn && (
+                            <Badge variant="secondary" className="text-[10px] px-1.5 py-0">Transfer</Badge>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 text-sm">
+                          <span className="text-green-600 dark:text-green-400">{formatTime(shift.punchIn)}</span>
+                          <span className="text-muted-foreground">→</span>
+                          <span className={shift.punchOut ? "text-red-600 dark:text-red-400" : "text-muted-foreground"}>
+                            {shift.punchOut ? formatTime(shift.punchOut) : "Missing"}
+                          </span>
+                          {shift.hours !== null && (
+                            <span className="text-xs text-muted-foreground ml-auto">{formatHours(shift.hours)}</span>
+                          )}
+                        </div>
                       </div>
                     ))}
                   </div>

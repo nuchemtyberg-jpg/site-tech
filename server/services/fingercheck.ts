@@ -164,13 +164,18 @@ export function isValidTimePunch(punch: FingercheckTimePunchResponse): boolean {
   return !!punch.TimeClockHistoryGuid && !!punch.EmployeeID && !!punch.ActualTime;
 }
 
-// Utility: pair in/out punches into shifts for an employee on a given day
+// Utility: pair in/out punches into shifts for an employee on a given day.
+// Each in/out pair is one shift. A job transfer (a new "in" arriving while a
+// shift is still open) closes the previous shift at the transfer time and
+// opens a new shift with the transfer time as its punch-in time.
 export interface TimeShift {
   punchIn: string;
   punchOut: string | null;
   hours: number | null;
   jobCode: string | null;
   jobDescription: string | null;
+  isTransferIn: boolean;
+  isTransferOut: boolean;
 }
 
 export interface DailyTimeSummary {
@@ -210,42 +215,102 @@ export function buildDailyTimeSummaries(punches: Array<{
     const dateOnly = emp.date.split("T")[0];
 
     const shifts: TimeShift[] = [];
-    let i = 0;
-    while (i < sorted.length) {
-      const current = sorted[i];
-      if (current.punchType === 0) {
-        const next = sorted[i + 1];
-        if (next && next.punchType === 1) {
-          const inTime = new Date(current.actualTime);
-          const outTime = new Date(next.actualTime);
-          const hours = (outTime.getTime() - inTime.getTime()) / (1000 * 60 * 60);
-          shifts.push({
-            punchIn: current.actualTime,
-            punchOut: next.actualTime,
-            hours: Math.round(hours * 100) / 100,
-            jobCode: current.jobCode,
-            jobDescription: current.jobDescription,
-          });
-          i += 2;
+    let current: {
+      punchIn: string;
+      jobCode: string | null;
+      jobDescription: string | null;
+      isTransferIn: boolean;
+    } | null = null;
+
+    const closeCurrent = (outTimeIso: string | null, isTransferOut: boolean) => {
+      if (!current) return;
+      let hours: number | null = null;
+      if (outTimeIso) {
+        const inT = new Date(current.punchIn).getTime();
+        const outT = new Date(outTimeIso).getTime();
+        if (!isNaN(inT) && !isNaN(outT) && outT >= inT) {
+          hours = Math.round(((outT - inT) / (1000 * 60 * 60)) * 100) / 100;
+        }
+      }
+      shifts.push({
+        punchIn: current.punchIn,
+        punchOut: outTimeIso,
+        hours,
+        jobCode: current.jobCode,
+        jobDescription: current.jobDescription,
+        isTransferIn: current.isTransferIn,
+        isTransferOut,
+      });
+      current = null;
+    };
+
+    for (const p of sorted) {
+      if (p.punchType === 1) {
+        // Out punch
+        if (current) {
+          closeCurrent(p.actualTime, false);
         } else {
+          // Orphan out — record it so it isn't silently dropped.
           shifts.push({
-            punchIn: current.actualTime,
-            punchOut: null,
+            punchIn: p.actualTime,
+            punchOut: p.actualTime,
             hours: null,
-            jobCode: current.jobCode,
-            jobDescription: current.jobDescription,
+            jobCode: p.jobCode,
+            jobDescription: p.jobDescription,
+            isTransferIn: false,
+            isTransferOut: false,
           });
-          i++;
         }
       } else {
-        shifts.push({
-          punchIn: current.actualTime,
-          punchOut: null,
-          hours: null,
-          jobCode: current.jobCode,
-          jobDescription: current.jobDescription,
-        });
-        i++;
+        // In (type 0) or any non-Out punch (e.g. explicit transfer types).
+        if (current) {
+          const sameJob = (current.jobCode || null) === (p.jobCode || null);
+          const isExplicitTransferType = p.punchType !== 0;
+          if (sameJob && !isExplicitTransferType) {
+            // Duplicate / edited "In" on the same job — keep the original
+            // open shift and skip this punch instead of falsely splitting.
+            continue;
+          }
+          // Job transfer: close prior shift at the transfer time and start a
+          // new one with the transfer time as its punch-in.
+          closeCurrent(p.actualTime, true);
+          current = {
+            punchIn: p.actualTime,
+            jobCode: p.jobCode,
+            jobDescription: p.jobDescription,
+            isTransferIn: true,
+          };
+        } else {
+          current = {
+            punchIn: p.actualTime,
+            jobCode: p.jobCode,
+            jobDescription: p.jobDescription,
+            isTransferIn: false,
+          };
+        }
+      }
+    }
+
+    // Any still-open shift means the employee never punched out (open shift).
+    if (current) {
+      closeCurrent(null, false);
+    }
+
+    // Detect implicit job transfers represented as an Out + In at the same
+    // time on different jobs. The main loop already handles back-to-back In
+    // punches; this pass also flags Out/In pairs as transfers so the UI shows
+    // a "Transfer" badge consistently.
+    for (let k = 0; k < shifts.length - 1; k++) {
+      const a = shifts[k];
+      const b = shifts[k + 1];
+      if (
+        a.punchOut &&
+        b.punchIn &&
+        a.punchOut === b.punchIn &&
+        (a.jobCode || null) !== (b.jobCode || null)
+      ) {
+        a.isTransferOut = true;
+        b.isTransferIn = true;
       }
     }
 
