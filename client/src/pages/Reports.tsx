@@ -46,18 +46,76 @@ interface ReportResult {
   rowCount: number;
 }
 
-const SUGGESTED_QUESTIONS = [
-  "How many tasks did I complete this week and what is the total value?",
-  "What is the total value of all completed tasks this month?",
-  "Show me unbilled completed tasks grouped by project",
-  "Which projects have the highest estimated value?",
-  "How many active projects do we have right now?",
-  "Show daily reports filed in the last 7 days by project",
-  "What equipment is currently in use?",
-  "Top 5 customers by total project value",
-  "Total labor hours per project this month",
-  "Tasks overdue (past due date and not completed)",
+interface Template {
+  label: string;
+  question: string;
+}
+
+interface TemplateCategory {
+  name: string;
+  templates: Template[];
+}
+
+const TEMPLATE_CATEGORIES: TemplateCategory[] = [
+  {
+    name: "Financial / Billing",
+    templates: [
+      { label: "Unbilled completed work", question: "List every task that is 100% complete or status 'completed' and has not been marked billed (billed_at IS NULL), grouped by project, with total scheduled value per project and the count of unbilled tasks." },
+      { label: "Revenue this month", question: "Total scheduled value of tasks completed (status='completed' or percent_complete=100) where completed_at is in the current month, grouped by project." },
+      { label: "Revenue this quarter", question: "Total scheduled value of tasks completed (status='completed' or percent_complete=100) where completed_at falls in the current calendar quarter, grouped by project." },
+      { label: "Revenue year-to-date", question: "Total scheduled value of tasks completed (status='completed' or percent_complete=100) where completed_at is in the current year, grouped by month." },
+      { label: "Outstanding receivables", question: "List all pay applications with status='submitted' (not yet approved), showing project name, application number, period_to date, and total this period's work plus materials stored." },
+      { label: "Retainage held by project", question: "For each project with active or completed pay applications, show project name, retainage_percent, and cumulative retainage held (sum of (this_periods_work + materials_stored) * retainage_percent / 100 across all pay_application_items)." },
+      { label: "Profitability snapshot", question: "For each active project, show estimated_value, total scheduled_value of all tasks, total estimated_hours of all tasks, and total actual labor hours from fingercheck_time_punches." },
+    ],
+  },
+  {
+    name: "Operations / Productivity",
+    templates: [
+      { label: "Tasks completed this week", question: "How many tasks were completed this week (completed_at >= date_trunc('week', CURRENT_DATE)) and what is the total scheduled value? Show one KPI." },
+      { label: "Overdue tasks", question: "List all tasks where due_date < CURRENT_DATE and status is not 'completed' and percent_complete < 100, grouped by project and assigned_to, showing task title, due_date, days overdue, and assignee." },
+      { label: "Aging tasks (30/60/90)", question: "Bucket all open tasks (status not 'completed' and percent_complete < 100) by age since created_at: 0-30 days, 31-60 days, 61-90 days, 90+ days. Show count and total scheduled_value per bucket." },
+      { label: "Schedule slip", question: "For tasks completed in the last 90 days, compare scheduled_date to completed_at. Show task title, project, scheduled_date, completed_at, and days_difference (positive = late, negative = early). Sort by largest slip." },
+    ],
+  },
+  {
+    name: "Labor (Fingercheck)",
+    templates: [
+      { label: "Labor hours by employee this week", question: "Total hours_worked from fingercheck_time_punches this week (punch_in >= date_trunc('week', CURRENT_DATE)), grouped by employee first_name and last_name. Sort by hours descending." },
+      { label: "Labor hours by project this month", question: "Total hours_worked from fingercheck_time_punches in the current month, grouped by project name. Sort by hours descending." },
+      { label: "Estimated vs actual hours", question: "For each active project, show total estimated_hours from tasks and total actual hours_worked from fingercheck_time_punches, and the variance." },
+      { label: "Job transfers today", question: "Find employees who had time punches on more than one project on the same day in the last 7 days. Show employee name, date, and the projects they transferred between." },
+      { label: "Daily report participation gaps", question: "For the last 14 days, find employee/project/date combinations where fingercheck_time_punches exist but no daily_report_labor_lines exist for that employee on that project's daily report for that date." },
+    ],
+  },
+  {
+    name: "Equipment",
+    templates: [
+      { label: "Equipment utilization this month", question: "For each piece of equipment, count distinct days in the current month where it appears in daily_report_equipment_lines (joined via daily_reports.report_date). Show equipment name, type, days used, and utilization percentage out of working days in the month." },
+      { label: "Idle equipment", question: "List equipment with status='available' that is not referenced in any allocations linked to schedule_entries with start_date in the next 14 days. Show equipment name, type, and current_location." },
+      { label: "Maintenance due / overdue", question: "For each piece of equipment, show the most recent maintenance_log performed_at date, days since last maintenance, and flag equipment with no maintenance in the last 90 days as overdue." },
+      { label: "Maintenance spend YTD", question: "Total cost from maintenance_logs in the current year, grouped by equipment name, sorted by total cost descending." },
+    ],
+  },
+  {
+    name: "Project Pipeline / Sales",
+    templates: [
+      { label: "Bid pipeline value", question: "Sum of estimated_value for projects in status 'bidding', 'takeoff_done', 'takeoff_reviewed', or 'proposal_sent', grouped by status. Show as a bar chart." },
+      { label: "Win rate this year", question: "For projects created in the current year, count how many are in 'completed' or 'active' status (won) vs 'bid_lost' (lost), and compute win rate percentage." },
+      { label: "Top customers by value", question: "Top 10 customers by total estimated_value across all their projects. Show customer name, company, project count, and total value." },
+    ],
+  },
+  {
+    name: "Field / Compliance",
+    templates: [
+      { label: "Daily reports filed vs expected", question: "For each active project, count daily_reports filed in the last 7 days vs the expected 5 (Mon-Fri). Show project name, reports filed, expected, and missing days count. Flag projects with fewer than expected." },
+      { label: "Inspections summary", question: "Count daily_report_inspection_entries in the last 30 days, grouped by inspection_type, authority, and status (pass/fail). Show as a table." },
+      { label: "Deliveries this week", question: "List daily_report_delivery_entries from the last 7 days, showing supplier, material, total quantity, unit, and which projects they were delivered to." },
+      { label: "Photo / document activity", question: "Count photos and files uploaded per project in the last 7 days, grouped by project name. Show photo count, file count, and total uploads." },
+    ],
+  },
 ];
+
 
 const PIE_COLORS = ["#f59e0b", "#3b82f6", "#10b981", "#ef4444", "#8b5cf6", "#ec4899", "#14b8a6", "#f97316"];
 
@@ -301,28 +359,45 @@ export default function Reports() {
             </Button>
           </div>
 
-          {!result && !queryMutation.isPending && (
-            <div className="pt-2">
-              <p className="text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wide">
-                Try one of these
-              </p>
-              <div className="flex flex-wrap gap-2">
-                {SUGGESTED_QUESTIONS.map((q) => (
-                  <Badge
-                    key={q}
-                    variant="secondary"
-                    className="cursor-pointer hover:bg-primary/20 transition-colors py-1.5 px-3 font-normal"
-                    onClick={() => handleSubmit(q)}
-                    data-testid={`suggestion-${q.slice(0, 20)}`}
-                  >
-                    {q}
-                  </Badge>
-                ))}
-              </div>
-            </div>
-          )}
         </CardContent>
       </Card>
+
+      {!queryMutation.isPending && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <BarChart3 className="w-4 h-4 text-primary" />
+              Report templates
+            </CardTitle>
+            <p className="text-sm text-muted-foreground">
+              Click any template to run it instantly
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {TEMPLATE_CATEGORIES.map((category) => (
+              <div key={category.name}>
+                <p className="text-xs font-semibold text-muted-foreground mb-2 uppercase tracking-wide">
+                  {category.name}
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {category.templates.map((tmpl) => (
+                    <Badge
+                      key={tmpl.label}
+                      variant="secondary"
+                      className="cursor-pointer hover:bg-primary/20 transition-colors py-1.5 px-3 font-normal"
+                      onClick={() => handleSubmit(tmpl.question)}
+                      title={tmpl.question}
+                      data-testid={`template-${tmpl.label.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`}
+                    >
+                      {tmpl.label}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
 
       {error && (
         <Card className="border-destructive">
