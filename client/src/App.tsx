@@ -27,6 +27,7 @@ import Billing from "@/pages/Billing";
 import Employees from "@/pages/Employees";
 import Settings from "@/pages/Settings";
 import CompanyDocuments from "@/pages/CompanyDocuments";
+import Reports from "@/pages/Reports";
 import NotFound from "@/pages/not-found";
 
 function ProtectedRoute({ component: Component, adminOnly = false }: { component: React.ComponentType; adminOnly?: boolean }) {
@@ -101,6 +102,7 @@ function Router() {
       <Route path="/admin/email-setup" component={() => <ProtectedRoute component={EmailSetup} adminOnly />} />
       <Route path="/admin/billing" component={() => <ProtectedRoute component={Billing} adminOnly />} />
       <Route path="/admin/documents" component={() => <ProtectedRoute component={CompanyDocuments} adminOnly />} />
+      <Route path="/admin/reports" component={() => <ProtectedRoute component={Reports} adminOnly />} />
       <Route component={NotFound} />
     </Switch>
   );

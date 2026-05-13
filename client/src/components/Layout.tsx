@@ -15,7 +15,8 @@ import {
   Receipt,
   Settings,
   ChevronRight,
-  Files
+  Files,
+  BarChart3
 } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -39,6 +40,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const adminItems = [
     { href: "/admin/users", label: "User Management", icon: Shield },
     { href: "/admin/billing", label: "Billing", icon: Receipt },
+    { href: "/admin/reports", label: "Reports", icon: BarChart3 },
     { href: "/admin/documents", label: "Documents", icon: Files },
     { href: "/employees", label: "Employees", icon: HardHat },
   ];

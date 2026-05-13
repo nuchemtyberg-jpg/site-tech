@@ -15,6 +15,7 @@ import {
   syncProjectEmails, getAttachmentContent, validateOAuthState
 } from "./services/outlook";
 import { processInboundEmail, verifyMailgunSignature } from "./services/inboundEmail";
+import { generateReport } from "./services/reportingAi";
 import multer from "multer";
 import sharp from "sharp";
 
@@ -87,6 +88,21 @@ export async function registerRoutes(
   
   // Object Storage Setup
   registerObjectStorageRoutes(app);
+
+  // AI Reporting (admin only) - natural language → SQL → results
+  app.post("/api/reports/query", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const { question } = req.body;
+      if (!question || typeof question !== "string" || question.trim().length === 0) {
+        return res.status(400).json({ error: "Question is required" });
+      }
+      const result = await generateReport(question.trim());
+      res.json(result);
+    } catch (err: any) {
+      console.error("Report query error:", err);
+      res.status(400).json({ error: err?.message || "Failed to generate report" });
+    }
+  });
 
   // Admin Routes - User Management
   
