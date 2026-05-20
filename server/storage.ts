@@ -2,7 +2,7 @@ import {
   projects, tasks, equipment, allocations, folders, files, photos, users, customers, dailyReports, maintenanceLogs, communications, taskStatusHistory, photoAlbums,
   reportTasks, laborEntries, equipmentEntries, reportTaskPhotos, deliveries, deliveryPhotos,
   dailyReportTaskEntries, dailyReportLaborLines, dailyReportEquipmentLines, dailyReportDeliveryEntries, dailyReportInspectionEntries, dailyReportPhotos,
-  authorizedUsers, scheduleEntries,
+  authorizedUsers, scheduleEntries, taskTitles,
   projectEmailConnections, projectEmails, projectEmailAttachments,
   fingercheckEmployees, fingercheckTimePunches, fingercheckProjectMappings,
   rfis, rfiResponses, userOutlookConnections, projectDailyReportRecipients, companyFolders, companyFiles,
@@ -15,7 +15,7 @@ import {
   type InsertProjectEmailConnection, type InsertProjectEmail, type InsertProjectEmailAttachment,
   type InsertFingercheckEmployee, type InsertFingercheckTimePunch, type InsertFingercheckProjectMapping,
   type InsertRfi, type InsertRfiResponse, type InsertProjectDailyReportRecipient, type InsertCompanyFolder, type InsertCompanyFile,
-  type InsertPayApplication, type InsertPayApplicationItem,
+  type InsertPayApplication, type InsertPayApplicationItem, type InsertTaskTitle,
   type Project, type Task, type Equipment, type Allocation, type Folder, type FileMetadata, type Photo,
   type Customer, type DailyReport, type MaintenanceLog, type Communication, type TaskStatusHistory, type PhotoAlbum,
   type ReportTask, type LaborEntry, type EquipmentEntry, type ReportTaskPhoto, type Delivery, type DeliveryPhoto,
@@ -23,7 +23,7 @@ import {
   type ProjectEmailConnection, type ProjectEmail, type ProjectEmailAttachment,
   type FingercheckEmployee, type FingercheckTimePunch, type FingercheckProjectMapping,
   type Rfi, type RfiResponse, type UserOutlookConnection, type ProjectDailyReportRecipient, type CompanyFolder, type CompanyFile,
-  type PayApplication, type PayApplicationItem,
+  type PayApplication, type PayApplicationItem, type TaskTitle,
   type ScheduleEntry,
   type User, type UpsertUser, type AuthorizedUser
 } from "@shared/schema";
@@ -61,6 +61,11 @@ export interface IStorage {
   createCustomer(customer: InsertCustomer): Promise<Customer>;
   updateCustomer(id: number, customer: Partial<InsertCustomer>): Promise<Customer>;
   deleteCustomer(id: number): Promise<void>;
+
+  // Task Titles
+  getTaskTitles(): Promise<TaskTitle[]>;
+  createTaskTitle(title: InsertTaskTitle): Promise<TaskTitle>;
+  deleteTaskTitle(id: number): Promise<void>;
 
   // Projects
   getProjects(): Promise<Project[]>;
@@ -414,6 +419,28 @@ export class DatabaseStorage implements IStorage {
     const [customer] = await db.update(customers).set(updates).where(eq(customers.id, id)).returning();
     return customer;
   }
+  async getTaskTitles(): Promise<TaskTitle[]> {
+    return await db.select().from(taskTitles).where(isNull(taskTitles.deletedAt)).orderBy(taskTitles.name);
+  }
+
+  async createTaskTitle(insertTitle: InsertTaskTitle): Promise<TaskTitle> {
+    const name = insertTitle.name.trim();
+    const [existing] = await db.select().from(taskTitles).where(sql`lower(${taskTitles.name}) = lower(${name})`);
+    if (existing) {
+      if (existing.deletedAt) {
+        const [restored] = await db.update(taskTitles).set({ deletedAt: null }).where(eq(taskTitles.id, existing.id)).returning();
+        return restored;
+      }
+      return existing;
+    }
+    const [title] = await db.insert(taskTitles).values({ name }).returning();
+    return title;
+  }
+
+  async deleteTaskTitle(id: number): Promise<void> {
+    await db.update(taskTitles).set({ deletedAt: new Date() }).where(eq(taskTitles.id, id));
+  }
+
   async deleteCustomer(id: number): Promise<void> {
     await db.update(customers).set({ deletedAt: new Date() }).where(eq(customers.id, id));
   }

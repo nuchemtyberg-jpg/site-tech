@@ -6,7 +6,7 @@ import { z } from "zod";
 import { setupAuth, registerAuthRoutes, isAuthenticated } from "./replit_integrations/auth";
 import { registerObjectStorageRoutes, ObjectStorageService } from "./replit_integrations/object_storage";
 import type { User } from "@shared/schema";
-import { insertAuthorizedUserSchema, insertRfiSchema } from "@shared/schema";
+import { insertAuthorizedUserSchema, insertRfiSchema, insertTaskTitleSchema } from "@shared/schema";
 import { isAdmin, isAuthorizedUser } from "./middleware/auth";
 import { sendInviteEmail } from "./services/email";
 import { generateUploadSignature, deleteFromCloudinary } from "./services/cloudinary";
@@ -634,6 +634,30 @@ export async function registerRoutes(
 
   app.delete(api.customers.delete.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
     await storage.deleteCustomer(Number(req.params.id));
+    res.status(204).send();
+  });
+
+  // Task Titles (a.k.a. task types) - persistent list users can add to when creating tasks
+  app.get("/api/task-titles", isAuthenticated, isAuthorizedUser, async (_req, res) => {
+    const titles = await storage.getTaskTitles();
+    res.json(titles);
+  });
+
+  app.post("/api/task-titles", isAuthenticated, isAuthorizedUser, async (req, res) => {
+    try {
+      const input = insertTaskTitleSchema.parse(req.body);
+      const title = await storage.createTaskTitle(input);
+      res.status(201).json(title);
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0].message });
+      }
+      throw err;
+    }
+  });
+
+  app.delete("/api/task-titles/:id", isAuthenticated, isAuthorizedUser, async (req, res) => {
+    await storage.deleteTaskTitle(Number(req.params.id));
     res.status(204).send();
   });
 

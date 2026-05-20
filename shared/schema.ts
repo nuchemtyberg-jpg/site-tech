@@ -796,4 +796,18 @@ export const insertPayApplicationItemSchema = createInsertSchema(payApplicationI
   materialsStored: z.number().int().min(0),
 });
 export type PayApplicationItem = typeof payApplicationItems.$inferSelect;
+
+// Task Titles (a.k.a. task types) - persistent custom titles users can add when creating tasks
+export const taskTitles = pgTable("task_titles", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull().unique(),
+  createdAt: timestamp("created_at").defaultNow(),
+  deletedAt: timestamp("deleted_at"),
+});
+
+export const insertTaskTitleSchema = createInsertSchema(taskTitles).omit({ id: true, createdAt: true, deletedAt: true }).extend({
+  name: z.string().trim().min(1, "Task title is required"),
+});
+export type TaskTitle = typeof taskTitles.$inferSelect;
+export type InsertTaskTitle = z.infer<typeof insertTaskTitleSchema>;
 export type InsertPayApplicationItem = z.infer<typeof insertPayApplicationItemSchema>;

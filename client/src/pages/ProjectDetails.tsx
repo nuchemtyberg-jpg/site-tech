@@ -98,7 +98,7 @@ import { Slider } from "@/components/ui/slider";
 import { useState, useRef, useEffect, useMemo } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { insertTaskSchema, type InsertTask, type FileMetadata, type Task, type Photo } from "@shared/schema";
+import { insertTaskSchema, type InsertTask, type FileMetadata, type Task, type Photo, type TaskTitle } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
 import { cn, getProxyUrl, getProxyUrlWithFilename } from "@/lib/utils";
 import { NativeFileUploader } from "@/components/NativeFileUploader";
@@ -198,6 +198,17 @@ export default function ProjectDetails() {
   const { data: files, isLoading: isFilesLoading } = useProjectFiles(projectId);
   const { data: folders, isLoading: isFoldersLoading } = useProjectFolders(projectId);
   const { data: customers = [] } = useQuery<Customer[]>({ queryKey: ["/api/customers"] });
+  const { data: taskTitleRecords = [] } = useQuery<TaskTitle[]>({ queryKey: ["/api/task-titles"] });
+  const customTaskTitles = useMemo(() => taskTitleRecords.map(t => t.name), [taskTitleRecords]);
+  const createTaskTitleMutation = useMutation({
+    mutationFn: async (name: string) => {
+      const res = await apiRequest("POST", "/api/task-titles", { name });
+      return res.json() as Promise<TaskTitle>;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/task-titles"] });
+    },
+  });
   const deleteTaskMutation = useDeleteTask();
   const deleteProjectMutation = useDeleteProject();
   const updateProjectMutation = useUpdateProject();
@@ -222,7 +233,6 @@ export default function ProjectDetails() {
   const [folderName, setFolderName] = useState("");
   const [customerSearch, setCustomerSearch] = useState("");
   const [customerPopoverOpen, setCustomerPopoverOpen] = useState(false);
-  const [customTaskTitles, setCustomTaskTitles] = useState<string[]>([]);
   const [isCustomTitleOpen, setIsCustomTitleOpen] = useState(false);
   const [newCustomTitle, setNewCustomTitle] = useState("");
   const [taskTitleSearch, setTaskTitleSearch] = useState("");
@@ -1903,7 +1913,7 @@ export default function ProjectDetails() {
                           <CommandList className="max-h-60">
                             <CommandEmpty>No task title found.</CommandEmpty>
                             <CommandGroup>
-                              {[...PREDEFINED_TASK_TITLES, ...customTaskTitles].sort().map((title) => (
+                              {Array.from(new Map([...PREDEFINED_TASK_TITLES, ...customTaskTitles].map(t => [t.toLowerCase(), t])).values()).sort().map((title) => (
                                 <CommandItem
                                   key={title}
                                   value={title}
@@ -2038,17 +2048,23 @@ export default function ProjectDetails() {
                     </Button>
                     <Button 
                       onClick={() => {
-                        if (newCustomTitle.trim()) {
-                          setCustomTaskTitles(prev => [...prev, newCustomTitle.trim()]);
-                          form.setValue("title", newCustomTitle.trim());
-                          setNewCustomTitle("");
-                          setIsCustomTitleOpen(false);
-                        }
+                        const name = newCustomTitle.trim();
+                        if (!name) return;
+                        createTaskTitleMutation.mutate(name, {
+                          onSuccess: (created) => {
+                            form.setValue("title", created.name);
+                            setNewCustomTitle("");
+                            setIsCustomTitleOpen(false);
+                          },
+                          onError: (err: any) => {
+                            toast({ title: "Error", description: err?.message ?? "Could not add task title", variant: "destructive" });
+                          },
+                        });
                       }}
-                      disabled={!newCustomTitle.trim()}
+                      disabled={!newCustomTitle.trim() || createTaskTitleMutation.isPending}
                       data-testid="button-add-custom-title"
                     >
-                      Add Title
+                      {createTaskTitleMutation.isPending ? "Adding..." : "Add Title"}
                     </Button>
                   </DialogFooter>
                 </div>
