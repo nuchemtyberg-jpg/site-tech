@@ -550,8 +550,18 @@ export default function DailyReportPage() {
       }
     },
     onError: (error: any) => {
-      if (error.message?.includes("403")) {
-        toast({ title: "Report is already completed", variant: "destructive" });
+      const message: string = (error?.message || "").toLowerCase();
+      if (message.includes("already completed")) {
+        // The report was already signed (e.g. on another device or a prior
+        // attempt that succeeded server-side). Sync the UI to reality.
+        toast({ title: "This report has already been signed and completed", variant: "destructive" });
+        setShowSignatureDialog(false);
+        refetchReport();
+        if (projectId) {
+          queryClient.invalidateQueries({ queryKey: ['/api/projects', projectId, 'reports'] });
+        }
+      } else if (message.includes("pending approval")) {
+        toast({ title: "Your account is pending approval", variant: "destructive" });
       } else {
         toast({ title: "Failed to complete report", variant: "destructive" });
       }
