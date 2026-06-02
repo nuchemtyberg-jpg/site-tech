@@ -189,6 +189,7 @@ export default function DailyReportPage() {
   const [signerName, setSignerName] = useState('');
   const [notes, setNotes] = useState('');
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const isSigningRef = useRef(false);
   const [isDrawing, setIsDrawing] = useState(false);
   const [showAddTaskDialog, setShowAddTaskDialog] = useState(false);
   const [selectedTaskId, setSelectedTaskId] = useState<number | null>(null);
@@ -566,6 +567,9 @@ export default function DailyReportPage() {
         toast({ title: "Failed to complete report", variant: "destructive" });
       }
     },
+    onSettled: () => {
+      isSigningRef.current = false;
+    },
   });
 
   const createTaskEntryMutation = useMutation({
@@ -848,6 +852,13 @@ export default function DailyReportPage() {
       toast({ title: "Please provide a signature", variant: "destructive" });
       return;
     }
+
+    // Synchronous guard against double submission. React state (and the
+    // button's disabled prop) updates asynchronously, so a fast double-tap or
+    // mobile "ghost click" can fire mutate() twice before the button disables,
+    // causing the second request to hit an already-completed report (403).
+    if (isSigningRef.current || completeReportMutation.isPending) return;
+    isSigningRef.current = true;
 
     completeReportMutation.mutate({
       signatureType,

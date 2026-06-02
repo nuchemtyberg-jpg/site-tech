@@ -1,0 +1,1 @@
+- [Daily report "already completed" 403 race](daily-report-completion-race.md) — spurious 403 on sign is a double-submit race; needs a synchronous ref guard, not just isPending.
