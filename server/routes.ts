@@ -1033,12 +1033,15 @@ export async function registerRoutes(
         return res.status(404).json({ message: "Report not found" });
       }
       
-      // Reject edits if report is completed (read-only)
-      if (existingReport.status === 'completed' && !req.body.status) {
+      // Reject edits if report is completed (read-only). State transitions
+      // (complete / reopen) must go through their dedicated endpoints.
+      if (existingReport.status === 'completed') {
         return res.status(403).json({ message: "Cannot edit a completed report" });
       }
       
       const body = { ...req.body };
+      // Prevent status transitions through the generic update route.
+      delete body.status;
       
       // Handle timestamp conversion
       if (body.completedAt && typeof body.completedAt === 'string') {
@@ -1136,6 +1139,36 @@ export async function registerRoutes(
     } catch (err) {
       console.error("Complete report error:", err);
       return res.status(500).json({ message: "Failed to complete report" });
+    }
+  });
+
+  // Reopen a completed report (admin only) - reverts to draft and clears signature
+  app.post("/api/reports/:id/incomplete", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const reportId = Number(req.params.id);
+
+      const existingReport = await storage.getDailyReport(reportId);
+      if (!existingReport) {
+        return res.status(404).json({ message: "Report not found" });
+      }
+
+      if (existingReport.status !== 'completed') {
+        return res.status(400).json({ message: "Report is not completed" });
+      }
+
+      const report = await storage.updateDailyReport(reportId, {
+        status: 'draft',
+        signatureType: null,
+        signatureValue: null,
+        completedAt: null,
+        completedBy: null,
+        completedByName: null,
+      });
+
+      res.json(report);
+    } catch (err) {
+      console.error("Incomplete report error:", err);
+      return res.status(500).json({ message: "Failed to reopen report" });
     }
   });
 

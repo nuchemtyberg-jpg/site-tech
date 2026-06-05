@@ -35,7 +35,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { ArrowLeft, Save, Plus, Trash2, Cloud, Truck, ChevronDown, ChevronUp, CheckCircle, PenLine, Download, Camera, X, Image, Clock, Users, AlertTriangle, ClipboardList, StickyNote, ImagePlus } from "lucide-react";
+import { ArrowLeft, Save, Plus, Trash2, Cloud, Truck, ChevronDown, ChevronUp, CheckCircle, PenLine, Download, Camera, X, Image, Clock, Users, AlertTriangle, ClipboardList, StickyNote, ImagePlus, Unlock } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
@@ -181,6 +181,7 @@ export default function DailyReportPage() {
   const [newReportDate, setNewReportDate] = useState(format(new Date(), "yyyy-MM-dd"));
   const [expandedTasks, setExpandedTasks] = useState<Set<number>>(new Set());
   const [deleteTaskEntryId, setDeleteTaskEntryId] = useState<number | null>(null);
+  const [showReopenDialog, setShowReopenDialog] = useState(false);
   const [deleteDeliveryId, setDeleteDeliveryId] = useState<number | null>(null);
   const [deleteInspectionId, setDeleteInspectionId] = useState<number | null>(null);
   const [showSignatureDialog, setShowSignatureDialog] = useState(false);
@@ -301,6 +302,7 @@ export default function DailyReportPage() {
   }, [report?.notes]);
 
   const isCompleted = report?.status === 'completed';
+  const isAdmin = user?.role === 'admin';
   
   // Check if there are unsaved changes
   const hasUnsavedChanges = useCallback(() => {
@@ -569,6 +571,28 @@ export default function DailyReportPage() {
     },
     onSettled: () => {
       isSigningRef.current = false;
+    },
+  });
+
+  const reopenReportMutation = useMutation({
+    mutationFn: async () => {
+      return apiRequest("POST", `/api/reports/${reportId}/incomplete`);
+    },
+    onSuccess: () => {
+      toast({ title: "Report reopened for editing" });
+      setShowReopenDialog(false);
+      refetchReport();
+      if (projectId) {
+        queryClient.invalidateQueries({ queryKey: ['/api/projects', projectId, 'reports'] });
+      }
+    },
+    onError: (error: any) => {
+      const message: string = (error?.message || "").toLowerCase();
+      if (message.includes("forbidden") || message.includes("admin")) {
+        toast({ title: "Only admins can reopen a completed report", variant: "destructive" });
+      } else {
+        toast({ title: "Failed to reopen report", variant: "destructive" });
+      }
     },
   });
 
@@ -1083,15 +1107,28 @@ export default function DailyReportPage() {
               </DropdownMenuContent>
             </DropdownMenu>
             {isCompleted ? (
-              <Button
-                variant="outline"
-                className="h-11 w-11 p-0 sm:h-9 sm:w-auto sm:px-4 inline-flex items-center justify-center gap-2"
-                onClick={() => setLocation(`/projects/${projectId}?tab=daily-reports`)}
-                data-testid="button-close-report"
-              >
-                <X className="h-4 w-4 shrink-0 sm:hidden" />
-                <span className="hidden sm:inline">Close</span>
-              </Button>
+              <>
+                {isAdmin && (
+                  <Button
+                    variant="outline"
+                    className="h-11 w-11 p-0 sm:h-9 sm:w-auto sm:px-4 inline-flex items-center justify-center gap-2"
+                    onClick={() => setShowReopenDialog(true)}
+                    data-testid="button-reopen-report"
+                  >
+                    <Unlock className="h-4 w-4 shrink-0" />
+                    <span className="hidden sm:inline">Reopen</span>
+                  </Button>
+                )}
+                <Button
+                  variant="outline"
+                  className="h-11 w-11 p-0 sm:h-9 sm:w-auto sm:px-4 inline-flex items-center justify-center gap-2"
+                  onClick={() => setLocation(`/projects/${projectId}?tab=daily-reports`)}
+                  data-testid="button-close-report"
+                >
+                  <X className="h-4 w-4 shrink-0 sm:hidden" />
+                  <span className="hidden sm:inline">Close</span>
+                </Button>
+              </>
             ) : (
               <>
                 <Button
@@ -2355,6 +2392,28 @@ export default function DailyReportPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Reopen (Incomplete) Report Confirmation */}
+      <AlertDialog open={showReopenDialog} onOpenChange={setShowReopenDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Reopen this report?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will revert the report to a draft and remove the existing signature. You'll need to complete and sign it again. This action is only available to admins.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-cancel-reopen">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => reopenReportMutation.mutate()}
+              disabled={reopenReportMutation.isPending}
+              data-testid="button-confirm-reopen"
+            >
+              {reopenReportMutation.isPending ? "Reopening..." : "Reopen Report"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Delete Task Entry Confirmation */}
       <AlertDialog open={!!deleteTaskEntryId} onOpenChange={() => setDeleteTaskEntryId(null)}>
