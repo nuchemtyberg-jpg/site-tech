@@ -1222,9 +1222,13 @@ export async function registerRoutes(
 
       const autoOrientImage = async (imageBytes: Uint8Array): Promise<Uint8Array> => {
         try {
+          // Photos display at max ~235x160 PDF points. Downscale to a cap that keeps
+          // print clarity (~2x display size) while drastically reducing embedded bytes,
+          // which is what makes photo-heavy reports slow/large to download.
           const oriented = await sharp(Buffer.from(imageBytes))
             .rotate()
-            .jpeg({ quality: 90 })
+            .resize(1000, 1000, { fit: 'inside', withoutEnlargement: true })
+            .jpeg({ quality: 72, mozjpeg: true })
             .toBuffer();
           return new Uint8Array(oriented);
         } catch (err) {
@@ -1311,6 +1315,30 @@ export async function registerRoutes(
       const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
       const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
       const italicFont = await pdfDoc.embedFont(StandardFonts.HelveticaOblique);
+
+      // Fetch + downscale + embed photos concurrently (bounded) so photo-heavy
+      // reports don't process images one-at-a-time. Returns embedded images in
+      // the same order as the input photos (null entries for any that failed).
+      const embedPhotosInOrder = async (photos: { url: string }[]): Promise<(any | null)[]> => {
+        const results: (any | null)[] = new Array(photos.length).fill(null);
+        const concurrency = Math.min(6, photos.length);
+        let next = 0;
+        const worker = async () => {
+          while (next < photos.length) {
+            const current = next++;
+            try {
+              const imageBytes = await getPhotoBytes(photos[current].url);
+              if (!imageBytes) continue;
+              let embeddedImage;
+              try { embeddedImage = await pdfDoc.embedJpg(imageBytes); }
+              catch { try { embeddedImage = await pdfDoc.embedPng(imageBytes); } catch { continue; } }
+              results[current] = embeddedImage;
+            } catch (err) { console.error("Failed to embed photo:", err); }
+          }
+        };
+        await Promise.all(Array.from({ length: concurrency }, worker));
+        return results;
+      };
       
       const pageWidth = 612;
       const pageHeight = 792;
@@ -1717,19 +1745,14 @@ export async function registerRoutes(
             const photoMaxHeight = 160;
             const photoGap = 20;
             
+            const embeddedTaskPhotos = await embedPhotosInOrder(entry.photos);
             for (let i = 0; i < entry.photos.length; i += 2) {
               const photosInRow: { image: any; width: number; height: number }[] = [];
               for (let j = 0; j < 2 && i + j < entry.photos.length; j++) {
-                const photo = entry.photos[i + j];
-                try {
-                  const imageBytes = await getPhotoBytes(photo.url);
-                  if (!imageBytes) continue;
-                  let embeddedImage;
-                  try { embeddedImage = await pdfDoc.embedJpg(imageBytes); }
-                  catch { try { embeddedImage = await pdfDoc.embedPng(imageBytes); } catch { continue; } }
-                  const scale = Math.min(photoMaxWidth / embeddedImage.width, photoMaxHeight / embeddedImage.height);
-                  photosInRow.push({ image: embeddedImage, width: embeddedImage.width * scale, height: embeddedImage.height * scale });
-                } catch (err) { console.error("Failed to embed task photo:", err); }
+                const embeddedImage = embeddedTaskPhotos[i + j];
+                if (!embeddedImage) continue;
+                const scale = Math.min(photoMaxWidth / embeddedImage.width, photoMaxHeight / embeddedImage.height);
+                photosInRow.push({ image: embeddedImage, width: embeddedImage.width * scale, height: embeddedImage.height * scale });
               }
               if (photosInRow.length > 0) {
                 const maxRowHeight = Math.max(...photosInRow.map(p => p.height));
@@ -1806,19 +1829,14 @@ export async function registerRoutes(
             const photoMaxWidth = 235;
             const photoMaxHeight = 160;
             const photoGap = 20;
+            const embeddedDeliveryPhotos = await embedPhotosInOrder(delivery.photos);
             for (let i = 0; i < delivery.photos.length; i += 2) {
               const photosInRow: { image: any; width: number; height: number }[] = [];
               for (let j = 0; j < 2 && i + j < delivery.photos.length; j++) {
-                const photo = delivery.photos[i + j];
-                try {
-                  const imageBytes = await getPhotoBytes(photo.url);
-                  if (!imageBytes) continue;
-                  let embeddedImage;
-                  try { embeddedImage = await pdfDoc.embedJpg(imageBytes); }
-                  catch { try { embeddedImage = await pdfDoc.embedPng(imageBytes); } catch { continue; } }
-                  const scale = Math.min(photoMaxWidth / embeddedImage.width, photoMaxHeight / embeddedImage.height);
-                  photosInRow.push({ image: embeddedImage, width: embeddedImage.width * scale, height: embeddedImage.height * scale });
-                } catch (err) { console.error("Failed to embed delivery photo:", err); }
+                const embeddedImage = embeddedDeliveryPhotos[i + j];
+                if (!embeddedImage) continue;
+                const scale = Math.min(photoMaxWidth / embeddedImage.width, photoMaxHeight / embeddedImage.height);
+                photosInRow.push({ image: embeddedImage, width: embeddedImage.width * scale, height: embeddedImage.height * scale });
               }
               if (photosInRow.length > 0) {
                 const maxRowHeight = Math.max(...photosInRow.map(p => p.height));
@@ -1877,19 +1895,14 @@ export async function registerRoutes(
             const photoMaxWidth = 235;
             const photoMaxHeight = 160;
             const photoGap = 20;
+            const embeddedInspectionPhotos = await embedPhotosInOrder(inspection.photos);
             for (let i = 0; i < inspection.photos.length; i += 2) {
               const photosInRow: { image: any; width: number; height: number }[] = [];
               for (let j = 0; j < 2 && i + j < inspection.photos.length; j++) {
-                const photo = inspection.photos[i + j];
-                try {
-                  const imageBytes = await getPhotoBytes(photo.url);
-                  if (!imageBytes) continue;
-                  let embeddedImage;
-                  try { embeddedImage = await pdfDoc.embedJpg(imageBytes); }
-                  catch { try { embeddedImage = await pdfDoc.embedPng(imageBytes); } catch { continue; } }
-                  const scale = Math.min(photoMaxWidth / embeddedImage.width, photoMaxHeight / embeddedImage.height);
-                  photosInRow.push({ image: embeddedImage, width: embeddedImage.width * scale, height: embeddedImage.height * scale });
-                } catch (err) { console.error("Failed to embed inspection photo:", err); }
+                const embeddedImage = embeddedInspectionPhotos[i + j];
+                if (!embeddedImage) continue;
+                const scale = Math.min(photoMaxWidth / embeddedImage.width, photoMaxHeight / embeddedImage.height);
+                photosInRow.push({ image: embeddedImage, width: embeddedImage.width * scale, height: embeddedImage.height * scale });
               }
               if (photosInRow.length > 0) {
                 const maxRowHeight = Math.max(...photosInRow.map(p => p.height));
