@@ -846,7 +846,12 @@ export default function Projects() {
                             {customer && (
                               <span className="flex items-center gap-1 truncate">
                                 <Building2 className="w-3 h-3 shrink-0" />
-                                <span className="truncate">{customer.name}</span>
+                                <span className="truncate" data-testid={`text-project-customer-list-${project.id}`}>
+                                  {customer.name}
+                                  {customer.company && (
+                                    <span className="text-muted-foreground"> · {customer.company}</span>
+                                  )}
+                                </span>
                               </span>
                             )}
                             {project.location && (
