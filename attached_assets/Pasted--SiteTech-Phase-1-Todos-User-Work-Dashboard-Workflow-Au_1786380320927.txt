@@ -1,0 +1,1201 @@
+# SiteTech Phase 1 — Todos, User Work Dashboard, Workflow Automation, Notifications & Activity Log
+
+We are expanding the existing **SiteTech construction management application**.
+
+This is an existing production application with current users, projects, project statuses, tasks, daily reports, documents, photos, equipment, scheduling, and other functionality.
+
+Before making changes, inspect the existing application architecture, database schema, authentication/user system, project structure, navigation, styling patterns, email/notification functionality, and existing reusable components.
+
+## Important Development Rules
+
+1. Do not rebuild functionality that already exists.
+2. Reuse the existing User and Project records.
+3. Do not create duplicate user, project, or authentication systems.
+4. Follow the existing application design and coding patterns where practical.
+5. Make all database changes through proper migrations.
+6. Do not break existing functionality.
+7. Maintain existing data.
+8. Design this system so future modules such as RFPs, Estimates, Proposals, Change Orders, T&M Tickets, Submittals, RFIs, Inspections, and other records can use the same Todo and workflow infrastructure.
+9. Do not hard-code specific users, IDs, project names, or workflow assignments.
+10. The application must remain fully usable on desktop and mobile.
+11. Mobile pages must fit the viewport without horizontal scrolling.
+12. Use clear, light, professional construction-management UI consistent with the existing SiteTech application.
+
+---
+
+# PHASE 1 GOAL
+
+Create a centralized **Action / Todo Management System** for SiteTech.
+
+Users should be able to:
+
+* Create todos manually.
+* Assign todos to other SiteTech users.
+* Associate todos with projects.
+* Assign due dates.
+* Set priority.
+* Track completion.
+* View all work assigned to them from a central dashboard.
+* Automatically receive todos when project statuses change based on configurable workflow rules.
+* Receive notifications when relevant actions occur.
+* Maintain a reliable audit/history record of important actions.
+
+The Todo system must be designed as a reusable platform feature rather than something that only works for Projects.
+
+---
+
+# 1. UNIVERSAL TODO SYSTEM
+
+Create a centralized Todo / Action Item system.
+
+## Todo Data Model
+
+Each Todo should support at minimum:
+
+* Unique ID
+* Title
+* Description / notes
+* Assigned user
+* Created by user
+* Project
+* Due date
+* Priority
+* Status
+* Created date/time
+* Updated date/time
+* Completed date/time
+* Completed by user
+* Source / related record
+* Whether the todo was manually created or automatically generated
+* Workflow rule that generated it, if applicable
+* Archived status if needed
+
+### Todo Statuses
+
+Use:
+
+* Open
+* In Progress
+* Completed
+* Cancelled
+
+Make the status architecture easy to expand later.
+
+### Priority
+
+Use:
+
+* Low
+* Normal
+* High
+* Urgent
+
+Default should be **Normal**.
+
+---
+
+# 2. GENERIC RECORD LINKING
+
+Do NOT design Todos so they can only belong to a Project.
+
+A Todo may be associated with a Project while also relating to another application record.
+
+Examples:
+
+* Project
+* Future RFP
+* Future Estimate
+* Future Proposal
+* Future Change Order
+* Future T&M Ticket
+* Future Submittal
+* Future RFI
+* Future Inspection
+
+Build the architecture now so additional record types can be added without redesigning the Todo system.
+
+For example, use a generic relationship concept similar to:
+
+* relatedEntityType
+* relatedEntityId
+
+or another appropriate polymorphic/reference architecture that fits the existing database and application.
+
+A Todo should still have a direct Project relationship whenever a Project is known because project-based filtering will be heavily used.
+
+Do not create fake placeholder tables for future modules. Simply make the Todo architecture capable of linking to them later.
+
+---
+
+# 3. CREATING TODOS
+
+Provide a clear **Add Todo** button.
+
+Todos should be creatable from:
+
+### Global Todo area
+
+Users can manually select:
+
+* Project
+* Assignee
+* Title
+* Description
+* Due date
+* Priority
+
+### Project page
+
+Provide the ability to create a Todo directly from a Project.
+
+When created from inside a Project:
+
+* Automatically populate the Project.
+* Allow assignment to a SiteTech user.
+* Allow due date.
+* Allow priority.
+* Allow description.
+
+The architecture should later allow other modules to use the same Todo creation component.
+
+Build the Todo form as a reusable component.
+
+---
+
+# 4. PROJECT TODO LIST
+
+Add a **Todos / Action Items** section or tab to each Project.
+
+Show project todos with:
+
+* Status
+* Title
+* Assigned user
+* Due date
+* Priority
+* Created by
+* Related record/source where applicable
+
+Default sorting:
+
+1. Overdue
+2. Due today
+3. Upcoming
+4. No due date
+5. Completed
+
+Completed items should not clutter the main list.
+
+Provide an easy control for:
+
+* Open
+* In Progress
+* Completed
+* All
+
+Allow filtering by:
+
+* Assigned user
+* Status
+* Priority
+* Due date
+
+---
+
+# 5. QUICK COMPLETE
+
+Users should be able to mark a Todo complete quickly without opening a full edit screen.
+
+When completed:
+
+Store:
+
+* Completed date/time
+* Completed by user
+
+Do not delete completed Todos.
+
+Completed Todos are part of the project's historical record.
+
+---
+
+# 6. TODO EDITING & PERMISSIONS
+
+Users should be able to:
+
+* Edit Todos they created, subject to existing application permissions.
+* Update status of Todos assigned to them.
+* Complete their assigned Todos.
+* Reassign Todos if their permissions allow it.
+* Modify due dates if allowed.
+
+Administrators should have full access.
+
+Use the application's existing role/permission architecture.
+
+Do not create a second independent permission system if one already exists.
+
+Ensure all server/API actions validate permissions. Do not rely only on hiding UI controls.
+
+---
+
+# 7. MY WORK DASHBOARD
+
+Create a centralized page called:
+
+# My Work
+
+This should become the primary place where a SiteTech employee sees everything currently assigned to them.
+
+It should only show work assigned to the currently logged-in user unless the user deliberately changes filters and has permission to view others.
+
+At the top show summary cards:
+
+* Overdue
+* Due Today
+* Upcoming
+* Open Total
+
+Example:
+
+Overdue: 3
+Due Today: 4
+Upcoming: 11
+Open: 18
+
+Clicking a summary card should filter the list accordingly.
+
+---
+
+# 8. MY WORK LIST
+
+The main My Work page should group or clearly identify:
+
+## Overdue
+
+Any incomplete Todo with a due date before today.
+
+## Due Today
+
+Incomplete Todos due today.
+
+## Upcoming
+
+Incomplete Todos due in the future.
+
+## No Due Date
+
+Incomplete Todos without a due date.
+
+Optionally allow completed items to be viewed through a filter, but do not show completed Todos in the default active list.
+
+Each item should clearly display:
+
+* Todo title
+* Project name
+* Due date
+* Priority
+* Status
+* Source / related record if applicable
+
+Clicking the Project should open the Project.
+
+Clicking the Todo should open/edit the Todo.
+
+Eventually clicking the source should open the related RFP, Change Order, Submittal, etc., so build this linking architecture accordingly.
+
+---
+
+# 9. MY WORK FILTERING
+
+Provide filters for:
+
+* Status
+* Project
+* Priority
+* Due date
+* Assigned user if user has permission to view others
+
+Provide useful quick filters such as:
+
+* Overdue
+* Today
+* This Week
+* Next 7 Days
+* All Open
+
+Avoid making the screen overly complicated.
+
+The default should immediately answer:
+
+> "What do I need to work on?"
+
+---
+
+# 10. NAVIGATION
+
+Add **My Work** to the main application navigation in a logical prominent location.
+
+If there is already a Dashboard, determine whether:
+
+* My Work should be its own navigation item, or
+* The user's active Todo summary should also appear on the main Dashboard.
+
+Do not unnecessarily redesign the full application navigation.
+
+---
+
+# 11. PROJECT STATUS WORKFLOW AUTOMATION
+
+Create a new administration/settings area for:
+
+# Workflow Rules
+
+For this first implementation, workflow rules will be triggered primarily by **Project Status changes**.
+
+Example:
+
+When:
+
+Project Status changes to "Pricing"
+
+Then:
+
+* Assign responsible user
+* Create Todo "Complete project pricing"
+* Due in 5 days
+* Send notification
+* Send email
+
+Do NOT hard-code this specific example. Administrators must configure the rules.
+
+---
+
+# 12. WORKFLOW RULE DATA MODEL
+
+Each workflow rule should support:
+
+* Rule name
+* Active / inactive
+* Trigger type
+* Project status triggering the rule
+* Assigned user
+* Whether to create a Todo
+* Todo title
+* Todo description
+* Todo priority
+* Todo due-date offset
+* Whether to send an in-app notification
+* Whether to send an email notification
+* Created date
+* Created by
+* Last updated date
+
+For example:
+
+Rule Name:
+Pricing Assignment
+
+Trigger:
+Project Status = Pricing
+
+Assigned User:
+John
+
+Create Todo:
+Yes
+
+Todo:
+Complete project pricing
+
+Due:
+5 days after status change
+
+Email:
+Yes
+
+In-app notification:
+Yes
+
+---
+
+# 13. GLOBAL PROJECT STATUS RESPONSIBILITY
+
+An administrator should be able to configure a default responsible user for each Project Status.
+
+Example:
+
+RFP Received → User A
+Pricing → User B
+Proposal Ready → User C
+Awarded → User D
+
+When a Project enters that status, the configured workflow should run.
+
+However, design this using workflow rules rather than permanently hard-coding responsibility into Project Status itself if the workflow architecture provides greater flexibility.
+
+The admin interface should make this simple enough that a nontechnical SiteTech administrator can configure it.
+
+---
+
+# 14. WORKFLOW DUE DATE OFFSETS
+
+Workflow-generated Todos should allow the administrator to specify:
+
+* Due immediately
+* Due in X calendar days
+* No due date
+
+Build the data model so support for **business days** can be added later, but business-day calculation is not required in this version unless it can be implemented cleanly.
+
+---
+
+# 15. PREVENT DUPLICATE AUTOMATION
+
+This is important.
+
+Changing a Project Status should not accidentally create duplicate automated Todos because:
+
+* the page was refreshed,
+* an API request retried,
+* a user saved the same status again,
+* or an event handler fired twice.
+
+Workflow execution must be idempotent where appropriate.
+
+Record each workflow execution.
+
+For example maintain:
+
+* Workflow Rule ID
+* Project ID
+* Trigger event
+* Status transition
+* Execution date/time
+* Generated Todo ID
+
+This provides both duplicate protection and an audit trail.
+
+---
+
+# 16. STATUS TRANSITIONS
+
+A workflow should trigger when a Project actually **changes from one status to another**.
+
+Do not trigger simply because the Project is saved while already having that status.
+
+Example:
+
+Pricing → Proposal Ready
+
+should trigger Proposal Ready workflows.
+
+Editing the Project address while status remains Proposal Ready should NOT trigger the workflow again.
+
+---
+
+# 17. STATUS CHANGE HISTORY
+
+Track Project Status history.
+
+For every status change record:
+
+* Project
+* Previous status
+* New status
+* User who changed it
+* Date/time
+* Workflow rules triggered
+
+This history should be available for future reporting even if we do not expose a detailed reporting interface yet.
+
+---
+
+# 18. NOTIFICATION SYSTEM
+
+Create an in-app Notification system if an appropriate reusable notification framework does not already exist.
+
+Notifications should support:
+
+* User
+* Title
+* Message
+* Related Project
+* Related Todo
+* Related record/entity
+* Created date/time
+* Read/unread
+* Read date/time
+
+Examples:
+
+"100 South Main Street has been moved to Pricing."
+
+"You were assigned: Complete project pricing."
+
+"Todo due today: Submit proposal."
+
+---
+
+# 19. NOTIFICATION CENTER
+
+Add a notification bell or equivalent indicator in the main application header if consistent with the existing design.
+
+Show:
+
+* unread count
+* recent notifications
+* mark as read
+* mark all as read
+
+Clicking a notification should take the user to the relevant Project, Todo, or related record whenever possible.
+
+Do not create intrusive popups for routine notifications.
+
+---
+
+# 20. EMAIL NOTIFICATIONS
+
+Use the application's existing email infrastructure if available.
+
+Do not create a new email provider if the application already has one configured.
+
+Send email for workflow events only when the workflow rule specifies email notification.
+
+Email should include:
+
+* Project name
+* What happened
+* Todo title if applicable
+* Due date if applicable
+* Assigned user
+* Clear link back into SiteTech if the app already supports reliable internal URLs
+
+Keep emails simple and professional.
+
+Do not send duplicate emails if the workflow event is executed only once.
+
+---
+
+# 21. TODO ASSIGNMENT NOTIFICATIONS
+
+When someone manually assigns a Todo to another user, create an in-app notification.
+
+Do not send an email for every manual Todo assignment by default unless we already have a user notification-preference system.
+
+Architecture should allow email preferences to be added later.
+
+Do not notify someone unnecessarily when they assign a Todo to themselves.
+
+---
+
+# 22. DUE DATE NOTIFICATIONS
+
+For this phase, the My Work dashboard must clearly identify overdue and due-today Todos.
+
+Build the notification architecture so scheduled reminders can later support things such as:
+
+* Todo due tomorrow
+* Todo due today
+* Todo overdue
+
+Do not build an unnecessarily complicated scheduler if this infrastructure does not already exist.
+
+If scheduled reminders can be implemented cleanly with the existing architecture, add:
+
+* Due today in-app notification once per Todo
+* Overdue notification once when the Todo first becomes overdue
+
+Make sure repeated background jobs do not generate duplicate notifications.
+
+---
+
+# 23. ACTIVITY / AUDIT LOG
+
+Create or extend a reusable activity log system.
+
+Important actions should be recorded, including:
+
+* Todo created
+* Todo assigned
+* Todo reassigned
+* Todo due date changed
+* Todo status changed
+* Todo completed
+* Todo cancelled
+* Project status changed
+* Workflow executed
+* Automated Todo created
+* Notification generated where useful
+
+Each activity entry should contain:
+
+* Timestamp
+* User responsible for action
+* Action type
+* Project
+* Related entity
+* Human-readable description
+* Metadata needed for auditing
+
+Automated actions should identify the actor as something similar to:
+
+"System"
+
+rather than pretending a user performed the action.
+
+---
+
+# 24. PROJECT ACTIVITY
+
+If the existing Project page already contains activity/history functionality, integrate with it.
+
+Otherwise add a basic **Activity** view to the Project where users can see important chronological actions.
+
+Example:
+
+Aug 10, 10:41 AM
+Nuchem changed project status from RFP Received to Pricing.
+
+Aug 10, 10:41 AM
+System assigned Adam a Todo: Complete project pricing.
+
+Aug 10, 10:41 AM
+System sent Adam a workflow notification.
+
+Do not display every insignificant database update.
+
+Focus on meaningful business activity.
+
+---
+
+# 25. GLOBAL ACTIVITY ARCHITECTURE
+
+Do not make the Activity Log Project-only.
+
+Build it as reusable infrastructure capable of eventually recording activity on:
+
+* RFPs
+* Estimates
+* Proposals
+* Change Orders
+* T&M
+* Submittals
+* RFIs
+* Documents
+* Tasks
+* Other future modules
+
+Again, do not create those future modules now.
+
+Only build reusable architecture.
+
+---
+
+# 26. DATABASE DESIGN
+
+Before implementing, review the existing database schema and determine the best structure.
+
+Likely new concepts/tables may include:
+
+* todos
+* workflow_rules
+* workflow_executions
+* notifications
+* activity_logs
+* project_status_history
+
+Names should follow the application's existing conventions.
+
+Use foreign keys where appropriate.
+
+Use timestamps consistently.
+
+Add indexes for commonly queried fields such as:
+
+Todos:
+
+* assigned user
+* project
+* status
+* due date
+
+Notifications:
+
+* user
+* read/unread
+* created date
+
+Activity:
+
+* project
+* entity type/entity ID
+* created date
+
+Workflow:
+
+* active
+* trigger type
+* trigger status
+
+Do not blindly create these exact table names if equivalent infrastructure already exists.
+
+First inspect the current schema.
+
+---
+
+# 27. DATA INTEGRITY
+
+Important requirements:
+
+* Deleting a Project should not cause invalid Todo records.
+* Deleting/deactivating a User should not destroy historical activity.
+* Completed Todo history must remain available.
+* Workflow execution history must remain available.
+* Activity records should not disappear merely because a Todo is completed.
+* Avoid cascade deletes that would destroy important project history.
+
+Follow the application's current archival/deletion strategy where possible.
+
+---
+
+# 28. USER DEACTIVATION
+
+If an assigned user becomes inactive:
+
+* Existing Todos must remain visible historically.
+* Administrators must be able to reassign open Todos.
+* Workflow rules assigned to inactive users should display a clear warning.
+
+Do not silently assign work to an inactive user.
+
+---
+
+# 29. UI / UX REQUIREMENTS
+
+The interface should be:
+
+* Clean
+* Fast
+* Mobile friendly
+* Touch friendly
+* Easy for field employees
+* Easy for office employees
+
+Use badges carefully for:
+
+* Priority
+* Status
+* Overdue
+
+Avoid excessive colors.
+
+Overdue items should be clearly recognizable.
+
+Forms should not require excessive clicks.
+
+On mobile:
+
+* No horizontal scrolling
+* Large touch targets
+* Important actions easy to reach
+* Todo title and due date should be visible without opening the record
+
+---
+
+# 30. PERFORMANCE
+
+Queries must be efficient.
+
+Do not load all application Todos and filter them only in the browser.
+
+My Work should retrieve only relevant records from the server/database.
+
+Use pagination or sensible result limiting if lists become large.
+
+Avoid unnecessary repeated requests.
+
+Ensure dashboard counts and Todo lists remain responsive as thousands of Todos accumulate.
+
+---
+
+# 31. SECURITY
+
+All Todo, workflow, notification, and activity APIs must require authentication.
+
+Apply server-side authorization.
+
+A user should not gain access to a Project simply because they know a Todo ID.
+
+Use existing Project access rules where applicable.
+
+Sanitize user-entered text.
+
+Validate all IDs and relationships server-side.
+
+---
+
+# 32. FUTURE-PROOFING — IMPORTANT
+
+This system will later support workflows such as:
+
+### RFP
+
+RFP Received
+→ Assign estimator
+→ Create Todo
+→ Send notification
+
+### Proposal
+
+Proposal Sent
+→ Create follow-up Todo due in 5 days
+
+### Submittal
+
+Revise & Resubmit
+→ Assign Project Manager
+→ Create Todo due in 3 days
+
+### Change Order
+
+Approved
+→ Notify Project Manager
+→ Notify accounting
+→ Create billing Todo
+
+DO NOT BUILD THESE WORKFLOWS NOW.
+
+Only make sure the architecture created in this phase can support them later without major redesign.
+
+---
+
+# 33. DO NOT BUILD YET
+
+Do not build the following in this phase:
+
+* RFP pipeline
+* Takeoff
+* Estimating
+* Proposal generator
+* Customer proposal portal
+* Electronic contract acceptance
+* T&M Tickets
+* Change Orders
+* Submittals
+* RFIs
+* Accounting
+* Job costing
+
+Those will be separate phases.
+
+This phase is only the shared workflow/task infrastructure they will eventually use.
+
+---
+
+# 34. TESTING REQUIREMENTS
+
+Before considering the feature complete, test at minimum:
+
+### Manual Todo
+
+1. User creates Todo.
+2. Assigns to another user.
+3. Assignee sees it in My Work.
+4. Todo appears on Project.
+5. Assignee receives notification.
+6. Assignee completes Todo.
+7. Todo disappears from active My Work.
+8. Todo remains visible in completed history.
+9. Activity log records the changes.
+
+### Workflow Todo
+
+1. Admin creates workflow for a Project Status.
+2. Project changes to that status.
+3. Workflow executes exactly once.
+4. Correct user is assigned.
+5. Correct Todo is created.
+6. Due date calculates correctly.
+7. Notification is created.
+8. Email is sent if enabled.
+9. Project status history is recorded.
+10. Workflow execution is recorded.
+
+### Duplicate Prevention
+
+1. Save Project without changing status.
+2. No additional Todo should be created.
+3. Refresh page.
+4. No duplicate.
+5. Retry request.
+6. No duplicate workflow execution where the triggering event is the same.
+
+### Mobile
+
+Test:
+
+* My Work
+* Add Todo
+* Edit Todo
+* Project Todo list
+* Notifications
+* Workflow settings
+
+at common phone widths.
+
+There must be no horizontal scrolling.
+
+---
+
+# 35. ADMIN WORKFLOW SETTINGS UI
+
+Create a simple administration screen:
+
+Settings → Workflow Rules
+
+Show a list/table containing:
+
+* Rule Name
+* Trigger
+* Assigned User
+* Todo
+* Due
+* Email
+* Active
+* Edit
+
+Provide:
+
+* New Workflow Rule
+
+The creation form should be understandable without technical knowledge.
+
+For Project Status workflow:
+
+### When this happens
+
+Project status changes to:
+[Status dropdown]
+
+### Assign responsibility
+
+Assigned User:
+[User dropdown]
+
+### Action
+
+[ ] Create Todo
+
+Todo Title:
+[Text]
+
+Description:
+[Text]
+
+Priority:
+[Dropdown]
+
+Due:
+[Immediately / X days / No due date]
+
+### Notify
+
+[ ] In-App Notification
+[ ] Email Notification
+
+### Rule
+
+[ ] Active
+
+Save Rule
+
+---
+
+# 36. MY WORK UI EXAMPLE
+
+Desktop concept:
+
+MY WORK
+
+[ 3 Overdue ] [ 4 Due Today ] [ 11 Upcoming ] [ 18 Open ]
+
+---
+
+OVERDUE
+
+100 South Main Street
+Complete project pricing
+Assigned to: Adam
+Due: Aug 8
+HIGH
+
+---
+
+DUE TODAY
+
+1405 South Street
+Review revised utility plan
+Due: Today
+NORMAL
+
+---
+
+UPCOMING
+
+Main Street Sewer
+Submit utility information
+Due: Aug 14
+
+---
+
+On mobile, convert this naturally into stacked cards.
+
+Do not force a desktop table onto the mobile screen.
+
+---
+
+# 37. PROJECT TODO UI EXAMPLE
+
+Inside a Project:
+
+Todos
+
+[ + Add Todo ]
+
+[ Open ] [ Completed ] [ All ]
+
+---
+
+Complete project pricing
+Adam
+Due Aug 12
+HIGH
+[Complete]
+
+Review revised civil plans
+Nuchem
+Due Aug 15
+NORMAL
+------
+
+Use the existing SiteTech visual language.
+
+---
+
+# 38. IMPLEMENTATION APPROACH
+
+Before coding:
+
+1. Inspect existing schema.
+2. Inspect current User model.
+3. Inspect current Project model.
+4. Inspect current Project Status implementation.
+5. Inspect authentication and permissions.
+6. Inspect existing email infrastructure.
+7. Inspect any existing notification/activity functionality.
+8. Inspect routing/navigation.
+9. Inspect existing mobile responsive components.
+
+Then determine what existing infrastructure can be reused.
+
+Do not create parallel systems unnecessarily.
+
+---
+
+# 39. DEVELOPMENT SEQUENCE
+
+Implement this phase in the following order:
+
+### Step 1
+
+Database architecture and migrations.
+
+### Step 2
+
+Core Todo backend/API/service layer.
+
+### Step 3
+
+Manual Todo creation/editing/completion.
+
+### Step 4
+
+Project Todo interface.
+
+### Step 5
+
+My Work dashboard.
+
+### Step 6
+
+Activity logging.
+
+### Step 7
+
+Notification system.
+
+### Step 8
+
+Workflow-rule administration.
+
+### Step 9
+
+Project-status workflow execution.
+
+### Step 10
+
+Email integration.
+
+### Step 11
+
+Mobile/responsive refinement.
+
+### Step 12
+
+Testing and regression testing.
+
+Do not try to build the entire feature as one giant component.
+
+Use reusable services/components.
+
+---
+
+# 40. COMPLETION CRITERIA
+
+This phase should not be considered complete until:
+
+* Users can manually assign Todos.
+* Todos can have projects, due dates, priorities, and statuses.
+* Users have a My Work dashboard.
+* Overdue and due-today work is obvious.
+* Project pages show their Todos.
+* Todos can be completed without deleting history.
+* Admins can create Project Status workflow rules.
+* Changing a Project Status can automatically assign work.
+* Workflow Todos do not duplicate accidentally.
+* Users receive in-app notifications.
+* Workflow emails work when enabled.
+* Status transitions are historically recorded.
+* Important actions appear in an audit/activity log.
+* Permissions are enforced server-side.
+* Mobile UI works cleanly.
+* Existing SiteTech features continue functioning.
+
+---
+
+# FINAL INSTRUCTION
+
+Do not begin by making broad visual changes.
+
+Start by inspecting the existing SiteTech application and identifying how this feature should integrate into the existing architecture.
+
+Preserve current functionality.
+
+Where an existing feature or database concept overlaps these requirements, extend it instead of creating a duplicate.
+
+If implementation reveals an architectural conflict with the existing application, choose the approach that maintains one clean source of truth and document the decision in the code/comments as appropriate.
+
+The goal of this phase is not merely to add a Todo page.
+
+The goal is to create the reusable **workflow and action-management foundation for the future SiteTech construction-management platform**.

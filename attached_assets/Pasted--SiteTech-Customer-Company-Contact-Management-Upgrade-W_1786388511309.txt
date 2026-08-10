@@ -1,0 +1,1207 @@
+# SiteTech — Customer / Company & Contact Management Upgrade
+
+We already have an existing **Customers** module in SiteTech.
+
+Current functionality includes:
+
+* Customer list
+* Create Customer form
+* Customer detail page
+* Customer contact information
+* Customer company name
+* Customer address
+* Customer notes
+* Projects linked to customers
+* Communications linked to customers
+* Existing customer search
+* Existing customer deletion
+* Existing Project → Customer relationships
+
+We now need to upgrade this architecture so that a **Customer represents a company/organization**, and each Customer can have **multiple individual Contacts**.
+
+This work must preserve all existing customer, project, and communication data.
+
+---
+
+# PRIMARY GOAL
+
+Change the customer architecture from essentially:
+
+Customer = Contact + Company
+
+to:
+
+Customer / Company
+→ Many Contacts
+→ Many Projects
+→ Many Communications
+→ Future Opportunities / RFPs
+→ Future Proposals / Contracts
+
+Do not create a new parallel customer system.
+
+Extend and migrate the existing Customer system.
+
+---
+
+# 1. EXISTING APPLICATION REVIEW
+
+Before making changes, inspect:
+
+* Existing Customer database schema
+* Existing Customer APIs/services
+* Existing Project → Customer relationship
+* Existing Communications → Customer relationship
+* Existing customer detail page
+* Existing customer creation form
+* Existing customer search
+* Existing permissions
+* Existing activity/audit logging
+* Existing archive/delete patterns
+* Existing reusable form/modal components
+
+Do not begin by rebuilding the customer UI from scratch.
+
+Preserve the current SiteTech design language.
+
+---
+
+# 2. CUSTOMER NOW REPRESENTS A COMPANY / ORGANIZATION
+
+The primary Customer record should represent the business or organization.
+
+Examples:
+
+ABC Construction
+
+XYZ Development
+
+Smith Engineering
+
+NJ American Water
+
+Each Customer should support at minimum:
+
+* Unique ID
+* Company name
+* Main company phone
+* General email
+* Website
+* Address line 1
+* Address line 2
+* City
+* State
+* ZIP
+* Customer type
+* Status
+* Notes
+* Created date/time
+* Updated date/time
+* Created by where already supported
+* Archived status
+
+The existing company/customer information should be migrated into this structure where applicable.
+
+---
+
+# 3. CUSTOMER TYPE
+
+Add a Customer Type field.
+
+Initial options:
+
+* General Contractor
+* Developer
+* Owner
+* Construction Manager
+* Engineer
+* Architect
+* Municipality / Public Agency
+* Property Manager
+* Vendor
+* Other
+
+For now, one primary type is sufficient.
+
+Build the database so this could later become multiple tags/types if needed, but do not over-engineer this now.
+
+---
+
+# 4. CUSTOMER STATUS
+
+Add or preserve a Customer Status field.
+
+Use:
+
+* Active
+* Inactive
+* Archived
+
+Default new customers to Active.
+
+Archived customers should not appear in the normal customer list unless the user intentionally includes archived customers.
+
+---
+
+# 5. MULTIPLE CONTACTS
+
+Create a new Contacts entity/table.
+
+Each Customer may have unlimited Contacts.
+
+Each Contact should contain:
+
+* Unique ID
+* Customer ID
+* First name
+* Last name
+* Job title
+* Email
+* Office phone
+* Mobile phone
+* Extension
+* Primary contact flag
+* Active / inactive status
+* Notes
+* Created date/time
+* Updated date/time
+
+Do not require every field.
+
+At minimum, a Contact should require a name.
+
+---
+
+# 6. CONTACT ROLES
+
+Add a separate Contact Role field.
+
+This is different from Job Title.
+
+Example:
+
+Job Title:
+Senior Project Manager
+
+Contact Role:
+Project Management
+
+Initial role options:
+
+* Estimating
+* Project Management
+* Purchasing
+* Accounting / AP
+* Executive / Owner
+* Contract Signer
+* Superintendent
+* Engineering
+* Other
+
+Prefer allowing multiple roles per contact if this can be implemented cleanly.
+
+Example:
+
+John Smith
+
+Job Title:
+Vice President
+
+Roles:
+
+* Estimating
+* Contract Signer
+
+If multi-role support adds substantial complexity, a single role may be used initially, but architecture should not make future multi-role support difficult.
+
+---
+
+# 7. PRIMARY CONTACT
+
+Allow one Contact under a Customer to be marked:
+
+Primary Contact
+
+Rules:
+
+* A Customer does not have to have a Primary Contact.
+* There should generally be no more than one Primary Contact.
+* If a new Contact is marked Primary, remove Primary from the previous Contact.
+* Do not delete the previous Contact.
+
+Customer cards and overview screens may display the Primary Contact where useful.
+
+---
+
+# 8. CONTACT ACTIVE / INACTIVE
+
+Contacts should generally not be permanently deleted once they have historical relationships.
+
+If someone leaves a company:
+
+John Smith
+Inactive
+
+Historical records should remain intact.
+
+Administrators should be able to:
+
+* Edit Contact
+* Mark Contact inactive
+* Reactivate Contact
+
+Hard delete should only be allowed when appropriate and when it will not destroy meaningful history.
+
+---
+
+# 9. EDIT CUSTOMER
+
+Add a clear:
+
+Edit Customer
+
+button to the Customer detail page.
+
+Users with permission should be able to edit:
+
+* Company name
+* Main phone
+* General email
+* Website
+* Customer type
+* Address
+* Status
+* Notes
+
+Do not require deleting/recreating a Customer just to fix information.
+
+---
+
+# 10. EDIT CONTACT
+
+Each Contact should have:
+
+* Edit
+* Deactivate / Reactivate
+* Delete only where appropriate
+
+Editing a Contact should not affect unrelated historical records.
+
+---
+
+# 11. CUSTOMER CREATION FLOW
+
+Update the New Customer flow.
+
+The existing form currently asks for things such as:
+
+* Contact Name
+* Company
+* Email
+* Phone
+* Address
+
+Change this so creation is logically divided into:
+
+## Company Information
+
+* Company Name
+* Main Phone
+* General Email
+* Website
+* Customer Type
+* Address
+* City
+* State
+* ZIP
+* Notes
+
+## Primary Contact
+
+Optionally allow adding the first Contact during customer creation:
+
+* First Name
+* Last Name
+* Job Title
+* Role
+* Email
+* Office Phone
+* Mobile Phone
+* Extension
+
+The Contact section may be optional.
+
+If a Contact is created during Customer creation, default:
+
+Primary Contact = Yes
+
+unless the user chooses otherwise.
+
+---
+
+# 12. CUSTOMER DETAIL PAGE
+
+Update the Customer detail page to better represent a Company.
+
+Recommended structure:
+
+CUSTOMER NAME
+
+Customer Type
+Status
+
+[ Edit Customer ]
+
+## Company Information
+
+* Main phone
+* General email
+* Website
+* Address
+
+Then provide tabs such as:
+
+* Contacts
+* Projects
+* Communications
+* Activity
+
+Future modules will eventually add:
+
+* Opportunities
+
+Do not build Opportunities now.
+
+---
+
+# 13. CONTACTS TAB
+
+Add a Contacts tab.
+
+Display:
+
+Contacts (3)
+
+[ + Add Contact ]
+
+Each Contact card or row should show:
+
+* Name
+* Job title
+* Role
+* Primary indicator if applicable
+* Email
+* Mobile or preferred phone
+* Active/inactive status
+
+Example:
+
+John Smith
+Senior Estimator
+
+Estimating
+PRIMARY
+
+[john@abc.com](mailto:john@abc.com)
+555-123-4567
+
+Provide quick access to Edit Contact.
+
+Inactive Contacts should be visually distinguishable.
+
+Default view should show active Contacts.
+
+Allow:
+
+Show Inactive
+
+---
+
+# 14. PROJECTS TAB
+
+Preserve the existing Projects tab and existing Customer → Project relationships.
+
+Projects should continue to belong to the Customer/company.
+
+Do not change Projects so that they belong directly to an individual Contact.
+
+A Project may later have multiple Contacts associated with it separately.
+
+Do not implement Project Contacts unless needed to preserve existing data.
+
+---
+
+# 15. COMMUNICATIONS TAB
+
+Preserve and improve the current Communications functionality.
+
+Each Communication should continue to link to the Customer.
+
+Add optional relationships for:
+
+* Contact
+* Project
+
+Future architecture should allow:
+
+* Opportunity
+
+but do not build Opportunities now.
+
+Example Communication:
+
+Customer:
+ABC Construction
+
+Contact:
+John Smith
+
+Project:
+100 South Main Street
+
+Type:
+Phone Call
+
+Notes:
+Discussed revised excavation pricing.
+
+---
+
+# 16. COMMUNICATION CONTACT SELECTION
+
+When logging a Communication:
+
+Provide a Contact dropdown containing Contacts belonging to the selected Customer.
+
+Do not allow selecting a Contact from an unrelated Customer.
+
+Contact is optional because some communications may be general company communications.
+
+---
+
+# 17. COMMUNICATION PROJECT SELECTION
+
+Allow optionally associating a Communication with a Project.
+
+Only show Projects belonging to the selected Customer unless application architecture requires otherwise.
+
+If Communication is opened from inside a Project, automatically populate:
+
+* Customer
+* Project
+
+If opened from a Customer, automatically populate:
+
+* Customer
+
+---
+
+# 18. COMMUNICATION HISTORY
+
+Communications should remain accessible even if:
+
+* Contact becomes inactive
+* Project closes
+* Customer becomes archived
+
+Do not destroy communications when related records are deactivated.
+
+---
+
+# 19. SEARCH IMPROVEMENTS
+
+Upgrade Customer search.
+
+Searching should match:
+
+* Company name
+* Contact first name
+* Contact last name
+* Contact full name
+* Contact email
+* Contact phone
+* Company email
+* Company phone
+* Address
+
+Example:
+
+Searching:
+
+John Smith
+
+should return:
+
+ABC Construction
+
+because John Smith is a Contact for ABC Construction.
+
+The search result may display matching Contact information to explain why the Customer matched.
+
+---
+
+# 20. CUSTOMER LIST
+
+Preserve the current clean Customer card/grid design.
+
+Update cards so the main identity is the Company.
+
+Recommended card:
+
+ABC Construction
+
+General Contractor
+
+John Smith
+Primary Contact
+
+[john@abc.com](mailto:john@abc.com)
+555-123-4567
+
+If there is no Primary Contact, simply display the Company information.
+
+Avoid making cards overly dense.
+
+---
+
+# 21. CUSTOMER ARCHIVING
+
+Replace dangerous customer deletion behavior where appropriate.
+
+Add:
+
+Archive Customer
+
+If a Customer has historical records such as:
+
+* Projects
+* Communications
+* future Opportunities
+* future Proposals
+* future Contracts
+
+do not allow normal users to permanently delete it.
+
+Instead:
+
+Status = Archived
+
+Archived customers should:
+
+* Retain all history
+* Retain Projects
+* Retain Communications
+* Not appear in default active Customer list
+
+Provide filter:
+
+Active
+Inactive
+Archived
+All
+
+---
+
+# 22. HARD DELETE
+
+Hard delete should only be allowed for administrators and preferably only if:
+
+* Customer has no Projects
+* No Communications
+* No important related records
+* No historical dependencies
+
+If deletion would break historical relationships, prevent it and explain why.
+
+Example:
+
+"This customer cannot be deleted because it has 4 Projects and 7 Communications. Archive the customer instead."
+
+---
+
+# 23. DUPLICATE CUSTOMER WARNING
+
+Add lightweight duplicate detection during Customer creation.
+
+If the entered Company name is similar to an existing Customer, display a warning.
+
+Example:
+
+Possible existing customer:
+
+ABC Construction LLC
+
+[View Customer]
+
+Still allow creation if the user confirms.
+
+Do not automatically merge customers.
+
+---
+
+# 24. DUPLICATE CONTACT WARNING
+
+If adding a Contact whose email already exists under the same Customer, warn the user.
+
+Do not automatically merge Contacts.
+
+---
+
+# 25. CUSTOMER NOTES
+
+Keep a general Notes field on the Customer.
+
+Use it for persistent company-level information.
+
+Examples:
+
+Requires COI before mobilization.
+
+Send all invoices to [accounting@abc.com](mailto:accounting@abc.com).
+
+Do not use Customer Notes as an activity timeline.
+
+Ongoing events belong in:
+
+* Communications
+* Activity
+
+---
+
+# 26. CONTACT NOTES
+
+Allow optional Notes on individual Contacts.
+
+Examples:
+
+Prefers text messages.
+
+Handles sitework estimates only.
+
+Do not mix Contact Notes with Communications history.
+
+---
+
+# 27. ACTIVITY LOG
+
+Integrate with the existing SiteTech activity/audit system.
+
+Record meaningful events such as:
+
+* Customer created
+* Customer edited
+* Customer archived
+* Contact added
+* Contact edited
+* Contact deactivated
+* Contact reactivated
+* Primary Contact changed
+* Communication logged
+
+Use the existing Activity system.
+
+Do not create a second activity log.
+
+---
+
+# 28. PERMISSIONS
+
+Use the existing SiteTech authentication and permission system.
+
+Server-side authorization is required.
+
+Users should only be able to:
+
+* Create Customers
+* Edit Customers
+* Add Contacts
+* Edit Contacts
+* Archive Customers
+
+if their existing permissions allow it.
+
+Do not create a separate permission system specifically for Customers.
+
+---
+
+# 29. DATA MIGRATION — CRITICAL
+
+Existing SiteTech Customer records already contain data.
+
+Do not discard or duplicate this data.
+
+Before migrating:
+
+Inspect exactly how the existing Customer table stores:
+
+* Contact name
+* Company
+* Email
+* Phone
+* Address
+* Notes
+
+Determine how Projects currently reference Customers.
+
+Determine how Communications currently reference Customers.
+
+Preserve these relationships.
+
+---
+
+# 30. EXISTING CUSTOMER MIGRATION
+
+For each existing Customer:
+
+Use the existing Company field as the Company/Customer name where available.
+
+Create a Contact from the existing Contact Name where available.
+
+Migrate existing:
+
+* Contact name
+* Email
+* Phone
+
+into that Contact.
+
+Mark this migrated Contact:
+
+Primary Contact = Yes
+
+where appropriate.
+
+Example Existing Record:
+
+Contact Name:
+John Smith
+
+Company:
+ABC Construction
+
+Email:
+[john@abc.com](mailto:john@abc.com)
+
+Phone:
+555-1234
+
+Should become:
+
+CUSTOMER
+
+ABC Construction
+
+CONTACT
+
+John Smith
+[john@abc.com](mailto:john@abc.com)
+555-1234
+Primary = Yes
+
+Do not duplicate the Customer.
+
+---
+
+# 31. EXISTING RECORDS WITHOUT COMPANY NAME
+
+Some existing Customers may have only a Contact Name and no Company.
+
+Do not lose these records.
+
+Use a sensible migration approach.
+
+For example:
+
+Customer Name:
+John Smith
+
+Contact:
+John Smith
+
+Do not invent a fake company.
+
+Flag these records if useful so they can later be cleaned up manually.
+
+---
+
+# 32. EXISTING PROJECT LINKS
+
+This is critical.
+
+All existing Project → Customer links must continue working after migration.
+
+Do not:
+
+* recreate Projects
+* duplicate Projects
+* change Project IDs
+* orphan Projects
+
+Test every migrated Customer relationship.
+
+---
+
+# 33. EXISTING COMMUNICATION LINKS
+
+Existing Communications must remain attached to the correct Customer.
+
+Do not create duplicate Communications.
+
+If existing Communication records cannot automatically identify a Contact, leave Contact blank.
+
+Do not guess which Contact participated.
+
+---
+
+# 34. DATABASE RELATIONSHIPS
+
+Conceptually the architecture should resemble:
+
+CUSTOMERS
+
+* id
+* company_name
+* phone
+* email
+* website
+* address fields
+* customer_type
+* status
+* notes
+* timestamps
+
+CONTACTS
+
+* id
+* customer_id
+* first_name
+* last_name
+* job_title
+* role
+* email
+* office_phone
+* mobile_phone
+* extension
+* is_primary
+* is_active
+* notes
+* timestamps
+
+PROJECTS
+
+* existing customer relationship
+
+COMMUNICATIONS
+
+* customer_id
+* optional contact_id
+* optional project_id
+
+Do not blindly use these exact field names if the existing codebase uses different conventions.
+
+Follow the application's current naming style.
+
+---
+
+# 35. DATABASE INDEXES
+
+Add appropriate indexes for commonly searched fields.
+
+Examples:
+
+Customer:
+
+* company name
+* status
+
+Contact:
+
+* customer ID
+* first name
+* last name
+* email
+* phone
+* active status
+
+Communication:
+
+* customer ID
+* contact ID
+* project ID
+* date
+
+Ensure customer search remains responsive as the database grows.
+
+---
+
+# 36. FUTURE OPPORTUNITY ARCHITECTURE
+
+The next SiteTech feature will be an Opportunity / RFP / Bidding pipeline.
+
+Design this Customer architecture so a future Opportunity can link to:
+
+* One Customer/company
+* Multiple Contacts
+* Project address
+* Communications
+* Proposals
+* Contracts
+
+Future conceptual architecture:
+
+CUSTOMER
+→ CONTACTS
+→ OPPORTUNITIES
+→ PROPOSALS
+→ PROJECT
+
+Do NOT build Opportunity functionality in this phase.
+
+Only avoid design decisions that would prevent it.
+
+---
+
+# 37. FUTURE MULTIPLE PROJECT CONTACTS
+
+In the future, a Project may have selected Contacts from the Customer.
+
+Example:
+
+ABC Construction
+
+Project:
+100 South Main Street
+
+Project Contacts:
+
+John Smith — Estimator
+Mike Jones — Project Manager
+David Green — Superintendent
+
+Do not necessarily build this now.
+
+However, do not design Contacts in a way that prevents it.
+
+---
+
+# 38. MOBILE REQUIREMENTS
+
+Customer pages and Contact management must remain fully mobile friendly.
+
+Requirements:
+
+* No horizontal scrolling
+* Customer cards fit screen
+* Contacts appear as stacked cards on mobile
+* Add/Edit forms fit screen width
+* Buttons large enough for touch
+* Phone and email information easy to tap
+* Tabs remain usable on small screens
+
+Do not force wide desktop tables onto mobile.
+
+---
+
+# 39. USER EXPERIENCE
+
+Keep the existing SiteTech look and feel.
+
+Do not redesign the entire Customers module.
+
+The current UI style should remain recognizable.
+
+Focus on:
+
+* Better data architecture
+* Multiple Contacts
+* Editing
+* Better history
+* Better search
+* Archiving
+* Future RFP compatibility
+
+Avoid unnecessary visual complexity.
+
+---
+
+# 40. DEVELOPMENT SEQUENCE
+
+Implement in this order:
+
+1. Inspect existing Customer, Project, and Communication architecture.
+2. Create database migration plan.
+3. Add Contact data model.
+4. Migrate existing Customer contact data.
+5. Verify Project relationships.
+6. Verify Communication relationships.
+7. Add Customer editing.
+8. Add Contact management.
+9. Update Customer detail page.
+10. Update Customer creation flow.
+11. Improve Communications linking.
+12. Improve Customer search.
+13. Add archive/inactive functionality.
+14. Add duplicate warnings.
+15. Integrate activity logging.
+16. Complete mobile refinement.
+17. Regression test existing Projects and Customers.
+
+Do not attempt a destructive rewrite.
+
+---
+
+# 41. TESTING
+
+Before considering this complete, test the following scenarios.
+
+## Existing Customer Migration
+
+Take an existing customer with:
+
+* Contact Name
+* Company
+* Email
+* Phone
+* Project
+* Communication
+
+After migration confirm:
+
+* Same Customer exists
+* Company information remains
+* Existing person exists as a Contact
+* Existing Project remains linked
+* Existing Communication remains linked
+* Nothing is duplicated
+
+## Multiple Contacts
+
+Create:
+
+ABC Construction
+
+Add:
+
+John Smith — Estimator
+
+Mike Jones — Project Manager
+
+David Brown — Accounting
+
+Confirm all three display under the same Customer.
+
+## Primary Contact
+
+Mark John Primary.
+
+Then mark Mike Primary.
+
+Confirm John is automatically no longer Primary.
+
+## Editing
+
+Edit:
+
+* Customer company information
+* Contact information
+
+Refresh page.
+
+Confirm changes persist.
+
+## Inactive Contact
+
+Deactivate a Contact.
+
+Confirm:
+
+* Historical records remain
+* Contact does not disappear permanently
+* Contact can be viewed when including inactive Contacts
+* Contact can be reactivated
+
+## Customer Search
+
+Search by:
+
+* Company
+* Contact name
+* Contact email
+* Contact phone
+
+Confirm correct Customer appears.
+
+## Communication
+
+Log Communication with:
+
+* Customer
+* Contact
+* Project
+
+Confirm it appears correctly under Customer Communications.
+
+## Archive Customer
+
+Archive Customer with existing Project history.
+
+Confirm:
+
+* Customer disappears from Active list
+* Projects remain
+* Communications remain
+* Customer can still be found using Archived/All filter
+
+## Mobile
+
+Test:
+
+* Customer list
+* Customer detail
+* Contacts
+* Add Contact
+* Edit Customer
+* Edit Contact
+* Communications
+
+at common phone widths.
+
+No horizontal scrolling.
+
+---
+
+# COMPLETION CRITERIA
+
+This feature is complete when:
+
+* A Customer represents a Company/organization.
+* A Customer can have multiple Contacts.
+* Contacts support job titles and roles.
+* One Contact can be Primary.
+* Contacts can be edited and deactivated.
+* Customers can be edited.
+* Customers can be archived instead of destroying history.
+* Existing Projects remain connected correctly.
+* Existing Communications remain connected correctly.
+* Communications can optionally identify a Contact and Project.
+* Customer search includes Contacts.
+* Existing Customer data has been safely migrated.
+* Activity logging works.
+* Mobile UI remains clean.
+* Existing SiteTech functionality is not broken.
+
+---
+
+# FINAL INSTRUCTION
+
+This is an upgrade to an existing production data structure.
+
+Preserving existing data and relationships is more important than implementing the feature quickly.
+
+Before applying destructive database changes, inspect the existing schema and produce a safe migration strategy.
+
+Do not delete, duplicate, or recreate existing Projects or Communications.
+
+Extend the current Customer system rather than creating a parallel replacement.
+
+The purpose of this upgrade is to establish the correct Customer → Contact foundation for the upcoming SiteTech Opportunity, RFP, estimating, proposal, and contract systems.
