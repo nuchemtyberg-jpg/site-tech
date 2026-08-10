@@ -1,5 +1,6 @@
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
+import { startTodoReminderScheduler } from "./services/todoReminders";
 import { runDataMigrations } from "./dataMigrations";
 import { serveStatic } from "./static";
 import { createServer } from "http";
@@ -66,6 +67,9 @@ app.use((req, res, next) => {
   await runDataMigrations();
 
   await registerRoutes(httpServer, app);
+
+  // Daily due-today / overdue todo reminders (duplicate-safe)
+  startTodoReminderScheduler();
 
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
     const status = err.status || err.statusCode || 500;

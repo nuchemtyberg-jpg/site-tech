@@ -368,6 +368,8 @@ export interface IStorage {
   completeTodo(id: number, userId: string): Promise<Todo>;
   deleteTodo(id: number): Promise<void>;
   getMyWorkSummary(userId: string, today: string): Promise<MyWorkSummary>;
+  getTodosNeedingDueReminder(today: string): Promise<(Todo & { reminderType: "due_today" | "overdue" })[]>;
+  createReminderNotificationIfAbsent(notification: InsertNotification): Promise<Notification | undefined>;
 
   // Todo Updates (notes / progress timeline)
   getTodoUpdates(todoId: number, opts?: { limit?: number; offset?: number }): Promise<TodoUpdateWithAuthor[]>;
@@ -2117,6 +2119,43 @@ export class DatabaseStorage implements IStorage {
       noDueDate: Number(row?.noDueDate ?? 0),
       open: Number(row?.open ?? 0),
     };
+  }
+
+  // Due-date reminders: open todos due today (no prior 'due_today' notification)
+  // or overdue (no prior 'overdue' notification). Dedupe is per todo+type via
+  // NOT EXISTS against the notifications table, so repeated runs and restarts
+  // never create duplicates.
+  async getTodosNeedingDueReminder(today: string): Promise<(Todo & { reminderType: "due_today" | "overdue" })[]> {
+    const reminderType = sql<"due_today" | "overdue">`case when ${todos.dueDate} < ${today} then 'overdue' else 'due_today' end`;
+    const rows = await db
+      .select({ todo: todos, reminderType })
+      .from(todos)
+      .where(and(
+        isNull(todos.deletedAt),
+        inArray(todos.status, ["open", "in_progress"]),
+        isNotNull(todos.dueDate),
+        lte(todos.dueDate, today),
+        sql`not exists (
+          select 1 from ${notifications} n
+          where n.todo_id = ${todos.id}
+            and n.type = (case when ${todos.dueDate} < ${today} then 'overdue' else 'due_today' end)
+        )`,
+      ))
+      .orderBy(asc(todos.dueDate), asc(todos.id));
+    return rows.map(r => ({ ...r.todo, reminderType: r.reminderType }));
+  }
+
+  // Atomic reminder insert: the partial unique index uq_notifications_todo_reminder
+  // on (todo_id, type) for reminder types makes ON CONFLICT DO NOTHING the
+  // authoritative dedupe — concurrent runs and multiple instances cannot
+  // double-remind. Returns undefined when the reminder already existed.
+  async createReminderNotificationIfAbsent(notification: InsertNotification): Promise<Notification | undefined> {
+    const [result] = await db
+      .insert(notifications)
+      .values(notification)
+      .onConflictDoNothing()
+      .returning();
+    return result;
   }
 
   // Workflow Rules

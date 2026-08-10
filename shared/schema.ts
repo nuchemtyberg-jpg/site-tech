@@ -1136,6 +1136,11 @@ export const notifications = pgTable("notifications", {
   index("idx_notifications_user").on(table.userId),
   index("idx_notifications_user_read").on(table.userId, table.isRead),
   index("idx_notifications_created").on(table.createdAt),
+  // At most one due-date reminder per todo per reminder type — enforced in the
+  // database so concurrent runs / multiple instances cannot double-remind.
+  uniqueIndex("uq_notifications_todo_reminder")
+    .on(table.todoId, table.type)
+    .where(sql`${table.type} in ('due_today', 'overdue')`),
 ]);
 
 export const insertNotificationSchema = createInsertSchema(notifications).omit({ id: true, createdAt: true, readAt: true });
