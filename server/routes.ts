@@ -10,7 +10,9 @@ import { insertAuthorizedUserSchema, insertRfiSchema, insertTaskTitleSchema } fr
 import { isAdmin, isAuthorizedUser } from "./middleware/auth";
 import { sendInviteEmail } from "./services/email";
 import { handleProjectStatusChange } from "./services/workflowEngine";
+import { changeOpportunityStatus, OpportunityStatusError } from "./services/opportunityService";
 import { logActivity, actorFromUser } from "./services/activityLog";
+import { getOpportunityStatusLabel, OPPORTUNITY_STATUS_VALUES, labelFor, OPPORTUNITY_CONTACT_ROLES } from "@shared/opportunityStatus";
 import { insertWorkflowRuleSchema } from "@shared/schema";
 import { generateUploadSignature, deleteFromCloudinary } from "./services/cloudinary";
 import {
@@ -1025,6 +1027,328 @@ export async function registerRoutes(
   });
 
   // ============================================================
+  // Opportunities (Phase 4 — RFP / bidding foundation)
+  // ============================================================
+
+  const opportunityDisplay = (o: { opportunityNumber: string; name: string }) => `${o.opportunityNumber} (${o.name})`;
+
+  app.get(api.opportunities.list.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
+    const q = req.query;
+    const status = typeof q.status === "string" && q.status ? q.status : undefined;
+    if (status && !OPPORTUNITY_STATUS_VALUES.includes(status)) {
+      return res.status(400).json({ message: `Invalid status filter: ${status}` });
+    }
+    const list = await storage.getOpportunities({
+      status,
+      customerId: typeof q.customerId === "string" && q.customerId ? Number(q.customerId) : undefined,
+      responsibleUserId: typeof q.responsibleUserId === "string" && q.responsibleUserId ? q.responsibleUserId : undefined,
+      includeArchived: q.includeArchived === "true",
+      search: typeof q.search === "string" && q.search ? q.search : undefined,
+    });
+    res.json(list);
+  });
+
+  app.get(api.opportunities.get.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
+    const opp = await storage.getOpportunityWithDetails(Number(req.params.id));
+    if (!opp) return res.status(404).json({ message: "Opportunity not found" });
+    res.json(opp);
+  });
+
+  app.get(api.opportunities.listForCustomer.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
+    const customer = await storage.getCustomer(Number(req.params.customerId));
+    if (!customer) return res.status(404).json({ message: "Customer not found" });
+    const list = await storage.getOpportunitiesByCustomer(customer.id, req.query.includeArchived === "true");
+    res.json(list);
+  });
+
+  app.post(api.opportunities.create.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
+    try {
+      const input = api.opportunities.create.input.parse(req.body);
+      const user = await getCurrentUser(req);
+      if (!user) return res.status(401).json({ message: "User not found" });
+
+      const customer = await storage.getCustomer(input.customerId);
+      if (!customer) return res.status(400).json({ message: "Customer not found" });
+
+      if (input.responsibleUserId) {
+        const responsible = await storage.getUser(input.responsibleUserId);
+        if (!responsible || responsible.isAuthorized !== "approved") {
+          return res.status(400).json({ message: "Responsible user must be an approved, active user" });
+        }
+      }
+
+      const opportunity = await storage.createOpportunity({ ...input, createdByUserId: user.id });
+
+      const actor = actorFromUser(user);
+      await logActivity({
+        entityType: "opportunity", entityId: opportunity.id, action: "opportunity_created",
+        actor,
+        description: `${actor.name} created opportunity ${opportunityDisplay(opportunity)} for ${customer.name}.`,
+        metadata: { opportunityId: opportunity.id, customerId: customer.id, status: opportunity.status },
+      });
+
+      res.status(201).json(opportunity);
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0].message });
+      }
+      throw err;
+    }
+  });
+
+  app.put(api.opportunities.update.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
+    try {
+      const { confirmRemoveContacts, ...input } = api.opportunities.update.input.parse(req.body);
+      const existing = await storage.getOpportunity(Number(req.params.id));
+      if (!existing) return res.status(404).json({ message: "Opportunity not found" });
+      const user = await getCurrentUser(req);
+      if (!user) return res.status(401).json({ message: "User not found" });
+      const actor = actorFromUser(user);
+
+      if (input.responsibleUserId !== undefined && input.responsibleUserId !== null) {
+        const responsible = await storage.getUser(input.responsibleUserId);
+        if (!responsible || responsible.isAuthorized !== "approved") {
+          return res.status(400).json({ message: "Responsible user must be an approved, active user" });
+        }
+      }
+
+      // Customer change safety: contacts from the previous customer must never
+      // be silently retained. Require explicit confirmation, then remove them.
+      let removedContacts = 0;
+      const customerChanging = input.customerId !== undefined && input.customerId !== existing.customerId;
+      if (customerChanging) {
+        const newCustomer = await storage.getCustomer(input.customerId!);
+        if (!newCustomer) return res.status(400).json({ message: "Customer not found" });
+        const linkedContacts = await storage.getOpportunityContacts(existing.id);
+        if (linkedContacts.length > 0 && !confirmRemoveContacts) {
+          return res.status(409).json({
+            message: `This opportunity has ${linkedContacts.length} linked contact${linkedContacts.length === 1 ? "" : "s"} from the current customer. Changing the customer will remove ${linkedContacts.length === 1 ? "it" : "them"}. Confirm to proceed.`,
+          });
+        }
+        if (linkedContacts.length > 0) {
+          removedContacts = await storage.deleteOpportunityContactsForOpportunity(existing.id);
+        }
+      }
+
+      const opportunity = await storage.updateOpportunity(existing.id, input);
+
+      if (customerChanging) {
+        const newCustomer = await storage.getCustomer(opportunity.customerId);
+        await logActivity({
+          entityType: "opportunity", entityId: opportunity.id, action: "opportunity_customer_changed",
+          actor,
+          description: `${actor.name} changed the customer of ${opportunityDisplay(opportunity)} to ${newCustomer?.name ?? "Unknown"}${removedContacts ? ` and removed ${removedContacts} contact${removedContacts === 1 ? "" : "s"} from the previous customer` : ""}.`,
+          metadata: { opportunityId: opportunity.id, customerId: opportunity.customerId, previousCustomerId: existing.customerId, removedContacts },
+        });
+      }
+      if (input.responsibleUserId !== undefined && input.responsibleUserId !== existing.responsibleUserId) {
+        const responsible = input.responsibleUserId ? await storage.getUser(input.responsibleUserId) : null;
+        const responsibleName = responsible
+          ? ([responsible.firstName, responsible.lastName].filter(Boolean).join(" ").trim() || responsible.email || "Unknown user")
+          : null;
+        await logActivity({
+          entityType: "opportunity", entityId: opportunity.id, action: "opportunity_responsible_user_changed",
+          actor,
+          description: responsibleName
+            ? `${actor.name} assigned ${responsibleName} as responsible for ${opportunityDisplay(opportunity)}.`
+            : `${actor.name} removed the responsible user from ${opportunityDisplay(opportunity)}.`,
+          metadata: { opportunityId: opportunity.id, customerId: opportunity.customerId, responsibleUserId: input.responsibleUserId },
+        });
+      }
+      // General edit activity (skip when the only changes were logged above)
+      const editedFields = Object.keys(input).filter(k =>
+        (input as any)[k] !== undefined && k !== "customerId" && k !== "responsibleUserId");
+      if (editedFields.length > 0) {
+        await logActivity({
+          entityType: "opportunity", entityId: opportunity.id, action: "opportunity_updated",
+          actor,
+          description: `${actor.name} updated ${opportunityDisplay(opportunity)} (${editedFields.join(", ")}).`,
+          metadata: { opportunityId: opportunity.id, customerId: opportunity.customerId, fields: editedFields },
+        });
+      }
+
+      res.json(opportunity);
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0].message });
+      }
+      throw err;
+    }
+  });
+
+  // ALL status transitions go through the centralized service — no other path
+  // may change an opportunity's status.
+  app.post(api.opportunities.changeStatus.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
+    try {
+      const input = api.opportunities.changeStatus.input.parse(req.body);
+      const user = await getCurrentUser(req);
+      if (!user) return res.status(401).json({ message: "User not found" });
+      const { opportunity } = await changeOpportunityStatus({
+        opportunityId: Number(req.params.id),
+        input,
+        actor: actorFromUser(user),
+        today: typeof req.query.clientDate === "string" ? req.query.clientDate : undefined,
+      });
+      res.json(opportunity);
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0].message });
+      }
+      if (err instanceof OpportunityStatusError) {
+        return res.status(err.status).json({ message: err.message });
+      }
+      throw err;
+    }
+  });
+
+  app.post(api.opportunities.archive.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
+    try {
+      const { archived } = api.opportunities.archive.input.parse(req.body);
+      const existing = await storage.getOpportunity(Number(req.params.id));
+      if (!existing) return res.status(404).json({ message: "Opportunity not found" });
+      const user = await getCurrentUser(req);
+      if (!user) return res.status(401).json({ message: "User not found" });
+
+      if (existing.isArchived === archived) return res.json(existing); // idempotent
+
+      const opportunity = await storage.updateOpportunity(existing.id, { isArchived: archived });
+      const actor = actorFromUser(user);
+      await logActivity({
+        entityType: "opportunity", entityId: opportunity.id,
+        action: archived ? "opportunity_archived" : "opportunity_unarchived",
+        actor,
+        description: `${actor.name} ${archived ? "archived" : "unarchived"} ${opportunityDisplay(opportunity)}.`,
+        metadata: { opportunityId: opportunity.id, customerId: opportunity.customerId },
+      });
+      res.json(opportunity);
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0].message });
+      }
+      throw err;
+    }
+  });
+
+  app.get(api.opportunities.statusHistory.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
+    const opp = await storage.getOpportunity(Number(req.params.id));
+    if (!opp) return res.status(404).json({ message: "Opportunity not found" });
+    res.json(await storage.getOpportunityStatusHistory(opp.id));
+  });
+
+  app.get(api.opportunities.activity.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
+    const opp = await storage.getOpportunity(Number(req.params.id));
+    if (!opp) return res.status(404).json({ message: "Opportunity not found" });
+    res.json(await storage.getOpportunityActivity(opp.id));
+  });
+
+  // ---------- Opportunity Contacts ----------
+
+  app.get(api.opportunityContacts.list.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
+    const opp = await storage.getOpportunity(Number(req.params.id));
+    if (!opp) return res.status(404).json({ message: "Opportunity not found" });
+    res.json(await storage.getOpportunityContacts(opp.id));
+  });
+
+  app.post(api.opportunityContacts.create.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
+    try {
+      const input = api.opportunityContacts.create.input.parse(req.body);
+      const opp = await storage.getOpportunity(Number(req.params.id));
+      if (!opp) return res.status(404).json({ message: "Opportunity not found" });
+      const user = await getCurrentUser(req);
+      if (!user) return res.status(401).json({ message: "User not found" });
+
+      // Contact must belong to the opportunity's customer — enforced server-side
+      const contact = await storage.getContact(input.contactId);
+      if (!contact || contact.customerId !== opp.customerId) {
+        return res.status(400).json({ message: "Contact does not belong to this opportunity's customer" });
+      }
+      const existingLink = await storage.findOpportunityContact(opp.id, input.contactId);
+      if (existingLink) {
+        return res.status(400).json({ message: "This contact is already linked to the opportunity" });
+      }
+
+      const link = await storage.createOpportunityContact({ ...input, opportunityId: opp.id });
+      const actor = actorFromUser(user);
+      const contactName = [contact.firstName, contact.lastName].filter(Boolean).join(" ").trim();
+      await logActivity({
+        entityType: "opportunity", entityId: opp.id, action: "opportunity_contact_added",
+        actor,
+        description: `${actor.name} added ${contactName}${link.role ? ` as ${labelFor(OPPORTUNITY_CONTACT_ROLES, link.role)}` : ""}${link.isPrimary ? " (primary contact)" : ""} to ${opportunityDisplay(opp)}.`,
+        metadata: { opportunityId: opp.id, customerId: opp.customerId, contactId: contact.id, role: link.role, isPrimary: link.isPrimary },
+      });
+
+      res.status(201).json({
+        ...link,
+        firstName: contact.firstName, lastName: contact.lastName, jobTitle: contact.jobTitle,
+        email: contact.email, officePhone: contact.officePhone, mobilePhone: contact.mobilePhone,
+        customerId: contact.customerId,
+      });
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0].message });
+      }
+      throw err;
+    }
+  });
+
+  app.put(api.opportunityContacts.update.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
+    try {
+      const input = api.opportunityContacts.update.input.parse(req.body);
+      const existing = await storage.getOpportunityContact(Number(req.params.id));
+      if (!existing) return res.status(404).json({ message: "Opportunity contact not found" });
+      const user = await getCurrentUser(req);
+      if (!user) return res.status(401).json({ message: "User not found" });
+
+      const link = await storage.updateOpportunityContact(existing.id, input);
+      const opp = await storage.getOpportunity(link.opportunityId);
+      const contact = await storage.getContact(link.contactId);
+      if (opp && contact) {
+        const actor = actorFromUser(user);
+        const contactName = [contact.firstName, contact.lastName].filter(Boolean).join(" ").trim();
+        await logActivity({
+          entityType: "opportunity", entityId: opp.id, action: "opportunity_contact_updated",
+          actor,
+          description: `${actor.name} updated ${contactName} on ${opportunityDisplay(opp)}${link.role ? ` (role: ${labelFor(OPPORTUNITY_CONTACT_ROLES, link.role)})` : ""}${link.isPrimary ? " (primary contact)" : ""}.`,
+          metadata: { opportunityId: opp.id, customerId: opp.customerId, contactId: contact.id, role: link.role, isPrimary: link.isPrimary },
+        });
+      }
+      res.json({
+        ...link,
+        firstName: contact?.firstName ?? "", lastName: contact?.lastName ?? null, jobTitle: contact?.jobTitle ?? null,
+        email: contact?.email ?? null, officePhone: contact?.officePhone ?? null, mobilePhone: contact?.mobilePhone ?? null,
+        customerId: contact?.customerId ?? 0,
+      });
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0].message });
+      }
+      throw err;
+    }
+  });
+
+  app.delete(api.opportunityContacts.delete.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
+    const existing = await storage.getOpportunityContact(Number(req.params.id));
+    if (!existing) return res.status(404).json({ message: "Opportunity contact not found" });
+    const user = await getCurrentUser(req);
+    if (!user) return res.status(401).json({ message: "User not found" });
+
+    await storage.deleteOpportunityContact(existing.id);
+    const opp = await storage.getOpportunity(existing.opportunityId);
+    const contact = await storage.getContact(existing.contactId);
+    if (opp) {
+      const actor = actorFromUser(user);
+      const contactName = contact ? [contact.firstName, contact.lastName].filter(Boolean).join(" ").trim() : "a contact";
+      await logActivity({
+        entityType: "opportunity", entityId: opp.id, action: "opportunity_contact_removed",
+        actor,
+        description: `${actor.name} removed ${contactName} from ${opportunityDisplay(opp)}.`,
+        metadata: { opportunityId: opp.id, customerId: opp.customerId, contactId: existing.contactId },
+      });
+    }
+    res.status(204).send();
+  });
+
+  // ============================================================
   // Todos (centralized action items)
   // ============================================================
 
@@ -1100,13 +1424,27 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Assignee must be an approved, active user" });
       }
 
+      // Optional opportunity link (no project required). Validated server-side.
+      let opportunityLink: { id: number } | null = null;
+      if (input.relatedEntityType === "opportunity") {
+        if (!input.relatedEntityId) {
+          return res.status(400).json({ message: "relatedEntityId is required when linking a todo to an opportunity" });
+        }
+        if (input.projectId) {
+          return res.status(400).json({ message: "A todo cannot link to both a project and an opportunity" });
+        }
+        const opp = await storage.getOpportunity(input.relatedEntityId);
+        if (!opp) return res.status(400).json({ message: "Opportunity not found" });
+        opportunityLink = { id: opp.id };
+      }
+
       const todo = await storage.createTodo({
         ...input,
         description: input.description || null,
         dueDate: input.dueDate || null,
         projectId: input.projectId ?? null,
-        relatedEntityType: input.projectId ? "project" : null,
-        relatedEntityId: input.projectId ?? null,
+        relatedEntityType: opportunityLink ? "opportunity" : (input.projectId ? "project" : null),
+        relatedEntityId: opportunityLink ? opportunityLink.id : (input.projectId ?? null),
         createdByUserId: user.id,
         source: "manual",
       });
@@ -1124,6 +1462,7 @@ export async function registerRoutes(
         description: todo.assignedToUserId === user.id
           ? `${actor.name} created a todo: ${todo.title}.`
           : `${actor.name} assigned ${assigneeName} a todo: ${todo.title}.`,
+        metadata: opportunityLink ? { opportunityId: opportunityLink.id } : undefined,
       });
 
       // In-app notification for assignment to someone else (never for self-assignment)
@@ -1135,8 +1474,8 @@ export async function registerRoutes(
           message: `${actor.name} assigned you a todo${todo.dueDate ? `, due ${todo.dueDate}` : ""}.`,
           projectId: todo.projectId,
           todoId: todo.id,
-          relatedEntityType: todo.projectId ? "project" : null,
-          relatedEntityId: todo.projectId,
+          relatedEntityType: todo.relatedEntityType,
+          relatedEntityId: todo.relatedEntityId,
           isRead: false,
         });
       }
@@ -1469,13 +1808,28 @@ export async function registerRoutes(
       const existing = await storage.getWorkflowRule(Number(req.params.id));
       if (!existing) return res.status(404).json({ message: "Workflow rule not found" });
 
-      // Same business validation as create, applied to the merged result
+      // Full schema validation (incl. trigger-type/status compatibility and
+      // todo/due refinements) applied to the MERGED rule, so a partial update
+      // can never produce a rule whose status doesn't match its trigger type.
       const merged = { ...existing, ...input };
-      if (merged.createTodo && (!merged.todoTitle || !merged.todoTitle.trim())) {
-        return res.status(400).json({ message: "Todo title is required when creating a todo" });
-      }
-      if (merged.dueOffsetType === "days" && (merged.dueOffsetDays === null || merged.dueOffsetDays === undefined)) {
-        return res.status(400).json({ message: "Number of days is required" });
+      const validation = insertWorkflowRuleSchema.safeParse({
+        name: merged.name,
+        isActive: merged.isActive,
+        triggerType: merged.triggerType,
+        triggerStatus: merged.triggerStatus,
+        assignedToUserId: merged.assignedToUserId,
+        createTodo: merged.createTodo,
+        todoTitle: merged.todoTitle,
+        todoDescription: merged.todoDescription,
+        todoPriority: merged.todoPriority,
+        dueOffsetType: merged.dueOffsetType,
+        dueOffsetDays: merged.dueOffsetDays,
+        dueOffsetUnit: merged.dueOffsetUnit,
+        sendInAppNotification: merged.sendInAppNotification,
+        sendEmailNotification: merged.sendEmailNotification,
+      });
+      if (!validation.success) {
+        return res.status(400).json({ message: validation.error.errors[0].message });
       }
       if (input.assignedToUserId && input.assignedToUserId !== existing.assignedToUserId) {
         const assignee = await storage.getUser(input.assignedToUserId);
@@ -3335,6 +3689,13 @@ export async function registerRoutes(
           return res.status(400).json({ message: "Project does not belong to this customer" });
         }
       }
+      // Optional opportunity link must belong to this customer
+      if (input.opportunityId) {
+        const opportunity = await storage.getOpportunity(input.opportunityId);
+        if (!opportunity || opportunity.customerId !== customerId) {
+          return res.status(400).json({ message: "Opportunity does not belong to this customer" });
+        }
+      }
 
       const comm = await storage.createCommunication({
         ...input,
@@ -3344,7 +3705,7 @@ export async function registerRoutes(
       await logActivity({
         entityType: "communication", entityId: comm.id, action: "communication_logged",
         actor, description: `Communication logged${comm.subject ? `: "${comm.subject}"` : ` (${comm.type})`}`,
-        metadata: { customerId },
+        metadata: { customerId, ...(comm.opportunityId ? { opportunityId: comm.opportunityId } : {}) },
       });
       res.status(201).json(comm);
     } catch (err) {

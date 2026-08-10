@@ -4,10 +4,13 @@ import {
   insertCustomerSchema, insertDailyReportSchema, insertMaintenanceLogSchema, insertCommunicationSchema,
   insertPhotoAlbumSchema, insertReportTaskSchema, insertLaborEntrySchema, insertEquipmentEntrySchema, insertDeliverySchema,
   insertScheduleEntrySchema, insertTodoSchema, insertTodoUpdateSchema, insertWorkflowRuleSchema,
+  insertOpportunitySchema, insertOpportunityContactSchema, opportunityStatusChangeSchema,
   projects, tasks, equipment, allocations, customers, dailyReports, maintenanceLogs, communications, photoAlbums,
   reportTasks, laborEntries, equipmentEntries, deliveries, scheduleEntries, todos, workflowRules, notifications, activityLogs, projectStatusHistory,
+  opportunities, opportunityStatusHistory,
   type TodoWithDetails, type MyWorkSummary, type WorkflowRuleWithDetails,
-  type TodoUpdate, type TodoUpdateWithAuthor, type TodoUpdatesPage
+  type TodoUpdate, type TodoUpdateWithAuthor, type TodoUpdatesPage,
+  type OpportunityWithDetails, type OpportunityContactWithDetails
 } from './schema';
 
 export const errorSchemas = {
@@ -825,6 +828,133 @@ export const api = {
           role: z.string(),
           isAuthorized: z.string(),
         })),
+      },
+    },
+  },
+
+  // Opportunities (Phase 4 — RFP / bidding foundation)
+  opportunities: {
+    list: {
+      method: 'GET' as const,
+      path: '/api/opportunities',
+      // Query params: status, customerId, responsibleUserId, includeArchived ('true'), search
+      responses: {
+        200: z.array(z.custom<OpportunityWithDetails>()),
+      },
+    },
+    get: {
+      method: 'GET' as const,
+      path: '/api/opportunities/:id',
+      responses: {
+        200: z.custom<OpportunityWithDetails>(),
+        404: errorSchemas.notFound,
+      },
+    },
+    create: {
+      method: 'POST' as const,
+      path: '/api/opportunities',
+      input: insertOpportunitySchema,
+      responses: {
+        201: z.custom<typeof opportunities.$inferSelect>(),
+        400: errorSchemas.validation,
+      },
+    },
+    update: {
+      method: 'PUT' as const,
+      // Status is NOT accepted here — all status transitions go through changeStatus.
+      // Changing customerId requires confirmRemoveContacts=true when contacts exist.
+      path: '/api/opportunities/:id',
+      input: insertOpportunitySchema.omit({ status: true }).partial().extend({
+        confirmRemoveContacts: z.boolean().optional(),
+      }),
+      responses: {
+        200: z.custom<typeof opportunities.$inferSelect>(),
+        400: errorSchemas.validation,
+        404: errorSchemas.notFound,
+        409: errorSchemas.validation, // customer change needs confirmation
+      },
+    },
+    changeStatus: {
+      method: 'POST' as const,
+      path: '/api/opportunities/:id/status',
+      input: opportunityStatusChangeSchema,
+      responses: {
+        200: z.custom<typeof opportunities.$inferSelect>(),
+        400: errorSchemas.validation,
+        404: errorSchemas.notFound,
+      },
+    },
+    archive: {
+      method: 'POST' as const,
+      path: '/api/opportunities/:id/archive',
+      input: z.object({ archived: z.boolean() }),
+      responses: {
+        200: z.custom<typeof opportunities.$inferSelect>(),
+        404: errorSchemas.notFound,
+      },
+    },
+    statusHistory: {
+      method: 'GET' as const,
+      path: '/api/opportunities/:id/status-history',
+      responses: {
+        200: z.array(z.custom<typeof opportunityStatusHistory.$inferSelect>()),
+        404: errorSchemas.notFound,
+      },
+    },
+    activity: {
+      method: 'GET' as const,
+      path: '/api/opportunities/:id/activity',
+      responses: {
+        200: z.array(z.custom<typeof activityLogs.$inferSelect>()),
+        404: errorSchemas.notFound,
+      },
+    },
+    listForCustomer: {
+      method: 'GET' as const,
+      path: '/api/customers/:customerId/opportunities',
+      responses: {
+        200: z.array(z.custom<OpportunityWithDetails>()),
+        404: errorSchemas.notFound,
+      },
+    },
+  },
+
+  // Opportunity Contacts (opportunity-specific role + primary flag)
+  opportunityContacts: {
+    list: {
+      method: 'GET' as const,
+      path: '/api/opportunities/:id/contacts',
+      responses: {
+        200: z.array(z.custom<OpportunityContactWithDetails>()),
+        404: errorSchemas.notFound,
+      },
+    },
+    create: {
+      method: 'POST' as const,
+      path: '/api/opportunities/:id/contacts',
+      input: insertOpportunityContactSchema.omit({ opportunityId: true }),
+      responses: {
+        201: z.custom<OpportunityContactWithDetails>(),
+        400: errorSchemas.validation,
+        404: errorSchemas.notFound,
+      },
+    },
+    update: {
+      method: 'PUT' as const,
+      path: '/api/opportunity-contacts/:id',
+      input: insertOpportunityContactSchema.pick({ role: true, isPrimary: true }).partial(),
+      responses: {
+        200: z.custom<OpportunityContactWithDetails>(),
+        400: errorSchemas.validation,
+        404: errorSchemas.notFound,
+      },
+    },
+    delete: {
+      method: 'DELETE' as const,
+      path: '/api/opportunity-contacts/:id',
+      responses: {
+        204: z.void(),
+        404: errorSchemas.notFound,
       },
     },
   },

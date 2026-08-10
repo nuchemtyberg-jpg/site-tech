@@ -39,5 +39,6 @@ if ! is_up; then
 fi
 
 npx tsx scripts/test-http-api.ts || exit $?
-npx tsx scripts/test-project-contacts-api.ts
+npx tsx scripts/test-project-contacts-api.ts || exit $?
+npx tsx scripts/test-opportunities-api.ts
 exit $?

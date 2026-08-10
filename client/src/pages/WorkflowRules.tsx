@@ -32,11 +32,13 @@ import {
   useAppUsers, userDisplayName, extractApiError,
 } from "@/hooks/use-todos";
 import { PROJECT_STATUSES, getProjectStatusLabel } from "@shared/projectStatus";
+import { OPPORTUNITY_STATUSES, getOpportunityStatusLabel } from "@shared/opportunityStatus";
 import type { WorkflowRuleWithDetails } from "@shared/schema";
 
 const ruleFormSchema = z.object({
   name: z.string().trim().min(1, "Give this rule a name"),
-  triggerStatus: z.string().min(1, "Choose a project status"),
+  triggerType: z.enum(["project_status_change", "opportunity_status_change"]),
+  triggerStatus: z.string().min(1, "Choose a status"),
   assignedToUserId: z.string().min(1, "Choose who gets the work"),
   createTodo: z.boolean(),
   todoTitle: z.string().optional(),
@@ -62,7 +64,7 @@ const ruleFormSchema = z.object({
 type RuleFormValues = z.infer<typeof ruleFormSchema>;
 
 const DEFAULT_VALUES: RuleFormValues = {
-  name: "", triggerStatus: "", assignedToUserId: "", createTodo: true,
+  name: "", triggerType: "project_status_change", triggerStatus: "", assignedToUserId: "", createTodo: true,
   todoTitle: "", todoDescription: "", todoPriority: "normal",
   dueOffsetType: "none", dueOffsetDays: "3",
   sendInAppNotification: true, sendEmailNotification: false, isActive: true,
@@ -89,12 +91,15 @@ export default function WorkflowRules() {
   const form = useForm<RuleFormValues>({ resolver: zodResolver(ruleFormSchema), defaultValues: DEFAULT_VALUES });
   const watchCreateTodo = form.watch("createTodo");
   const watchDueOffsetType = form.watch("dueOffsetType");
+  const watchTriggerType = form.watch("triggerType");
+  const statusOptions = watchTriggerType === "opportunity_status_change" ? OPPORTUNITY_STATUSES : PROJECT_STATUSES;
 
   useEffect(() => {
     if (!formOpen) return;
     if (editingRule) {
       form.reset({
         name: editingRule.name,
+        triggerType: (editingRule.triggerType as RuleFormValues["triggerType"]) ?? "project_status_change",
         triggerStatus: editingRule.triggerStatus,
         assignedToUserId: editingRule.assignedToUserId,
         createTodo: editingRule.createTodo,
@@ -119,7 +124,7 @@ export default function WorkflowRules() {
     const payload = {
       name: values.name.trim(),
       isActive: values.isActive,
-      triggerType: "project_status_change",
+      triggerType: values.triggerType,
       triggerStatus: values.triggerStatus,
       assignedToUserId: values.assignedToUserId,
       createTodo: values.createTodo,
@@ -199,7 +204,7 @@ export default function WorkflowRules() {
                       {!rule.isActive && <Badge variant="outline" className="text-[10px]">Off</Badge>}
                     </div>
                     <p className="text-sm text-muted-foreground mt-1">
-                      When a project moves to <span className="font-medium text-foreground">{getProjectStatusLabel(rule.triggerStatus)}</span>
+                      When {rule.triggerType === "opportunity_status_change" ? "an opportunity" : "a project"} moves to <span className="font-medium text-foreground">{rule.triggerType === "opportunity_status_change" ? getOpportunityStatusLabel(rule.triggerStatus) : getProjectStatusLabel(rule.triggerStatus)}</span>
                       {rule.createTodo && rule.todoTitle ? (
                         <> → assign <span className="font-medium text-foreground">"{rule.todoTitle}"</span> to <span className="font-medium text-foreground">{rule.assignedToName || "Unknown user"}</span></>
                       ) : (
@@ -270,6 +275,25 @@ export default function WorkflowRules() {
                 </FormItem>
               )} />
 
+              <FormField control={form.control} name="triggerType" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Watch for *</FormLabel>
+                  <Select
+                    onValueChange={(v) => { field.onChange(v); form.setValue("triggerStatus", ""); }}
+                    value={field.value}
+                  >
+                    <FormControl>
+                      <SelectTrigger data-testid="select-rule-trigger-type"><SelectValue /></SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="project_status_change">Project status changes</SelectItem>
+                      <SelectItem value="opportunity_status_change">Opportunity status changes</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )} />
+
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <FormField control={form.control} name="triggerStatus" render={({ field }) => (
                   <FormItem>
@@ -279,7 +303,7 @@ export default function WorkflowRules() {
                         <SelectTrigger data-testid="select-rule-trigger-status"><SelectValue placeholder="Pick a status" /></SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        {PROJECT_STATUSES.map(s => (
+                        {statusOptions.map(s => (
                           <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
                         ))}
                       </SelectContent>

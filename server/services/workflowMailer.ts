@@ -1,4 +1,5 @@
 import { getProjectStatusLabel } from "@shared/projectStatus";
+import { getOpportunityStatusLabel } from "@shared/opportunityStatus";
 
 // Workflow email notifications — reuses the existing Mailgun infrastructure
 // (same env config as dailyReportMailer). Sent non-blocking and only when a
@@ -15,13 +16,16 @@ function getAppUrl(): string {
 export async function sendWorkflowEmail(params: {
   toEmail: string;
   toName: string | null;
-  projectId: number;
-  projectName: string;
+  projectId: number | null;
+  projectName: string; // display name of the project or opportunity
   previousStatus: string | null;
   newStatus: string;
   todoTitle: string | null;
   todoDueDate: string | null;
   ruleName: string;
+  // 'project' (default) or 'opportunity' — controls status labels and the link target
+  entityType?: "project" | "opportunity";
+  opportunityId?: number | null;
 }): Promise<void> {
   const mailgunApiKey = process.env.MAILGUN_API_KEY;
   const mailgunDomain = process.env.MAILGUN_DOMAIN;
@@ -35,9 +39,13 @@ export async function sendWorkflowEmail(params: {
 
   try {
     const appUrl = getAppUrl();
-    const projectUrl = `${appUrl}/projects/${params.projectId}?tab=todos`;
-    const newStatusLabel = getProjectStatusLabel(params.newStatus);
-    const prevStatusLabel = params.previousStatus ? getProjectStatusLabel(params.previousStatus) : null;
+    const isOpportunity = params.entityType === "opportunity";
+    const projectUrl = isOpportunity
+      ? `${appUrl}/opportunities${params.opportunityId ? `/${params.opportunityId}` : ""}`
+      : `${appUrl}/projects/${params.projectId}?tab=todos`;
+    const statusLabel = isOpportunity ? getOpportunityStatusLabel : getProjectStatusLabel;
+    const newStatusLabel = statusLabel(params.newStatus);
+    const prevStatusLabel = params.previousStatus ? statusLabel(params.previousStatus) : null;
     const assigneeName = params.toName || params.toEmail;
 
     const whatHappened = prevStatusLabel

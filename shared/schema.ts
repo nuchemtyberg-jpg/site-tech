@@ -4,9 +4,19 @@ import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 import { users } from "./models/auth";
 import { PROJECT_STATUS_VALUES } from "./projectStatus";
+import {
+  OPPORTUNITY_STATUS_VALUES,
+  OPPORTUNITY_SOURCE_VALUES,
+  OPPORTUNITY_PROJECT_TYPE_VALUES,
+  OPPORTUNITY_CONTACT_ROLE_VALUES,
+  OPPORTUNITY_LOST_REASON_VALUES,
+  OPPORTUNITY_NO_BID_REASON_VALUES,
+  WORKFLOW_TRIGGER_TYPE_VALUES,
+} from "./opportunityStatus";
 
 export * from "./models/auth";
 export * from "./projectStatus";
+export * from "./opportunityStatus";
 
 // Customers - a Customer represents a company/organization
 export const CUSTOMER_TYPES = [
@@ -678,6 +688,7 @@ export const communications = pgTable("communications", {
   customerId: integer("customer_id").notNull(),
   contactId: integer("contact_id"), // optional link to a specific contact at the customer
   projectId: integer("project_id"),
+  opportunityId: integer("opportunity_id"), // optional link to an Opportunity (must belong to the same customer)
   type: text("type").notNull(), // email, phone, meeting, site_visit, other
   subject: text("subject"),
   notes: text("notes").notNull(),
@@ -692,6 +703,7 @@ export const insertCommunicationSchema = createInsertSchema(communications).omit
   contactDate: z.coerce.date(),
   contactId: z.number().int().nullable().optional(),
   projectId: z.number().int().nullable().optional(),
+  opportunityId: z.number().int().nullable().optional(),
 });
 export type Communication = typeof communications.$inferSelect;
 export type InsertCommunication = z.infer<typeof insertCommunicationSchema>;
@@ -998,12 +1010,14 @@ export const insertTodoSchema = createInsertSchema(todos).omit({
 export type Todo = typeof todos.$inferSelect;
 export type InsertTodo = z.infer<typeof insertTodoSchema>;
 
-// Todo enriched with display names for lists (server joins users/projects)
+// Todo enriched with display names for lists (server joins users/projects/opportunities)
 export type TodoWithDetails = Todo & {
   assignedToName: string | null;
   createdByName: string | null;
   completedByName: string | null;
   projectName: string | null;
+  opportunityName: string | null; // set when relatedEntityType === 'opportunity'
+  opportunityNumber: string | null;
   updateCount: number; // number of (non-deleted) todo updates, for 💬 badges
 };
 
@@ -1074,7 +1088,8 @@ export const insertWorkflowRuleSchema = createInsertSchema(workflowRules).omit({
   id: true, createdAt: true, updatedAt: true, deletedAt: true, createdByUserId: true,
 }).extend({
   name: z.string().trim().min(1, "Rule name is required"),
-  triggerStatus: z.enum(PROJECT_STATUS_VALUES),
+  triggerType: z.enum(WORKFLOW_TRIGGER_TYPE_VALUES).optional(),
+  triggerStatus: z.string().min(1, "Trigger status is required"),
   assignedToUserId: z.string().min(1, "Assigned user is required"),
   todoTitle: z.string().optional().nullable(),
   todoDescription: z.string().optional().nullable(),
@@ -1082,6 +1097,12 @@ export const insertWorkflowRuleSchema = createInsertSchema(workflowRules).omit({
   dueOffsetType: z.enum(DUE_OFFSET_TYPES).optional(),
   dueOffsetDays: z.number().int().min(0).optional().nullable(),
 }).superRefine((data, ctx) => {
+  // Trigger status must be valid for the selected trigger type
+  const triggerType = data.triggerType ?? "project_status_change";
+  const validStatuses: readonly string[] = triggerType === "opportunity_status_change" ? OPPORTUNITY_STATUS_VALUES : PROJECT_STATUS_VALUES;
+  if (!validStatuses.includes(data.triggerStatus)) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["triggerStatus"], message: `Invalid trigger status for ${triggerType === "opportunity_status_change" ? "opportunity" : "project"} status change` });
+  }
   if (data.createTodo !== false && (!data.todoTitle || !data.todoTitle.trim())) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["todoTitle"], message: "Todo title is required when creating a todo" });
   }
@@ -1104,8 +1125,9 @@ export type WorkflowRuleWithDetails = WorkflowRule & {
 export const workflowExecutions = pgTable("workflow_executions", {
   id: serial("id").primaryKey(),
   workflowRuleId: integer("workflow_rule_id").notNull(),
-  projectId: integer("project_id").notNull(),
-  statusHistoryId: integer("status_history_id").notNull(), // identity of the triggering transition
+  projectId: integer("project_id"), // set for project_status_change executions
+  opportunityId: integer("opportunity_id"), // set for opportunity_status_change executions
+  statusHistoryId: integer("status_history_id").notNull(), // identity of the triggering transition (project_status_history or opportunity_status_history id, per triggerEvent)
   triggerEvent: text("trigger_event").notNull().default("project_status_change"),
   previousStatus: text("previous_status"),
   newStatus: text("new_status").notNull(),
@@ -1114,8 +1136,12 @@ export const workflowExecutions = pgTable("workflow_executions", {
   emailSent: boolean("email_sent").notNull().default(false),
   executedAt: timestamp("executed_at").defaultNow(),
 }, (table) => [
-  uniqueIndex("unique_workflow_execution_per_transition").on(table.workflowRuleId, table.statusHistoryId),
+  // statusHistoryId namespaces are per triggerEvent (project vs opportunity
+  // history tables have independent serial ids), so the trigger event is part
+  // of the idempotency identity.
+  uniqueIndex("unique_workflow_execution_per_transition_event").on(table.workflowRuleId, table.triggerEvent, table.statusHistoryId),
   index("idx_workflow_executions_project").on(table.projectId),
+  index("idx_workflow_executions_opportunity").on(table.opportunityId),
 ]);
 
 export const insertWorkflowExecutionSchema = createInsertSchema(workflowExecutions).omit({ id: true, executedAt: true });
@@ -1189,3 +1215,157 @@ export const activityLogs = pgTable("activity_logs", {
 export const insertActivityLogSchema = createInsertSchema(activityLogs).omit({ id: true, createdAt: true });
 export type ActivityLog = typeof activityLogs.$inferSelect;
 export type InsertActivityLog = z.infer<typeof insertActivityLogSchema>;
+
+// ============================================================
+// Opportunities (Phase 4 — RFP / bidding pipeline foundation)
+// ============================================================
+// An Opportunity is a potential job being evaluated/bid/negotiated. It is NOT
+// a Project — Projects are created only when work is awarded (conversion is a
+// later phase; for now we only store awardDate and a nullable convertedProjectId).
+
+export const opportunities = pgTable("opportunities", {
+  id: serial("id").primaryKey(),
+  // Human-readable permanent identifier (e.g. OPP-2026-0012). Server-generated,
+  // unique, never changes even when the name changes. Decoupled from the PK so
+  // the format can change later without breaking references.
+  opportunityNumber: text("opportunity_number").notNull(),
+  name: text("name").notNull(),
+  customerId: integer("customer_id").notNull(),
+  status: text("status").notNull().default("new"), // see OPPORTUNITY_STATUSES
+  responsibleUserId: varchar("responsible_user_id"), // estimator / responsible SiteTech user
+  // Project address (optional until known)
+  streetAddress: text("street_address"),
+  address2: text("address_2"),
+  city: text("city"),
+  state: text("state"),
+  zip: text("zip"),
+  // Key dates
+  rfpReceivedDate: date("rfp_received_date"),
+  bidDueDate: date("bid_due_date"),
+  bidDueTime: text("bid_due_time"), // HH:MM (24h); separate from date per spec
+  estimatedStartDate: date("estimated_start_date"),
+  // Classification
+  source: text("source"), // see OPPORTUNITY_SOURCES
+  projectType: text("project_type"), // see OPPORTUNITY_PROJECT_TYPES
+  // Descriptions
+  scopeSummary: text("scope_summary"), // high-level only; detailed checklist is a later phase
+  internalNotes: text("internal_notes"),
+  // Value / confidence
+  expectedValue: integer("expected_value"), // dollars, optional
+  probability: integer("probability"), // 0-100, optional
+  // Outcome capture (set by the status change service)
+  lostReason: text("lost_reason"), // see OPPORTUNITY_LOST_REASONS
+  lostReasonNotes: text("lost_reason_notes"),
+  noBidReason: text("no_bid_reason"), // see OPPORTUNITY_NO_BID_REASONS
+  noBidReasonNotes: text("no_bid_reason_notes"),
+  awardDate: date("award_date"),
+  convertedProjectId: integer("converted_project_id"), // set when converted to a Project (future phase)
+  // Archive is a visibility flag, distinct from business statuses (Lost/No Bid
+  // remain searchable; archived records are just hidden from default views).
+  isArchived: boolean("is_archived").notNull().default(false),
+  createdByUserId: varchar("created_by_user_id"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+  deletedAt: timestamp("deleted_at"), // Soft delete support
+}, (table) => [
+  uniqueIndex("uq_opportunities_number").on(table.opportunityNumber),
+  index("idx_opportunities_customer").on(table.customerId),
+  index("idx_opportunities_status").on(table.status),
+  index("idx_opportunities_responsible_user").on(table.responsibleUserId),
+  index("idx_opportunities_bid_due_date").on(table.bidDueDate),
+  index("idx_opportunities_archived").on(table.isArchived),
+]);
+
+export const insertOpportunitySchema = createInsertSchema(opportunities).omit({
+  id: true, opportunityNumber: true, createdByUserId: true,
+  lostReason: true, lostReasonNotes: true, noBidReason: true, noBidReasonNotes: true,
+  awardDate: true, convertedProjectId: true, // outcome fields are managed by the status change service
+  createdAt: true, updatedAt: true, deletedAt: true,
+}).extend({
+  name: z.string().trim().min(1, "Opportunity name is required"),
+  customerId: z.number().int({ message: "Customer is required" }),
+  status: z.enum(OPPORTUNITY_STATUS_VALUES).optional(),
+  responsibleUserId: z.string().nullable().optional(),
+  source: z.enum(OPPORTUNITY_SOURCE_VALUES).nullable().optional(),
+  projectType: z.enum(OPPORTUNITY_PROJECT_TYPE_VALUES).nullable().optional(),
+  bidDueDate: z.string().nullable().optional(),
+  bidDueTime: z.string().regex(/^\d{2}:\d{2}$/, "Bid due time must be HH:MM").nullable().optional(),
+  rfpReceivedDate: z.string().nullable().optional(),
+  estimatedStartDate: z.string().nullable().optional(),
+  expectedValue: z.number().int().min(0).nullable().optional(),
+  probability: z.number().int().min(0, "Probability must be 0-100").max(100, "Probability must be 0-100").nullable().optional(),
+});
+export type Opportunity = typeof opportunities.$inferSelect;
+export type InsertOpportunity = z.infer<typeof insertOpportunitySchema>;
+
+// Opportunity enriched for lists/detail (server joins customers/users)
+export type OpportunityWithDetails = Opportunity & {
+  customerName: string | null;
+  responsibleUserName: string | null;
+  primaryContactId: number | null;
+  primaryContactName: string | null;
+};
+
+// Opportunity Contacts — links an Opportunity to contacts of its customer,
+// with an optional opportunity-specific role (distinct from the contact's
+// company-level roles/title) and a single primary flag per opportunity.
+export const opportunityContacts = pgTable("opportunity_contacts", {
+  id: serial("id").primaryKey(),
+  opportunityId: integer("opportunity_id").notNull(),
+  contactId: integer("contact_id").notNull(),
+  role: text("role"), // see OPPORTUNITY_CONTACT_ROLES (optional)
+  isPrimary: boolean("is_primary").notNull().default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  uniqueIndex("uq_opportunity_contacts_opportunity_contact").on(table.opportunityId, table.contactId),
+  index("idx_opportunity_contacts_opportunity").on(table.opportunityId),
+  index("idx_opportunity_contacts_contact").on(table.contactId),
+]);
+
+export const insertOpportunityContactSchema = createInsertSchema(opportunityContacts).omit({ id: true, createdAt: true }).extend({
+  role: z.enum(OPPORTUNITY_CONTACT_ROLE_VALUES).nullable().optional(),
+  isPrimary: z.boolean().optional(),
+});
+export type OpportunityContact = typeof opportunityContacts.$inferSelect;
+export type InsertOpportunityContact = z.infer<typeof insertOpportunityContactSchema>;
+
+export type OpportunityContactWithDetails = OpportunityContact & {
+  firstName: string;
+  lastName: string | null;
+  jobTitle: string | null;
+  email: string | null;
+  officePhone: string | null;
+  mobilePhone: string | null;
+  customerId: number;
+};
+
+// Opportunity Status History — records every true status transition.
+// History rows also serve as the workflow idempotency identity for
+// opportunity_status_change triggers (like project_status_history does for projects).
+export const opportunityStatusHistory = pgTable("opportunity_status_history", {
+  id: serial("id").primaryKey(),
+  opportunityId: integer("opportunity_id").notNull(),
+  previousStatus: text("previous_status"),
+  newStatus: text("new_status").notNull(),
+  changedByUserId: varchar("changed_by_user_id"),
+  changedByName: text("changed_by_name"),
+  changedAt: timestamp("changed_at").defaultNow(),
+}, (table) => [
+  index("idx_opportunity_status_history_opportunity").on(table.opportunityId),
+]);
+
+export const insertOpportunityStatusHistorySchema = createInsertSchema(opportunityStatusHistory).omit({ id: true, changedAt: true });
+export type OpportunityStatusHistory = typeof opportunityStatusHistory.$inferSelect;
+export type InsertOpportunityStatusHistory = z.infer<typeof insertOpportunityStatusHistorySchema>;
+
+// Input for the centralized status change service (reasons required by route validation
+// when transitioning to lost / no_bid; award date defaults to today on awarded).
+export const opportunityStatusChangeSchema = z.object({
+  status: z.enum(OPPORTUNITY_STATUS_VALUES),
+  lostReason: z.enum(OPPORTUNITY_LOST_REASON_VALUES).nullable().optional(),
+  lostReasonNotes: z.string().max(2000).nullable().optional(),
+  noBidReason: z.enum(OPPORTUNITY_NO_BID_REASON_VALUES).nullable().optional(),
+  noBidReasonNotes: z.string().max(2000).nullable().optional(),
+  awardDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+});
+export type OpportunityStatusChangeInput = z.infer<typeof opportunityStatusChangeSchema>;

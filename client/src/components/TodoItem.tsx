@@ -162,6 +162,16 @@ export function TodoItem({ todo, onEdit, showProject = false }: {
               <FolderKanban className="w-3 h-3" />{todo.projectName}
             </Link>
           )}
+          {showProject && todo.relatedEntityType === "opportunity" && todo.relatedEntityId && todo.opportunityName && (
+            <Link
+              href={`/opportunities/${todo.relatedEntityId}`}
+              onClick={(e) => e.stopPropagation()}
+              className="text-[10px] text-primary hover:underline flex items-center gap-0.5"
+              data-testid={`link-todo-opportunity-${todo.id}`}
+            >
+              <FolderKanban className="w-3 h-3" />{todo.opportunityNumber} {todo.opportunityName}
+            </Link>
+          )}
         </div>
       </div>
 

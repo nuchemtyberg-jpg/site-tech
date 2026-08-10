@@ -18,7 +18,8 @@ import {
   Files,
   BarChart3,
   ClipboardCheck,
-  Zap
+  Zap,
+  Target
 } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -36,6 +37,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     { href: "/", label: "Dashboard", icon: LayoutDashboard },
     { href: "/my-work", label: "My Work", icon: ClipboardCheck },
     { href: "/projects", label: "Projects", icon: FolderKanban },
+    { href: "/opportunities", label: "Opportunities", icon: Target },
     { href: "/customers", label: "Customers", icon: Users },
     { href: "/schedule", label: "Schedule", icon: Calendar },
     { href: "/equipment", label: "Equipment", icon: Truck },

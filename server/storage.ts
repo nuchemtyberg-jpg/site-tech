@@ -8,6 +8,10 @@ import {
   rfis, rfiResponses, userOutlookConnections, projectDailyReportRecipients, companyFolders, companyFiles,
   payApplications, payApplicationItems,
   todos, todoUpdates, workflowRules, workflowExecutions, notifications, activityLogs, projectStatusHistory,
+  opportunities, opportunityContacts, opportunityStatusHistory,
+  type Opportunity, type InsertOpportunity, type OpportunityWithDetails,
+  type OpportunityContact, type InsertOpportunityContact, type OpportunityContactWithDetails,
+  type OpportunityStatusHistory, type InsertOpportunityStatusHistory,
   type InsertProject, type InsertTask, type InsertEquipment, type InsertAllocation, type InsertFolder, type InsertFileMetadata, type InsertPhoto,
   type InsertCustomer, type Contact, type InsertContact, type ProjectContact, type InsertProjectContact, type InsertDailyReport, type InsertMaintenanceLog, type InsertCommunication, type InsertTaskStatusHistory, type InsertPhotoAlbum,
   type InsertReportTask, type InsertLaborEntry, type InsertEquipmentEntry, type InsertReportTaskPhoto, type InsertDelivery, type InsertDeliveryPhoto,
@@ -391,7 +395,7 @@ export interface IStorage {
   // Workflow Rules
   getWorkflowRules(): Promise<WorkflowRuleWithDetails[]>;
   getWorkflowRule(id: number): Promise<WorkflowRule | undefined>;
-  getActiveWorkflowRulesForStatus(triggerStatus: string): Promise<WorkflowRule[]>;
+  getActiveWorkflowRulesForStatus(triggerStatus: string, triggerType?: string): Promise<WorkflowRule[]>;
   createWorkflowRule(rule: InsertWorkflowRule & { createdByUserId?: string | null }): Promise<WorkflowRule>;
   updateWorkflowRule(id: number, updates: Partial<InsertWorkflowRule>): Promise<WorkflowRule>;
   deleteWorkflowRule(id: number): Promise<void>;
@@ -415,6 +419,38 @@ export interface IStorage {
   createActivityLog(log: InsertActivityLog): Promise<ActivityLog>;
   getProjectActivity(projectId: number, limit?: number): Promise<ActivityLog[]>;
   getCustomerActivity(customerId: number, limit?: number): Promise<ActivityLog[]>;
+  getOpportunityActivity(opportunityId: number, limit?: number): Promise<ActivityLog[]>;
+
+  // Opportunities (Phase 4 — RFP/bidding foundation)
+  getOpportunities(filters?: OpportunityFilters): Promise<OpportunityWithDetails[]>;
+  getOpportunity(id: number): Promise<Opportunity | undefined>;
+  getOpportunityWithDetails(id: number): Promise<OpportunityWithDetails | undefined>;
+  getOpportunitiesByCustomer(customerId: number, includeArchived?: boolean): Promise<OpportunityWithDetails[]>;
+  createOpportunity(opportunity: InsertOpportunity & { createdByUserId?: string | null }): Promise<Opportunity>;
+  updateOpportunity(id: number, updates: Partial<InsertOpportunity>): Promise<Opportunity>;
+  updateOpportunityWithStatusTracking(id: number, updates: Record<string, unknown> & { status: string }, changedBy: { userId: string | null; name: string | null }): Promise<{ opportunity: Opportunity; previousStatus: string | null; changed: boolean; history: OpportunityStatusHistory | null }>;
+
+  // Opportunity Contacts
+  getOpportunityContacts(opportunityId: number): Promise<OpportunityContactWithDetails[]>;
+  getOpportunityContact(id: number): Promise<OpportunityContact | undefined>;
+  findOpportunityContact(opportunityId: number, contactId: number): Promise<OpportunityContact | undefined>;
+  createOpportunityContact(link: InsertOpportunityContact): Promise<OpportunityContact>;
+  updateOpportunityContact(id: number, updates: { role?: string | null; isPrimary?: boolean }): Promise<OpportunityContact>;
+  deleteOpportunityContact(id: number): Promise<void>;
+  deleteOpportunityContactsForOpportunity(opportunityId: number): Promise<number>;
+
+  // Opportunity Status History
+  createOpportunityStatusHistory(history: InsertOpportunityStatusHistory): Promise<OpportunityStatusHistory>;
+  getOpportunityStatusHistory(opportunityId: number): Promise<OpportunityStatusHistory[]>;
+}
+
+export interface OpportunityFilters {
+  status?: string;
+  customerId?: number;
+  responsibleUserId?: string;
+  includeArchived?: boolean; // default false — archived records are hidden from default views
+  search?: string;
+  limit?: number;
 }
 
 // Project contact link enriched with the full contact record
@@ -2017,6 +2053,8 @@ export class DatabaseStorage implements IStorage {
         createdByName: this.userDisplayName(creator as any),
         completedByName: this.userDisplayName(completer as any),
         projectName: projects.name,
+        opportunityName: opportunities.name,
+        opportunityNumber: opportunities.opportunityNumber,
         updateCount: sql<number>`(select count(*)::int from todo_updates tu where tu.todo_id = ${todos.id} and tu.deleted_at is null)`,
       })
       .from(todos)
@@ -2024,6 +2062,7 @@ export class DatabaseStorage implements IStorage {
       .leftJoin(creator, eq(todos.createdByUserId, creator.id))
       .leftJoin(completer, eq(todos.completedByUserId, completer.id))
       .leftJoin(projects, eq(todos.projectId, projects.id))
+      .leftJoin(opportunities, and(eq(todos.relatedEntityType, "opportunity"), eq(todos.relatedEntityId, opportunities.id)))
       .where(and(...conditions))
       .orderBy(
         // Grouped default sort: overdue -> due today -> upcoming -> no due date, completed/cancelled last
@@ -2040,6 +2079,8 @@ export class DatabaseStorage implements IStorage {
       createdByName: r.todo.createdByUserId ? (r.createdByName || null) : "System",
       completedByName: r.completedByName || null,
       projectName: r.projectName ?? null,
+      opportunityName: r.opportunityName ?? null,
+      opportunityNumber: r.opportunityNumber ?? null,
       updateCount: r.updateCount ?? 0,
     }));
   }
@@ -2053,6 +2094,8 @@ export class DatabaseStorage implements IStorage {
         createdByName: this.userDisplayName(creator as any),
         completedByName: this.userDisplayName(completer as any),
         projectName: projects.name,
+        opportunityName: opportunities.name,
+        opportunityNumber: opportunities.opportunityNumber,
         updateCount: sql<number>`(select count(*)::int from todo_updates tu where tu.todo_id = ${todos.id} and tu.deleted_at is null)`,
       })
       .from(todos)
@@ -2060,6 +2103,7 @@ export class DatabaseStorage implements IStorage {
       .leftJoin(creator, eq(todos.createdByUserId, creator.id))
       .leftJoin(completer, eq(todos.completedByUserId, completer.id))
       .leftJoin(projects, eq(todos.projectId, projects.id))
+      .leftJoin(opportunities, and(eq(todos.relatedEntityType, "opportunity"), eq(todos.relatedEntityId, opportunities.id)))
       .where(and(eq(todos.id, id), isNull(todos.deletedAt)));
     if (!row) return undefined;
     return {
@@ -2068,6 +2112,8 @@ export class DatabaseStorage implements IStorage {
       createdByName: row.todo.createdByUserId ? (row.createdByName || null) : "System",
       completedByName: row.completedByName || null,
       projectName: row.projectName ?? null,
+      opportunityName: row.opportunityName ?? null,
+      opportunityNumber: row.opportunityNumber ?? null,
       updateCount: row.updateCount ?? 0,
     };
   }
@@ -2238,11 +2284,11 @@ export class DatabaseStorage implements IStorage {
     return rule;
   }
 
-  async getActiveWorkflowRulesForStatus(triggerStatus: string): Promise<WorkflowRule[]> {
+  async getActiveWorkflowRulesForStatus(triggerStatus: string, triggerType = "project_status_change"): Promise<WorkflowRule[]> {
     return db.select().from(workflowRules).where(and(
       isNull(workflowRules.deletedAt),
       eq(workflowRules.isActive, true),
-      eq(workflowRules.triggerType, "project_status_change"),
+      eq(workflowRules.triggerType, triggerType),
       eq(workflowRules.triggerStatus, triggerStatus),
     ));
   }
@@ -2339,6 +2385,230 @@ export class DatabaseStorage implements IStorage {
       ))
       .orderBy(desc(activityLogs.createdAt))
       .limit(limit);
+  }
+
+  async getOpportunityActivity(opportunityId: number, limit = 100): Promise<ActivityLog[]> {
+    // Opportunity events are logged with entityType 'opportunity'; related events
+    // (todos, contacts, communications) carry metadata.opportunityId.
+    return db.select().from(activityLogs)
+      .where(or(
+        and(eq(activityLogs.entityType, "opportunity"), eq(activityLogs.entityId, opportunityId)),
+        sql`(${activityLogs.metadata} ->> 'opportunityId')::int = ${opportunityId}`,
+      ))
+      .orderBy(desc(activityLogs.createdAt))
+      .limit(limit);
+  }
+
+  // ============================================================
+  // Opportunities
+  // ============================================================
+
+  private opportunityDetailsQuery() {
+    return db
+      .select({
+        opportunity: opportunities,
+        customerName: customers.name,
+        responsibleUserName: this.userDisplayName(users),
+        primaryContactId: sql<number | null>`(
+          select oc.contact_id from opportunity_contacts oc
+          where oc.opportunity_id = ${opportunities.id} and oc.is_primary = true limit 1
+        )`,
+        primaryContactName: sql<string | null>`(
+          select trim(concat(c.first_name, ' ', coalesce(c.last_name, '')))
+          from opportunity_contacts oc join contacts c on c.id = oc.contact_id
+          where oc.opportunity_id = ${opportunities.id} and oc.is_primary = true limit 1
+        )`,
+      })
+      .from(opportunities)
+      .leftJoin(customers, eq(opportunities.customerId, customers.id))
+      .leftJoin(users, eq(opportunities.responsibleUserId, users.id));
+  }
+
+  private mapOpportunityDetails(r: { opportunity: Opportunity; customerName: string | null; responsibleUserName: string | null; primaryContactId: number | null; primaryContactName: string | null }): OpportunityWithDetails {
+    return {
+      ...r.opportunity,
+      customerName: r.customerName ?? null,
+      responsibleUserName: r.responsibleUserName || null,
+      primaryContactId: r.primaryContactId ?? null,
+      primaryContactName: r.primaryContactName || null,
+    };
+  }
+
+  async getOpportunities(filters: OpportunityFilters = {}): Promise<OpportunityWithDetails[]> {
+    const conditions = [isNull(opportunities.deletedAt)];
+    if (!filters.includeArchived) conditions.push(eq(opportunities.isArchived, false));
+    if (filters.status) conditions.push(eq(opportunities.status, filters.status));
+    if (filters.customerId !== undefined) conditions.push(eq(opportunities.customerId, filters.customerId));
+    if (filters.responsibleUserId) conditions.push(eq(opportunities.responsibleUserId, filters.responsibleUserId));
+    if (filters.search) {
+      const term = `%${filters.search}%`;
+      conditions.push(or(ilike(opportunities.name, term), ilike(opportunities.opportunityNumber, term))!);
+    }
+    const rows = await this.opportunityDetailsQuery()
+      .where(and(...conditions))
+      .orderBy(desc(opportunities.createdAt))
+      .limit(filters.limit ?? 500);
+    return rows.map(r => this.mapOpportunityDetails(r));
+  }
+
+  async getOpportunity(id: number): Promise<Opportunity | undefined> {
+    const [row] = await db.select().from(opportunities).where(and(eq(opportunities.id, id), isNull(opportunities.deletedAt)));
+    return row;
+  }
+
+  async getOpportunityWithDetails(id: number): Promise<OpportunityWithDetails | undefined> {
+    const [row] = await this.opportunityDetailsQuery().where(and(eq(opportunities.id, id), isNull(opportunities.deletedAt)));
+    return row ? this.mapOpportunityDetails(row) : undefined;
+  }
+
+  async getOpportunitiesByCustomer(customerId: number, includeArchived = false): Promise<OpportunityWithDetails[]> {
+    return this.getOpportunities({ customerId, includeArchived });
+  }
+
+  // Opportunity numbers (OPP-YYYY-NNNN) are generated under a transaction-scoped
+  // advisory lock so concurrent creates can never allocate the same number. The
+  // number is decoupled from the primary key so the format can change later.
+  async createOpportunity(opportunity: InsertOpportunity & { createdByUserId?: string | null }): Promise<Opportunity> {
+    return await db.transaction(async (tx) => {
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtext('opportunity_number'))`);
+      const year = new Date().getFullYear();
+      const prefix = `OPP-${year}-`;
+      // Numeric max of the sequence part — robust even if padding width changes later
+      const [row] = await tx
+        .select({ maxSeq: sql<number | null>`max((substring(${opportunities.opportunityNumber} from ${sql.raw(String(prefix.length + 1))}))::int)` })
+        .from(opportunities)
+        .where(sql`${opportunities.opportunityNumber} like ${prefix + "%"}`);
+      const next = (row?.maxSeq ?? 0) + 1;
+      const opportunityNumber = `${prefix}${String(next).padStart(4, "0")}`;
+      const [result] = await tx.insert(opportunities).values({ ...opportunity, opportunityNumber }).returning();
+      return result;
+    });
+  }
+
+  async updateOpportunity(id: number, updates: Record<string, unknown>): Promise<Opportunity> {
+    const [result] = await db
+      .update(opportunities)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(and(eq(opportunities.id, id), isNull(opportunities.deletedAt)))
+      .returning();
+    return result;
+  }
+
+  // Atomic status transition detection under a row lock (mirrors
+  // updateProjectWithStatusTracking): concurrent duplicate requests cannot both
+  // observe the same transition, and re-saving the same status is a no-op.
+  async updateOpportunityWithStatusTracking(
+    id: number,
+    updates: Record<string, unknown> & { status: string },
+    changedBy: { userId: string | null; name: string | null },
+  ): Promise<{ opportunity: Opportunity; previousStatus: string | null; changed: boolean; history: OpportunityStatusHistory | null }> {
+    // Status update AND its history row commit in ONE transaction so a
+    // transition can never be recorded without its history (the history row is
+    // the workflow idempotency identity). If anything here fails, the status
+    // change rolls back too and the client can safely retry.
+    return await db.transaction(async (tx) => {
+      const [existing] = await tx.select().from(opportunities)
+        .where(and(eq(opportunities.id, id), isNull(opportunities.deletedAt)))
+        .for("update");
+      if (!existing) throw new Error("Opportunity not found");
+      if (existing.status === updates.status) {
+        return { opportunity: existing, previousStatus: existing.status, changed: false, history: null };
+      }
+      const [opportunity] = await tx.update(opportunities)
+        .set({ ...updates, updatedAt: new Date() })
+        .where(eq(opportunities.id, id))
+        .returning();
+      const [history] = await tx.insert(opportunityStatusHistory).values({
+        opportunityId: id,
+        previousStatus: existing.status ?? null,
+        newStatus: updates.status,
+        changedByUserId: changedBy.userId,
+        changedByName: changedBy.name,
+      }).returning();
+      return { opportunity, previousStatus: existing.status ?? null, changed: true, history };
+    });
+  }
+
+  // Opportunity Contacts
+  async getOpportunityContacts(opportunityId: number): Promise<OpportunityContactWithDetails[]> {
+    const rows = await db
+      .select({ link: opportunityContacts, contact: contacts })
+      .from(opportunityContacts)
+      .innerJoin(contacts, eq(opportunityContacts.contactId, contacts.id))
+      .where(eq(opportunityContacts.opportunityId, opportunityId))
+      .orderBy(desc(opportunityContacts.isPrimary), asc(contacts.firstName));
+    return rows.map(r => ({
+      ...r.link,
+      firstName: r.contact.firstName,
+      lastName: r.contact.lastName,
+      jobTitle: r.contact.jobTitle,
+      email: r.contact.email,
+      officePhone: r.contact.officePhone,
+      mobilePhone: r.contact.mobilePhone,
+      customerId: r.contact.customerId,
+    }));
+  }
+
+  async getOpportunityContact(id: number): Promise<OpportunityContact | undefined> {
+    const [row] = await db.select().from(opportunityContacts).where(eq(opportunityContacts.id, id));
+    return row;
+  }
+
+  async findOpportunityContact(opportunityId: number, contactId: number): Promise<OpportunityContact | undefined> {
+    const [row] = await db.select().from(opportunityContacts)
+      .where(and(eq(opportunityContacts.opportunityId, opportunityId), eq(opportunityContacts.contactId, contactId)));
+    return row;
+  }
+
+  // Single primary per opportunity is enforced transactionally: setting a new
+  // primary clears any existing one first.
+  async createOpportunityContact(link: InsertOpportunityContact): Promise<OpportunityContact> {
+    return await db.transaction(async (tx) => {
+      if (link.isPrimary) {
+        await tx.update(opportunityContacts).set({ isPrimary: false })
+          .where(and(eq(opportunityContacts.opportunityId, link.opportunityId), eq(opportunityContacts.isPrimary, true)));
+      }
+      const [result] = await tx.insert(opportunityContacts).values(link).returning();
+      return result;
+    });
+  }
+
+  async updateOpportunityContact(id: number, updates: { role?: string | null; isPrimary?: boolean }): Promise<OpportunityContact> {
+    return await db.transaction(async (tx) => {
+      const [existing] = await tx.select().from(opportunityContacts).where(eq(opportunityContacts.id, id)).for("update");
+      if (!existing) throw new Error("Opportunity contact not found");
+      if (updates.isPrimary === true) {
+        await tx.update(opportunityContacts).set({ isPrimary: false })
+          .where(and(eq(opportunityContacts.opportunityId, existing.opportunityId), eq(opportunityContacts.isPrimary, true), ne(opportunityContacts.id, id)));
+      }
+      const [result] = await tx.update(opportunityContacts).set(updates).where(eq(opportunityContacts.id, id)).returning();
+      return result;
+    });
+  }
+
+  async deleteOpportunityContact(id: number): Promise<void> {
+    await db.delete(opportunityContacts).where(eq(opportunityContacts.id, id));
+  }
+
+  // Used when an opportunity's customer changes: contacts from the previous
+  // customer must never be silently retained.
+  async deleteOpportunityContactsForOpportunity(opportunityId: number): Promise<number> {
+    const deleted = await db.delete(opportunityContacts)
+      .where(eq(opportunityContacts.opportunityId, opportunityId))
+      .returning({ id: opportunityContacts.id });
+    return deleted.length;
+  }
+
+  // Opportunity Status History
+  async createOpportunityStatusHistory(history: InsertOpportunityStatusHistory): Promise<OpportunityStatusHistory> {
+    const [result] = await db.insert(opportunityStatusHistory).values(history).returning();
+    return result;
+  }
+
+  async getOpportunityStatusHistory(opportunityId: number): Promise<OpportunityStatusHistory[]> {
+    return db.select().from(opportunityStatusHistory)
+      .where(eq(opportunityStatusHistory.opportunityId, opportunityId))
+      .orderBy(desc(opportunityStatusHistory.changedAt), desc(opportunityStatusHistory.id));
   }
 }
 

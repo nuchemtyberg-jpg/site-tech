@@ -11,6 +11,7 @@ import { Loader2 } from "lucide-react";
 // Pages
 import Dashboard from "@/pages/Dashboard";
 import Projects from "@/pages/Projects";
+import Opportunities from "@/pages/Opportunities";
 import ProjectDetails from "@/pages/ProjectDetails";
 import Customers from "@/pages/Customers";
 import CustomerDetails from "@/pages/CustomerDetails";
@@ -90,6 +91,8 @@ function Router() {
       <Route path="/" component={() => <ProtectedRoute component={Projects} />} />
       <Route path="/projects" component={() => <ProtectedRoute component={Projects} />} />
       <Route path="/projects/:id" component={() => <ProtectedRoute component={ProjectDetails} />} />
+      <Route path="/opportunities" component={() => <ProtectedRoute component={Opportunities} />} />
+      <Route path="/opportunities/:id" component={() => <ProtectedRoute component={Opportunities} />} />
       <Route path="/projects/:projectId/pdf/:fileId" component={() => <ProtectedFullScreenRoute component={PDFViewerPage} />} />
       <Route path="/projects/:projectId/reports/new" component={() => <ProtectedFullScreenRoute component={DailyReportPage} />} />
       <Route path="/projects/:projectId/reports/:reportId" component={() => <ProtectedFullScreenRoute component={DailyReportPage} />} />
