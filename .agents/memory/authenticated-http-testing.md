@@ -7,4 +7,4 @@ Replit Auth has no scriptable login, so protected routes can only be exercised e
 
 **Why:** Storage-level tests miss route-level authorization bugs — a completion review rejected the todos feature for exactly such gaps (unscoped list reads, missing detail-view checks) that only authenticated HTTP requests reveal. Test authorization with a *low-privilege* user, not just an admin.
 
-**How to apply:** Working, self-cleaning example: `scripts/test-http-api.ts` (forges sessions for both an admin and a temp regular user). The dev DB is shared with live users — always create temp data and delete it in `finally`.
+**How to apply:** Look for existing self-cleaning HTTP test scripts under `scripts/` and model new ones on them. The dev DB is shared with live users — always create temp data and delete it in `finally`. Restart the app workflow after server edits before testing (the backend is not hot-reloaded).

@@ -291,7 +291,7 @@ export const api = {
     create: {
       method: 'POST' as const,
       path: '/api/customers/:customerId/communications',
-      input: insertCommunicationSchema,
+      input: insertCommunicationSchema.omit({ customerId: true }),
       responses: {
         201: z.custom<typeof communications.$inferSelect>(),
         400: errorSchemas.validation,

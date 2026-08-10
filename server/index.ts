@@ -1,5 +1,6 @@
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
+import { runDataMigrations } from "./dataMigrations";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 
@@ -60,6 +61,10 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  // Apply any pending one-time data migrations before serving requests
+  // (fails loudly if the schema push has not been applied yet).
+  await runDataMigrations();
+
   await registerRoutes(httpServer, app);
 
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {

@@ -1,5 +1,5 @@
 import {
-  projects, tasks, equipment, allocations, folders, files, photos, users, customers, dailyReports, maintenanceLogs, communications, taskStatusHistory, photoAlbums,
+  projects, tasks, equipment, allocations, folders, files, photos, users, customers, contacts, dailyReports, maintenanceLogs, communications, taskStatusHistory, photoAlbums,
   reportTasks, laborEntries, equipmentEntries, reportTaskPhotos, deliveries, deliveryPhotos,
   dailyReportTaskEntries, dailyReportLaborLines, dailyReportEquipmentLines, dailyReportDeliveryEntries, dailyReportInspectionEntries, dailyReportPhotos,
   authorizedUsers, scheduleEntries, taskTitles,
@@ -9,7 +9,7 @@ import {
   payApplications, payApplicationItems,
   todos, todoUpdates, workflowRules, workflowExecutions, notifications, activityLogs, projectStatusHistory,
   type InsertProject, type InsertTask, type InsertEquipment, type InsertAllocation, type InsertFolder, type InsertFileMetadata, type InsertPhoto,
-  type InsertCustomer, type InsertDailyReport, type InsertMaintenanceLog, type InsertCommunication, type InsertTaskStatusHistory, type InsertPhotoAlbum,
+  type InsertCustomer, type Contact, type InsertContact, type InsertDailyReport, type InsertMaintenanceLog, type InsertCommunication, type InsertTaskStatusHistory, type InsertPhotoAlbum,
   type InsertReportTask, type InsertLaborEntry, type InsertEquipmentEntry, type InsertReportTaskPhoto, type InsertDelivery, type InsertDeliveryPhoto,
   type InsertDailyReportTaskEntry, type InsertDailyReportLaborLine, type InsertDailyReportEquipmentLine, type InsertDailyReportDeliveryEntry, type InsertDailyReportInspectionEntry, type InsertDailyReportPhoto,
   type InsertAuthorizedUser, type InsertScheduleEntry,
@@ -61,10 +61,22 @@ export interface IStorage {
 
   // Customers
   getCustomers(): Promise<Customer[]>;
+  listCustomers(options?: { status?: string; search?: string }): Promise<CustomerListItem[]>;
   getCustomer(id: number): Promise<Customer | undefined>;
   createCustomer(customer: InsertCustomer): Promise<Customer>;
   updateCustomer(id: number, customer: Partial<InsertCustomer>): Promise<Customer>;
   deleteCustomer(id: number): Promise<void>;
+  getCustomerDependencyCounts(id: number): Promise<{ projects: number; communications: number }>;
+  findSimilarCustomers(name: string, excludeId?: number): Promise<Customer[]>;
+
+  // Contacts
+  getContacts(customerId: number): Promise<Contact[]>;
+  getContact(id: number): Promise<Contact | undefined>;
+  createContact(contact: InsertContact): Promise<Contact>;
+  updateContact(id: number, contact: Partial<InsertContact>): Promise<Contact>;
+  deleteContact(id: number): Promise<void>;
+  contactCommunicationCount(contactId: number): Promise<number>;
+  findContactsByEmail(customerId: number, email: string, excludeId?: number): Promise<Contact[]>;
 
   // Task Titles
   getTaskTitles(): Promise<TaskTitle[]>;
@@ -391,7 +403,14 @@ export interface IStorage {
   // Activity Logs
   createActivityLog(log: InsertActivityLog): Promise<ActivityLog>;
   getProjectActivity(projectId: number, limit?: number): Promise<ActivityLog[]>;
+  getCustomerActivity(customerId: number, limit?: number): Promise<ActivityLog[]>;
 }
+
+// Customer list item enriched with primary contact and (when searching) why it matched
+export type CustomerListItem = Customer & {
+  primaryContact: Contact | null;
+  matchReason: string | null;
+};
 
 export type TodoFilters = {
   assignedToUserId?: string;
@@ -477,8 +496,137 @@ export class DatabaseStorage implements IStorage {
     return customer;
   }
   async updateCustomer(id: number, updates: Partial<InsertCustomer>): Promise<Customer> {
-    const [customer] = await db.update(customers).set(updates).where(eq(customers.id, id)).returning();
+    const [customer] = await db.update(customers).set({ ...updates, updatedAt: new Date() }).where(eq(customers.id, id)).returning();
     return customer;
+  }
+
+  async listCustomers(options?: { status?: string; search?: string }): Promise<CustomerListItem[]> {
+    const status = options?.status || "active";
+    const search = options?.search?.trim().toLowerCase() || "";
+
+    const conditions = [isNull(customers.deletedAt)];
+    if (status !== "all") {
+      conditions.push(eq(customers.status, status));
+    }
+    const allCustomers = await db.select().from(customers).where(and(...conditions)).orderBy(customers.name);
+    if (allCustomers.length === 0) return [];
+
+    const customerIds = allCustomers.map((c) => c.id);
+    const allContacts = await db.select().from(contacts).where(inArray(contacts.customerId, customerIds));
+    const contactsByCustomer = new Map<number, Contact[]>();
+    for (const ct of allContacts) {
+      const list = contactsByCustomer.get(ct.customerId) || [];
+      list.push(ct);
+      contactsByCustomer.set(ct.customerId, list);
+    }
+
+    const results: CustomerListItem[] = [];
+    for (const cu of allCustomers) {
+      const ctList = contactsByCustomer.get(cu.id) || [];
+      const primaryContact = ctList.find((c) => c.isPrimary && c.isActive) || ctList.find((c) => c.isPrimary) || null;
+
+      let matchReason: string | null = null;
+      if (search) {
+        const has = (v: string | null | undefined) => !!v && v.toLowerCase().includes(search);
+        if (has(cu.name)) matchReason = null; // direct company match needs no explanation
+        else if (has(cu.email)) matchReason = `Company email: ${cu.email}`;
+        else if (has(cu.phone)) matchReason = `Company phone: ${cu.phone}`;
+        else if (has([cu.address, cu.address2, cu.city, cu.state, cu.zip].filter(Boolean).join(" "))) {
+          matchReason = `Address: ${[cu.address, cu.city, cu.state].filter(Boolean).join(", ")}`;
+        } else {
+          const matched = ctList.find((c) => {
+            const fullName = `${c.firstName} ${c.lastName || ""}`.trim();
+            return has(fullName) || has(c.email) || has(c.officePhone) || has(c.mobilePhone);
+          });
+          if (matched) {
+            const fullName = `${matched.firstName} ${matched.lastName || ""}`.trim();
+            matchReason = `Contact: ${fullName}`;
+          } else {
+            continue; // no match at all - exclude from results
+          }
+        }
+      }
+      results.push({ ...cu, primaryContact, matchReason });
+    }
+    return results;
+  }
+
+  async getCustomerDependencyCounts(id: number): Promise<{ projects: number; communications: number }> {
+    const [projRow] = await db.select({ count: sql<number>`count(*)::int` }).from(projects)
+      .where(and(eq(projects.customerId, id), isNull(projects.deletedAt)));
+    // Soft-deleted communications are still historical records that may
+    // reference this customer's contacts, so they count as dependencies for
+    // hard-delete purposes.
+    const [commRow] = await db.select({ count: sql<number>`count(*)::int` }).from(communications)
+      .where(eq(communications.customerId, id));
+    return { projects: projRow?.count ?? 0, communications: commRow?.count ?? 0 };
+  }
+
+  async findSimilarCustomers(name: string, excludeId?: number): Promise<Customer[]> {
+    const normalize = (s: string) => s.toLowerCase().replace(/\b(llc|inc|corp|co|ltd|company|construction)\b/g, "").replace(/[^a-z0-9]/g, "");
+    const target = normalize(name);
+    if (!target) return [];
+    const all = await db.select().from(customers).where(isNull(customers.deletedAt));
+    return all.filter((c) => {
+      if (excludeId && c.id === excludeId) return false;
+      const existing = normalize(c.name);
+      if (!existing) return false;
+      return existing === target || existing.includes(target) || target.includes(existing);
+    });
+  }
+
+  // Contacts
+  async getContacts(customerId: number): Promise<Contact[]> {
+    return await db.select().from(contacts).where(eq(contacts.customerId, customerId))
+      .orderBy(desc(contacts.isPrimary), contacts.firstName);
+  }
+  async getContact(id: number): Promise<Contact | undefined> {
+    const [contact] = await db.select().from(contacts).where(eq(contacts.id, id));
+    return contact;
+  }
+  async createContact(insertContact: InsertContact): Promise<Contact> {
+    return await db.transaction(async (tx) => {
+      if (insertContact.isPrimary) {
+        await tx.update(contacts).set({ isPrimary: false, updatedAt: new Date() })
+          .where(and(eq(contacts.customerId, insertContact.customerId), eq(contacts.isPrimary, true)));
+      }
+      const [contact] = await tx.insert(contacts).values(insertContact).returning();
+      return contact;
+    });
+  }
+  async updateContact(id: number, updates: Partial<InsertContact>): Promise<Contact> {
+    return await db.transaction(async (tx) => {
+      if (updates.isPrimary) {
+        const [existing] = await tx.select().from(contacts).where(eq(contacts.id, id));
+        if (existing) {
+          await tx.update(contacts).set({ isPrimary: false, updatedAt: new Date() })
+            .where(and(eq(contacts.customerId, existing.customerId), eq(contacts.isPrimary, true), ne(contacts.id, id)));
+        }
+      }
+      // Deactivating a contact always clears primary status: an inactive
+      // contact cannot be the primary.
+      const effective = updates.isActive === false ? { ...updates, isPrimary: false } : updates;
+      const [contact] = await tx.update(contacts).set({ ...effective, updatedAt: new Date() }).where(eq(contacts.id, id)).returning();
+      return contact;
+    });
+  }
+  async deleteContact(id: number): Promise<void> {
+    await db.delete(contacts).where(eq(contacts.id, id));
+  }
+  async contactCommunicationCount(contactId: number): Promise<number> {
+    // Includes soft-deleted communications: they remain historical references
+    // to the contact, so the contact must not be hard-deleted.
+    const [row] = await db.select({ count: sql<number>`count(*)::int` }).from(communications)
+      .where(eq(communications.contactId, contactId));
+    return row?.count ?? 0;
+  }
+  async findContactsByEmail(customerId: number, email: string, excludeId?: number): Promise<Contact[]> {
+    const conditions = [
+      eq(contacts.customerId, customerId),
+      sql`lower(${contacts.email}) = lower(${email})`,
+    ];
+    if (excludeId) conditions.push(ne(contacts.id, excludeId));
+    return await db.select().from(contacts).where(and(...conditions));
   }
   async getTaskTitles(): Promise<TaskTitle[]> {
     return await db.select().from(taskTitles).where(isNull(taskTitles.deletedAt)).orderBy(taskTitles.name);
@@ -503,7 +651,13 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteCustomer(id: number): Promise<void> {
-    await db.update(customers).set({ deletedAt: new Date() }).where(eq(customers.id, id));
+    // Deletion is only allowed when the customer has no projects or
+    // communications (enforced at the route), so its contacts have no history
+    // either — remove them in the same transaction to avoid orphans.
+    await db.transaction(async (tx) => {
+      await tx.delete(contacts).where(eq(contacts.customerId, id));
+      await tx.update(customers).set({ deletedAt: new Date() }).where(eq(customers.id, id));
+    });
   }
 
   // Projects (with soft delete)
@@ -2080,6 +2234,18 @@ export class DatabaseStorage implements IStorage {
 
   async getProjectActivity(projectId: number, limit = 100): Promise<ActivityLog[]> {
     return db.select().from(activityLogs).where(eq(activityLogs.projectId, projectId)).orderBy(desc(activityLogs.createdAt)).limit(limit);
+  }
+
+  async getCustomerActivity(customerId: number, limit = 100): Promise<ActivityLog[]> {
+    // Customer events are logged with entityType 'customer'; contact/communication events
+    // carry metadata.customerId so all history for a customer can be read together.
+    return db.select().from(activityLogs)
+      .where(or(
+        and(eq(activityLogs.entityType, "customer"), eq(activityLogs.entityId, customerId)),
+        sql`(${activityLogs.metadata} ->> 'customerId')::int = ${customerId}`,
+      ))
+      .orderBy(desc(activityLogs.createdAt))
+      .limit(limit);
   }
 }
 

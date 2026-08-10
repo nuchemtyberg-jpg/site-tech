@@ -1,4 +1,5 @@
 import { pgTable, text, serial, integer, boolean, timestamp, date, uniqueIndex, index, real, varchar, jsonb } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 import { users } from "./models/auth";
@@ -7,25 +8,131 @@ import { PROJECT_STATUS_VALUES } from "./projectStatus";
 export * from "./models/auth";
 export * from "./projectStatus";
 
-// Customers
+// Customers - a Customer represents a company/organization
+export const CUSTOMER_TYPES = [
+  "general_contractor",
+  "developer",
+  "owner",
+  "construction_manager",
+  "engineer",
+  "architect",
+  "municipality",
+  "property_manager",
+  "vendor",
+  "other",
+] as const;
+export type CustomerType = (typeof CUSTOMER_TYPES)[number];
+
+export const CUSTOMER_TYPE_LABELS: Record<CustomerType, string> = {
+  general_contractor: "General Contractor",
+  developer: "Developer",
+  owner: "Owner",
+  construction_manager: "Construction Manager",
+  engineer: "Engineer",
+  architect: "Architect",
+  municipality: "Municipality / Public Agency",
+  property_manager: "Property Manager",
+  vendor: "Vendor",
+  other: "Other",
+};
+
+export const CUSTOMER_STATUSES = ["active", "inactive", "archived"] as const;
+export type CustomerStatus = (typeof CUSTOMER_STATUSES)[number];
+
 export const customers = pgTable("customers", {
   id: serial("id").primaryKey(),
-  name: text("name").notNull(),
-  company: text("company"),
-  email: text("email"),
-  phone: text("phone"),
+  name: text("name").notNull(), // company / organization name
+  company: text("company"), // legacy column (pre-upgrade); no longer used
+  email: text("email"), // general company email
+  phone: text("phone"), // main company phone
+  website: text("website"),
+  customerType: text("customer_type"), // see CUSTOMER_TYPES
+  status: text("status").notNull().default("active"), // active, inactive, archived
   address: text("address"),
+  address2: text("address_2"),
   city: text("city"),
   state: text("state"),
   zip: text("zip"),
   notes: text("notes"),
+  nameNeedsReview: boolean("name_needs_review").notNull().default(false), // migrated from a person name; company name needs cleanup
   createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
   deletedAt: timestamp("deleted_at"), // Soft delete support
-});
+}, (table) => [
+  index("idx_customers_status").on(table.status),
+  index("idx_customers_name").on(table.name),
+]);
 
-export const insertCustomerSchema = createInsertSchema(customers).omit({ id: true, createdAt: true, deletedAt: true });
+export const insertCustomerSchema = createInsertSchema(customers)
+  .omit({ id: true, company: true, createdAt: true, updatedAt: true, deletedAt: true })
+  .extend({
+    name: z.string().min(1, "Company name is required"),
+    customerType: z.enum(CUSTOMER_TYPES).nullable().optional(),
+    status: z.enum(CUSTOMER_STATUSES).optional(),
+  });
 export type Customer = typeof customers.$inferSelect;
 export type InsertCustomer = z.infer<typeof insertCustomerSchema>;
+
+// Contacts - individual people belonging to a Customer (company)
+export const CONTACT_ROLES = [
+  "estimating",
+  "project_management",
+  "purchasing",
+  "accounting_ap",
+  "executive_owner",
+  "contract_signer",
+  "superintendent",
+  "engineering",
+  "other",
+] as const;
+export type ContactRole = (typeof CONTACT_ROLES)[number];
+
+export const CONTACT_ROLE_LABELS: Record<ContactRole, string> = {
+  estimating: "Estimating",
+  project_management: "Project Management",
+  purchasing: "Purchasing",
+  accounting_ap: "Accounting / AP",
+  executive_owner: "Executive / Owner",
+  contract_signer: "Contract Signer",
+  superintendent: "Superintendent",
+  engineering: "Engineering",
+  other: "Other",
+};
+
+export const contacts = pgTable("contacts", {
+  id: serial("id").primaryKey(),
+  customerId: integer("customer_id").notNull(),
+  firstName: text("first_name").notNull(),
+  lastName: text("last_name"),
+  jobTitle: text("job_title"),
+  roles: text("roles").array().notNull().default(sqlArrayDefault()), // see CONTACT_ROLES (multi-role)
+  email: text("email"),
+  officePhone: text("office_phone"),
+  mobilePhone: text("mobile_phone"),
+  extension: text("extension"),
+  isPrimary: boolean("is_primary").notNull().default(false),
+  isActive: boolean("is_active").notNull().default(true),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_contacts_customer").on(table.customerId),
+  index("idx_contacts_email").on(table.email),
+]);
+
+function sqlArrayDefault() {
+  // drizzle needs an explicit sql default for empty text arrays
+  return sql`'{}'::text[]`;
+}
+
+export const insertContactSchema = createInsertSchema(contacts)
+  .omit({ id: true, createdAt: true, updatedAt: true })
+  .extend({
+    firstName: z.string().min(1, "Name is required"),
+    roles: z.array(z.enum(CONTACT_ROLES)).optional(),
+  });
+export type Contact = typeof contacts.$inferSelect;
+export type InsertContact = z.infer<typeof insertContactSchema>;
 
 // Projects
 export const projects = pgTable("projects", {
@@ -548,6 +655,7 @@ export type InsertRfiResponse = z.infer<typeof insertRfiResponseSchema>;
 export const communications = pgTable("communications", {
   id: serial("id").primaryKey(),
   customerId: integer("customer_id").notNull(),
+  contactId: integer("contact_id"), // optional link to a specific contact at the customer
   projectId: integer("project_id"),
   type: text("type").notNull(), // email, phone, meeting, site_visit, other
   subject: text("subject"),
@@ -559,7 +667,11 @@ export const communications = pgTable("communications", {
   deletedAt: timestamp("deleted_at"), // Soft delete support
 });
 
-export const insertCommunicationSchema = createInsertSchema(communications).omit({ id: true, createdAt: true, deletedAt: true });
+export const insertCommunicationSchema = createInsertSchema(communications).omit({ id: true, createdAt: true, deletedAt: true }).extend({
+  contactDate: z.coerce.date(),
+  contactId: z.number().int().nullable().optional(),
+  projectId: z.number().int().nullable().optional(),
+});
 export type Communication = typeof communications.$inferSelect;
 export type InsertCommunication = z.infer<typeof insertCommunicationSchema>;
 

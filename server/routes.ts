@@ -601,9 +601,27 @@ export async function registerRoutes(
   });
 
   // Customers - all routes protected by authorization
+  // Helper to resolve the acting user for activity logging
+  const getActor = async (req: any) => {
+    const claims = (req.user as any)?.claims;
+    const dbUser = claims?.sub ? await storage.getUser(claims.sub) : undefined;
+    return actorFromUser(dbUser);
+  };
+
   app.get(api.customers.list.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
-    const customers = await storage.getCustomers();
-    res.json(customers);
+    const status = typeof req.query.status === "string" ? req.query.status : "active";
+    const search = typeof req.query.search === "string" ? req.query.search : undefined;
+    const list = await storage.listCustomers({ status, search });
+    res.json(list);
+  });
+
+  // Duplicate company-name check (must be registered before /api/customers/:id)
+  app.get("/api/customers/duplicate-check", isAuthenticated, isAuthorizedUser, async (req, res) => {
+    const name = typeof req.query.name === "string" ? req.query.name : "";
+    const excludeId = req.query.excludeId ? Number(req.query.excludeId) : undefined;
+    if (!name.trim()) return res.json([]);
+    const matches = await storage.findSimilarCustomers(name, excludeId);
+    res.json(matches.map((c) => ({ id: c.id, name: c.name, customerType: c.customerType, status: c.status })));
   });
 
   app.get(api.customers.get.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
@@ -616,6 +634,12 @@ export async function registerRoutes(
     try {
       const input = api.customers.create.input.parse(req.body);
       const customer = await storage.createCustomer(input);
+      const actor = await getActor(req);
+      await logActivity({
+        entityType: "customer", entityId: customer.id, action: "customer_created",
+        actor, description: `Customer "${customer.name}" created`,
+        metadata: { customerId: customer.id },
+      });
       res.status(201).json(customer);
     } catch (err) {
       if (err instanceof z.ZodError) {
@@ -627,17 +651,184 @@ export async function registerRoutes(
 
   app.put(api.customers.update.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
     try {
+      const id = Number(req.params.id);
+      const existing = await storage.getCustomer(id);
+      if (!existing) return res.status(404).json({ message: "Customer not found" });
       const input = api.customers.update.input.parse(req.body);
-      const customer = await storage.updateCustomer(Number(req.params.id), input);
+      const customer = await storage.updateCustomer(id, input);
+      const actor = await getActor(req);
+      const action = input.status === "archived" && existing.status !== "archived" ? "customer_archived" : "customer_edited";
+      await logActivity({
+        entityType: "customer", entityId: customer.id, action,
+        actor,
+        description: action === "customer_archived"
+          ? `Customer "${customer.name}" archived`
+          : `Customer "${customer.name}" edited`,
+        metadata: { customerId: customer.id },
+      });
       res.json(customer);
     } catch (err) {
-      return res.status(404).json({ message: "Customer not found" });
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0].message });
+      }
+      throw err;
     }
   });
 
-  app.delete(api.customers.delete.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
-    await storage.deleteCustomer(Number(req.params.id));
+  // Archive customer (safe alternative to deletion)
+  app.post("/api/customers/:id/archive", isAuthenticated, isAuthorizedUser, async (req, res) => {
+    const id = Number(req.params.id);
+    const existing = await storage.getCustomer(id);
+    if (!existing) return res.status(404).json({ message: "Customer not found" });
+    const customer = await storage.updateCustomer(id, { status: "archived" });
+    const actor = await getActor(req);
+    await logActivity({
+      entityType: "customer", entityId: id, action: "customer_archived",
+      actor, description: `Customer "${customer.name}" archived`,
+      metadata: { customerId: id },
+    });
+    res.json(customer);
+  });
+
+  // Hard delete is admin-only and blocked when historical records exist
+  app.delete(api.customers.delete.path, isAuthenticated, isAdmin, async (req, res) => {
+    const id = Number(req.params.id);
+    const existing = await storage.getCustomer(id);
+    if (!existing) return res.status(404).json({ message: "Customer not found" });
+    const counts = await storage.getCustomerDependencyCounts(id);
+    if (counts.projects > 0 || counts.communications > 0) {
+      const parts: string[] = [];
+      if (counts.projects > 0) parts.push(`${counts.projects} Project${counts.projects === 1 ? "" : "s"}`);
+      if (counts.communications > 0) parts.push(`${counts.communications} Communication${counts.communications === 1 ? "" : "s"}`);
+      return res.status(409).json({
+        message: `This customer cannot be deleted because it has ${parts.join(" and ")}. Archive the customer instead.`,
+        counts,
+      });
+    }
+    await storage.deleteCustomer(id);
     res.status(204).send();
+  });
+
+  // Customer activity log
+  app.get("/api/customers/:id/activity", isAuthenticated, isAuthorizedUser, async (req, res) => {
+    const activity = await storage.getCustomerActivity(Number(req.params.id));
+    res.json(activity);
+  });
+
+  // Projects belonging to a customer (drives the Projects tab and communication project select)
+  app.get("/api/customers/:customerId/projects", isAuthenticated, isAuthorizedUser, async (req, res) => {
+    const customerId = Number(req.params.customerId);
+    if (isNaN(customerId)) return res.status(400).json({ message: "Invalid customer id" });
+    const customer = await storage.getCustomer(customerId);
+    if (!customer) return res.status(404).json({ message: "Customer not found" });
+    const list = await storage.getProjectsByCustomer(customerId);
+    res.json(list);
+  });
+
+  // Contacts
+  app.get("/api/customers/:customerId/contacts", isAuthenticated, isAuthorizedUser, async (req, res) => {
+    const customerId = Number(req.params.customerId);
+    if (isNaN(customerId)) return res.status(400).json({ message: "Invalid customer id" });
+    const customer = await storage.getCustomer(customerId);
+    if (!customer) return res.status(404).json({ message: "Customer not found" });
+    const list = await storage.getContacts(customerId);
+    res.json(list);
+  });
+
+  app.post("/api/customers/:customerId/contacts", isAuthenticated, isAuthorizedUser, async (req, res) => {
+    try {
+      const customerId = Number(req.params.customerId);
+      const customer = await storage.getCustomer(customerId);
+      if (!customer) return res.status(404).json({ message: "Customer not found" });
+      const { insertContactSchema } = await import("@shared/schema");
+      const input = insertContactSchema.parse({ ...req.body, customerId });
+      const contact = await storage.createContact(input);
+      const actor = await getActor(req);
+      const fullName = `${contact.firstName} ${contact.lastName || ""}`.trim();
+      await logActivity({
+        entityType: "contact", entityId: contact.id, action: "contact_added",
+        actor, description: `Contact "${fullName}" added to ${customer.name}${contact.isPrimary ? " (Primary)" : ""}`,
+        metadata: { customerId },
+      });
+      res.status(201).json(contact);
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0].message });
+      }
+      throw err;
+    }
+  });
+
+  app.put("/api/contacts/:id", isAuthenticated, isAuthorizedUser, async (req, res) => {
+    try {
+      const id = Number(req.params.id);
+      const existing = await storage.getContact(id);
+      if (!existing) return res.status(404).json({ message: "Contact not found" });
+      const { insertContactSchema } = await import("@shared/schema");
+      const input = insertContactSchema.partial().omit({ customerId: true }).parse(req.body);
+      const contact = await storage.updateContact(id, input);
+      const actor = await getActor(req);
+      const fullName = `${contact.firstName} ${contact.lastName || ""}`.trim();
+
+      let action = "contact_edited";
+      let description = `Contact "${fullName}" edited`;
+      if (input.isActive === false && existing.isActive) {
+        action = "contact_deactivated";
+        description = `Contact "${fullName}" deactivated`;
+      } else if (input.isActive === true && !existing.isActive) {
+        action = "contact_reactivated";
+        description = `Contact "${fullName}" reactivated`;
+      } else if (input.isPrimary === true && !existing.isPrimary) {
+        action = "primary_contact_changed";
+        description = `"${fullName}" set as Primary Contact`;
+      }
+      await logActivity({
+        entityType: "contact", entityId: id, action,
+        actor, description,
+        metadata: { customerId: existing.customerId },
+      });
+      res.json(contact);
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0].message });
+      }
+      throw err;
+    }
+  });
+
+  // Hard delete a contact - only allowed when it has no historical relationships
+  app.delete("/api/contacts/:id", isAuthenticated, isAuthorizedUser, async (req, res) => {
+    const id = Number(req.params.id);
+    const existing = await storage.getContact(id);
+    if (!existing) return res.status(404).json({ message: "Contact not found" });
+    const commCount = await storage.contactCommunicationCount(id);
+    if (commCount > 0) {
+      return res.status(409).json({
+        message: `This contact is linked to ${commCount} communication${commCount === 1 ? "" : "s"}. Deactivate the contact instead to keep history intact.`,
+      });
+    }
+    await storage.deleteContact(id);
+    const actor = await getActor(req);
+    const fullName = `${existing.firstName} ${existing.lastName || ""}`.trim();
+    await logActivity({
+      entityType: "contact", entityId: id, action: "contact_deleted",
+      actor, description: `Contact "${fullName}" deleted`,
+      metadata: { customerId: existing.customerId },
+    });
+    res.status(204).send();
+  });
+
+  // Duplicate contact-email check within a customer
+  app.get("/api/customers/:customerId/contacts/duplicate-check", isAuthenticated, isAuthorizedUser, async (req, res) => {
+    const customerId = Number(req.params.customerId);
+    if (isNaN(customerId)) return res.status(400).json({ message: "Invalid customer id" });
+    const customer = await storage.getCustomer(customerId);
+    if (!customer) return res.status(404).json({ message: "Customer not found" });
+    const email = typeof req.query.email === "string" ? req.query.email : "";
+    const excludeId = req.query.excludeId ? Number(req.query.excludeId) : undefined;
+    if (!email.trim()) return res.json([]);
+    const matches = await storage.findContactsByEmail(customerId, email, excludeId);
+    res.json(matches);
   });
 
   // Task Titles (a.k.a. task types) - persistent list users can add to when creating tasks
@@ -3036,10 +3227,33 @@ export async function registerRoutes(
 
   app.post(api.communications.create.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
     try {
+      const customerId = Number(req.params.customerId);
       const input = api.communications.create.input.parse(req.body);
+
+      // Optional contact link must belong to this customer
+      if (input.contactId) {
+        const contact = await storage.getContact(input.contactId);
+        if (!contact || contact.customerId !== customerId) {
+          return res.status(400).json({ message: "Contact does not belong to this customer" });
+        }
+      }
+      // Optional project link must belong to this customer
+      if (input.projectId) {
+        const project = await storage.getProject(input.projectId);
+        if (!project || project.customerId !== customerId) {
+          return res.status(400).json({ message: "Project does not belong to this customer" });
+        }
+      }
+
       const comm = await storage.createCommunication({
         ...input,
-        customerId: Number(req.params.customerId),
+        customerId,
+      });
+      const actor = await getActor(req);
+      await logActivity({
+        entityType: "communication", entityId: comm.id, action: "communication_logged",
+        actor, description: `Communication logged${comm.subject ? `: "${comm.subject}"` : ` (${comm.type})`}`,
+        metadata: { customerId },
       });
       res.status(201).json(comm);
     } catch (err) {
