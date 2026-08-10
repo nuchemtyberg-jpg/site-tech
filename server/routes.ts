@@ -807,6 +807,12 @@ export async function registerRoutes(
         message: `This contact is linked to ${commCount} communication${commCount === 1 ? "" : "s"}. Deactivate the contact instead to keep history intact.`,
       });
     }
+    const projectLinkCount = await storage.contactProjectLinkCount(id);
+    if (projectLinkCount > 0) {
+      return res.status(409).json({
+        message: `This contact is linked to ${projectLinkCount} project${projectLinkCount === 1 ? "" : "s"}. Remove it from those projects first, or deactivate the contact instead.`,
+      });
+    }
     await storage.deleteContact(id);
     const actor = await getActor(req);
     const fullName = `${existing.firstName} ${existing.lastName || ""}`.trim();
@@ -829,6 +835,91 @@ export async function registerRoutes(
     if (!email.trim()) return res.json([]);
     const matches = await storage.findContactsByEmail(customerId, email, excludeId);
     res.json(matches);
+  });
+
+  // Project Contacts - link a project to contacts belonging to its customer
+  app.get("/api/projects/:projectId/contacts", isAuthenticated, isAuthorizedUser, async (req, res) => {
+    const projectId = Number(req.params.projectId);
+    if (isNaN(projectId)) return res.status(400).json({ message: "Invalid project id" });
+    const project = await storage.getProject(projectId);
+    if (!project) return res.status(404).json({ message: "Project not found" });
+    const list = await storage.getProjectContacts(projectId);
+    res.json(list);
+  });
+
+  app.post("/api/projects/:projectId/contacts", isAuthenticated, isAuthorizedUser, async (req, res) => {
+    try {
+      const projectId = Number(req.params.projectId);
+      if (isNaN(projectId)) return res.status(400).json({ message: "Invalid project id" });
+      const project = await storage.getProject(projectId);
+      if (!project) return res.status(404).json({ message: "Project not found" });
+      if (!project.customerId) {
+        return res.status(400).json({ message: "Project has no customer; assign a customer before linking contacts" });
+      }
+      const { insertProjectContactSchema } = await import("@shared/schema");
+      const input = insertProjectContactSchema.parse({ ...req.body, projectId });
+      const contact = await storage.getContact(input.contactId);
+      if (!contact) return res.status(404).json({ message: "Contact not found" });
+      if (contact.customerId !== project.customerId) {
+        return res.status(400).json({ message: "Contact does not belong to this project's customer" });
+      }
+      const existing = await storage.findProjectContact(projectId, input.contactId);
+      if (existing) {
+        return res.status(409).json({ message: "Contact is already linked to this project" });
+      }
+      const link = await storage.createProjectContact(input);
+      const actor = await getActor(req);
+      const fullName = `${contact.firstName} ${contact.lastName || ""}`.trim();
+      await logActivity({
+        entityType: "project", entityId: projectId, action: "project_contact_linked",
+        actor, description: `Contact "${fullName}" linked to project "${project.name}"${input.roleLabel ? ` as ${input.roleLabel}` : ""}`,
+        metadata: { contactId: contact.id, customerId: contact.customerId },
+      });
+      res.status(201).json({ ...link, contact });
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0].message });
+      }
+      throw err;
+    }
+  });
+
+  app.patch("/api/project-contacts/:id", isAuthenticated, isAuthorizedUser, async (req, res) => {
+    try {
+      const id = Number(req.params.id);
+      const existing = await storage.getProjectContact(id);
+      if (!existing) return res.status(404).json({ message: "Project contact link not found" });
+      const updateSchema = z.object({ roleLabel: z.string().max(100).nullable().optional() });
+      const input = updateSchema.parse(req.body);
+      // Omitted roleLabel is a no-op; explicit null clears it.
+      if (!("roleLabel" in req.body)) {
+        return res.json(existing);
+      }
+      const updated = await storage.updateProjectContact(id, { roleLabel: input.roleLabel ?? null });
+      res.json(updated);
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0].message });
+      }
+      throw err;
+    }
+  });
+
+  app.delete("/api/project-contacts/:id", isAuthenticated, isAuthorizedUser, async (req, res) => {
+    const id = Number(req.params.id);
+    const existing = await storage.getProjectContact(id);
+    if (!existing) return res.status(404).json({ message: "Project contact link not found" });
+    await storage.deleteProjectContact(id);
+    const contact = await storage.getContact(existing.contactId);
+    const project = await storage.getProject(existing.projectId);
+    const actor = await getActor(req);
+    const fullName = contact ? `${contact.firstName} ${contact.lastName || ""}`.trim() : `#${existing.contactId}`;
+    await logActivity({
+      entityType: "project", entityId: existing.projectId, action: "project_contact_unlinked",
+      actor, description: `Contact "${fullName}" unlinked from project "${project?.name ?? existing.projectId}"`,
+      metadata: { contactId: existing.contactId },
+    });
+    res.status(204).send();
   });
 
   // Task Titles (a.k.a. task types) - persistent list users can add to when creating tasks

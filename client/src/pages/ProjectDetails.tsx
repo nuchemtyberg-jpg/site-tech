@@ -63,7 +63,10 @@ import {
   Settings,
   Mail,
   Play,
-  Video
+  Video,
+  Phone,
+  Smartphone,
+  UserPlus
 } from "lucide-react";
 import { 
   DropdownMenu, 
@@ -107,7 +110,7 @@ import { NativeFileUploader } from "@/components/NativeFileUploader";
 import { PDFViewer } from "@/components/PDFViewer";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import type { Customer } from "@shared/schema";
+import type { Customer, Contact, ProjectContact } from "@shared/schema";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { z } from "zod";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
@@ -313,6 +316,68 @@ export default function ProjectDetails() {
       toast({ title: "Failed to remove recipient", variant: "destructive" });
     },
   });
+
+  // Project Contacts
+  type ProjectContactWithContact = ProjectContact & { contact: Contact };
+  const { data: projectContacts = [] } = useQuery<ProjectContactWithContact[]>({
+    queryKey: ["/api/projects", projectId, "contacts"],
+    queryFn: async () => {
+      const res = await fetch(`/api/projects/${projectId}/contacts`, { credentials: "include" });
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: !isNaN(projectId),
+  });
+
+  const [isAddContactOpen, setIsAddContactOpen] = useState(false);
+  const [selectedContactId, setSelectedContactId] = useState<string>("");
+  const [contactRoleLabel, setContactRoleLabel] = useState("");
+  const [removeProjectContactId, setRemoveProjectContactId] = useState<number | null>(null);
+
+  const { data: customerContacts = [] } = useQuery<Contact[]>({
+    queryKey: ["/api/customers", project?.customerId, "contacts"],
+    queryFn: async () => {
+      const res = await fetch(`/api/customers/${project?.customerId}/contacts`, { credentials: "include" });
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: isAddContactOpen && !!project?.customerId,
+  });
+
+  const linkContactMutation = useMutation({
+    mutationFn: async (data: { contactId: number; roleLabel?: string | null }) => {
+      const res = await apiRequest("POST", `/api/projects/${projectId}/contacts`, data);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "contacts"] });
+      toast({ title: "Contact linked to project" });
+      setIsAddContactOpen(false);
+      setSelectedContactId("");
+      setContactRoleLabel("");
+    },
+    onError: async (err: any) => {
+      const message = err?.message?.replace(/^\d+:\s*/, "") || "Failed to link contact";
+      toast({ title: message, variant: "destructive" });
+    },
+  });
+
+  const unlinkContactMutation = useMutation({
+    mutationFn: async (id: number) => {
+      await apiRequest("DELETE", `/api/project-contacts/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "contacts"] });
+      toast({ title: "Contact removed from project" });
+      setRemoveProjectContactId(null);
+    },
+    onError: () => {
+      toast({ title: "Failed to remove contact", variant: "destructive" });
+    },
+  });
+
+  const linkedContactIds = new Set(projectContacts.map((pc) => pc.contactId));
+  const availableContacts = customerContacts.filter((c) => c.isActive && !linkedContactIds.has(c.id));
 
   const [newRecipientEmail, setNewRecipientEmail] = useState("");
   const [newRecipientName, setNewRecipientName] = useState("");
@@ -1610,6 +1675,79 @@ export default function ProjectDetails() {
                 </div>
               )}
               
+              {/* Project Contacts */}
+              <div className="text-sm border-t border-border pt-4 mt-2">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <User className="w-4 h-4 text-primary shrink-0" />
+                    <span className="text-muted-foreground text-xs uppercase tracking-wide">Project Contacts</span>
+                  </div>
+                  {project.customerId && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={(e) => { e.stopPropagation(); setIsAddContactOpen(true); }}
+                      data-testid="button-add-project-contact"
+                    >
+                      <UserPlus className="w-4 h-4 mr-1" /> Link Contact
+                    </Button>
+                  )}
+                </div>
+                {projectContacts.length === 0 ? (
+                  <p className="text-muted-foreground text-sm" data-testid="text-no-project-contacts">
+                    {project.customerId
+                      ? "No contacts linked yet. Link the customer's contacts involved in this job."
+                      : "Assign a customer to this project to link contacts."}
+                  </p>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {projectContacts.map((pc) => (
+                      <div key={pc.id} className="border border-border rounded-lg p-3 flex flex-col gap-1" data-testid={`card-project-contact-${pc.id}`}>
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <span className="font-medium text-foreground block truncate">
+                              {pc.contact.firstName} {pc.contact.lastName || ""}
+                            </span>
+                            <span className="text-xs text-muted-foreground block truncate">
+                              {[pc.roleLabel, pc.contact.jobTitle].filter(Boolean).join(" · ") || null}
+                            </span>
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="shrink-0 h-8 w-8 text-muted-foreground hover:text-destructive"
+                            onClick={() => setRemoveProjectContactId(pc.id)}
+                            data-testid={`button-remove-project-contact-${pc.id}`}
+                          >
+                            <X className="w-4 h-4" />
+                          </Button>
+                        </div>
+                        <div className="flex flex-col gap-1 text-sm">
+                          {pc.contact.mobilePhone && (
+                            <a href={`tel:${pc.contact.mobilePhone}`} className="flex items-center gap-2 text-foreground hover:text-primary" data-testid={`link-contact-mobile-${pc.id}`}>
+                              <Smartphone className="w-3.5 h-3.5 shrink-0" /> {pc.contact.mobilePhone}
+                            </a>
+                          )}
+                          {pc.contact.officePhone && (
+                            <a href={`tel:${pc.contact.officePhone}`} className="flex items-center gap-2 text-foreground hover:text-primary" data-testid={`link-contact-office-${pc.id}`}>
+                              <Phone className="w-3.5 h-3.5 shrink-0" /> {pc.contact.officePhone}{pc.contact.extension ? ` x${pc.contact.extension}` : ""}
+                            </a>
+                          )}
+                          {pc.contact.email && (
+                            <a href={`mailto:${pc.contact.email}`} className="flex items-center gap-2 text-foreground hover:text-primary truncate" data-testid={`link-contact-email-${pc.id}`}>
+                              <Mail className="w-3.5 h-3.5 shrink-0" /> <span className="truncate">{pc.contact.email}</span>
+                            </a>
+                          )}
+                          {!pc.contact.mobilePhone && !pc.contact.officePhone && !pc.contact.email && (
+                            <span className="text-muted-foreground text-xs">No phone or email on file</span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
               {/* Action buttons */}
               <div className="flex items-center gap-2 mt-4 pt-4 border-t border-border">
                 <Button variant="outline" onClick={() => setIsEditOpen(true)} data-testid="button-edit-project" className="min-h-[44px] md:min-h-9">
@@ -1634,6 +1772,85 @@ export default function ProjectDetails() {
             </div>
           )}
         </div>
+
+        {/* Link Contact Dialog */}
+        <Dialog open={isAddContactOpen} onOpenChange={setIsAddContactOpen}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Link Contact to Project</DialogTitle>
+              <DialogDescription>
+                Choose one of the customer's contacts and optionally note their role on this job.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label>Contact *</Label>
+                <Select value={selectedContactId} onValueChange={setSelectedContactId}>
+                  <SelectTrigger data-testid="select-project-contact" className="bg-white dark:bg-zinc-900 text-black dark:text-white">
+                    <SelectValue placeholder={availableContacts.length ? "Select a contact" : "No contacts available"} />
+                  </SelectTrigger>
+                  <SelectContent className="bg-white dark:bg-zinc-900 text-black dark:text-white">
+                    {availableContacts.map((c) => (
+                      <SelectItem key={c.id} value={String(c.id)}>
+                        {c.firstName} {c.lastName || ""}{c.jobTitle ? ` — ${c.jobTitle}` : ""}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {availableContacts.length === 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    All of this customer's active contacts are already linked, or none exist yet. Add contacts from the customer's page.
+                  </p>
+                )}
+              </div>
+              <div className="space-y-2">
+                <Label>Role on this job (optional)</Label>
+                <Input
+                  placeholder="e.g. Site Super, Billing (AP)"
+                  value={contactRoleLabel}
+                  onChange={(e) => setContactRoleLabel(e.target.value)}
+                  maxLength={100}
+                  data-testid="input-project-contact-role"
+                  className="bg-white dark:bg-zinc-900 text-black dark:text-white"
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setIsAddContactOpen(false)}>Cancel</Button>
+              <Button
+                disabled={!selectedContactId || linkContactMutation.isPending}
+                onClick={() => linkContactMutation.mutate({
+                  contactId: Number(selectedContactId),
+                  roleLabel: contactRoleLabel.trim() || null,
+                })}
+                data-testid="button-confirm-link-contact"
+              >
+                {linkContactMutation.isPending ? "Linking..." : "Link Contact"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Remove Project Contact Confirmation */}
+        <AlertDialog open={removeProjectContactId !== null} onOpenChange={(open) => !open && setRemoveProjectContactId(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Remove contact from project?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This only unlinks the contact from this project. The contact stays on the customer's record.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={() => removeProjectContactId !== null && unlinkContactMutation.mutate(removeProjectContactId)}
+                data-testid="button-confirm-remove-project-contact"
+              >
+                Remove
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
 
         {/* Edit Project Dialog */}
         <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>

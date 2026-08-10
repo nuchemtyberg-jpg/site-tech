@@ -1,5 +1,5 @@
 import {
-  projects, tasks, equipment, allocations, folders, files, photos, users, customers, contacts, dailyReports, maintenanceLogs, communications, taskStatusHistory, photoAlbums,
+  projects, tasks, equipment, allocations, folders, files, photos, users, customers, contacts, projectContacts, dailyReports, maintenanceLogs, communications, taskStatusHistory, photoAlbums,
   reportTasks, laborEntries, equipmentEntries, reportTaskPhotos, deliveries, deliveryPhotos,
   dailyReportTaskEntries, dailyReportLaborLines, dailyReportEquipmentLines, dailyReportDeliveryEntries, dailyReportInspectionEntries, dailyReportPhotos,
   authorizedUsers, scheduleEntries, taskTitles,
@@ -9,7 +9,7 @@ import {
   payApplications, payApplicationItems,
   todos, todoUpdates, workflowRules, workflowExecutions, notifications, activityLogs, projectStatusHistory,
   type InsertProject, type InsertTask, type InsertEquipment, type InsertAllocation, type InsertFolder, type InsertFileMetadata, type InsertPhoto,
-  type InsertCustomer, type Contact, type InsertContact, type InsertDailyReport, type InsertMaintenanceLog, type InsertCommunication, type InsertTaskStatusHistory, type InsertPhotoAlbum,
+  type InsertCustomer, type Contact, type InsertContact, type ProjectContact, type InsertProjectContact, type InsertDailyReport, type InsertMaintenanceLog, type InsertCommunication, type InsertTaskStatusHistory, type InsertPhotoAlbum,
   type InsertReportTask, type InsertLaborEntry, type InsertEquipmentEntry, type InsertReportTaskPhoto, type InsertDelivery, type InsertDeliveryPhoto,
   type InsertDailyReportTaskEntry, type InsertDailyReportLaborLine, type InsertDailyReportEquipmentLine, type InsertDailyReportDeliveryEntry, type InsertDailyReportInspectionEntry, type InsertDailyReportPhoto,
   type InsertAuthorizedUser, type InsertScheduleEntry,
@@ -76,7 +76,16 @@ export interface IStorage {
   updateContact(id: number, contact: Partial<InsertContact>): Promise<Contact>;
   deleteContact(id: number): Promise<void>;
   contactCommunicationCount(contactId: number): Promise<number>;
+  contactProjectLinkCount(contactId: number): Promise<number>;
   findContactsByEmail(customerId: number, email: string, excludeId?: number): Promise<Contact[]>;
+
+  // Project Contacts
+  getProjectContacts(projectId: number): Promise<ProjectContactWithContact[]>;
+  getProjectContact(id: number): Promise<ProjectContact | undefined>;
+  findProjectContact(projectId: number, contactId: number): Promise<ProjectContact | undefined>;
+  createProjectContact(link: InsertProjectContact): Promise<ProjectContact>;
+  updateProjectContact(id: number, updates: { roleLabel?: string | null }): Promise<ProjectContact>;
+  deleteProjectContact(id: number): Promise<void>;
 
   // Task Titles
   getTaskTitles(): Promise<TaskTitle[]>;
@@ -408,6 +417,11 @@ export interface IStorage {
   getCustomerActivity(customerId: number, limit?: number): Promise<ActivityLog[]>;
 }
 
+// Project contact link enriched with the full contact record
+export type ProjectContactWithContact = ProjectContact & {
+  contact: Contact;
+};
+
 // Customer list item enriched with primary contact and (when searching) why it matched
 export type CustomerListItem = Customer & {
   primaryContact: Contact | null;
@@ -622,6 +636,11 @@ export class DatabaseStorage implements IStorage {
       .where(eq(communications.contactId, contactId));
     return row?.count ?? 0;
   }
+  async contactProjectLinkCount(contactId: number): Promise<number> {
+    const [row] = await db.select({ count: sql<number>`count(*)::int` }).from(projectContacts)
+      .where(eq(projectContacts.contactId, contactId));
+    return row?.count ?? 0;
+  }
   async findContactsByEmail(customerId: number, email: string, excludeId?: number): Promise<Contact[]> {
     const conditions = [
       eq(contacts.customerId, customerId),
@@ -630,6 +649,36 @@ export class DatabaseStorage implements IStorage {
     if (excludeId) conditions.push(ne(contacts.id, excludeId));
     return await db.select().from(contacts).where(and(...conditions));
   }
+  // Project Contacts
+  async getProjectContacts(projectId: number): Promise<ProjectContactWithContact[]> {
+    const rows = await db.select({ link: projectContacts, contact: contacts })
+      .from(projectContacts)
+      .innerJoin(contacts, eq(projectContacts.contactId, contacts.id))
+      .where(eq(projectContacts.projectId, projectId))
+      .orderBy(desc(contacts.isPrimary), contacts.firstName);
+    return rows.map(r => ({ ...r.link, contact: r.contact }));
+  }
+  async getProjectContact(id: number): Promise<ProjectContact | undefined> {
+    const [row] = await db.select().from(projectContacts).where(eq(projectContacts.id, id));
+    return row;
+  }
+  async findProjectContact(projectId: number, contactId: number): Promise<ProjectContact | undefined> {
+    const [row] = await db.select().from(projectContacts)
+      .where(and(eq(projectContacts.projectId, projectId), eq(projectContacts.contactId, contactId)));
+    return row;
+  }
+  async createProjectContact(link: InsertProjectContact): Promise<ProjectContact> {
+    const [row] = await db.insert(projectContacts).values(link).returning();
+    return row;
+  }
+  async updateProjectContact(id: number, updates: { roleLabel?: string | null }): Promise<ProjectContact> {
+    const [row] = await db.update(projectContacts).set(updates).where(eq(projectContacts.id, id)).returning();
+    return row;
+  }
+  async deleteProjectContact(id: number): Promise<void> {
+    await db.delete(projectContacts).where(eq(projectContacts.id, id));
+  }
+
   async getTaskTitles(): Promise<TaskTitle[]> {
     return await db.select().from(taskTitles).where(isNull(taskTitles.deletedAt)).orderBy(taskTitles.name);
   }
@@ -657,6 +706,11 @@ export class DatabaseStorage implements IStorage {
     // communications (enforced at the route), so its contacts have no history
     // either — remove them in the same transaction to avoid orphans.
     await db.transaction(async (tx) => {
+      // Defensive: remove any project-contact links for this customer's
+      // contacts so hard-deleting the contacts can't orphan link rows.
+      await tx.delete(projectContacts).where(
+        inArray(projectContacts.contactId, tx.select({ id: contacts.id }).from(contacts).where(eq(contacts.customerId, id)))
+      );
       await tx.delete(contacts).where(eq(contacts.customerId, id));
       await tx.update(customers).set({ deletedAt: new Date() }).where(eq(customers.id, id));
     });

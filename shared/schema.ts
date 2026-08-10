@@ -134,6 +134,27 @@ export const insertContactSchema = createInsertSchema(contacts)
 export type Contact = typeof contacts.$inferSelect;
 export type InsertContact = z.infer<typeof insertContactSchema>;
 
+// Project Contacts - links a project to contacts of its customer (with optional role label)
+export const projectContacts = pgTable("project_contacts", {
+  id: serial("id").primaryKey(),
+  projectId: integer("project_id").notNull(),
+  contactId: integer("contact_id").notNull(),
+  roleLabel: text("role_label"), // optional free-text role for this job, e.g. "Site Super"
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  uniqueIndex("uq_project_contacts_project_contact").on(table.projectId, table.contactId),
+  index("idx_project_contacts_project").on(table.projectId),
+  index("idx_project_contacts_contact").on(table.contactId),
+]);
+
+export const insertProjectContactSchema = createInsertSchema(projectContacts)
+  .omit({ id: true, createdAt: true })
+  .extend({
+    roleLabel: z.string().max(100).nullable().optional(),
+  });
+export type ProjectContact = typeof projectContacts.$inferSelect;
+export type InsertProjectContact = z.infer<typeof insertProjectContactSchema>;
+
 // Projects
 export const projects = pgTable("projects", {
   id: serial("id").primaryKey(),
