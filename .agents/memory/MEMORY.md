@@ -1,1 +1,2 @@
 - [Daily report "already completed" 403 race](daily-report-completion-race.md) — spurious 403 on sign is a double-submit race; needs a synchronous ref guard, not just isPending.
+- [Authenticated HTTP testing](authenticated-http-testing.md) — forge a signed `connect.sid` + PG session row to e2e-test protected APIs behind Replit Auth; dev DB is live, always clean up.

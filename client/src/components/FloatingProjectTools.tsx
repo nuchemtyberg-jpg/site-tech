@@ -8,6 +8,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { 
   ClipboardList, 
+  ListTodo,
+  Activity,
   FileText, 
   Camera, 
   Calendar,
@@ -30,8 +32,10 @@ const toolItems = [
   { value: "daily-reports", label: "Daily Reports", icon: Calendar },
   { value: "photos", label: "Photos", icon: Camera },
   { value: "tasks", label: "Tasks", icon: ClipboardList },
+  { value: "todos", label: "Todos", icon: ListTodo },
   { value: "communications", label: "Communications", icon: Mail },
   { value: "rfis", label: "RFIs", icon: MessageSquareText },
+  { value: "activity", label: "Activity", icon: Activity },
   { value: "settings", label: "Settings", icon: Settings },
 ];
 

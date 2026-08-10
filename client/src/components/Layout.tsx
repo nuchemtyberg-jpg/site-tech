@@ -16,12 +16,15 @@ import {
   Settings,
   ChevronRight,
   Files,
-  BarChart3
+  BarChart3,
+  ClipboardCheck,
+  Zap
 } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { NotificationBell } from "@/components/NotificationBell";
 import siteTechLogo from "@assets/Logo_1770600587313.png";
 
 export function Layout({ children }: { children: React.ReactNode }) {
@@ -31,6 +34,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
   const navItems = [
     { href: "/", label: "Dashboard", icon: LayoutDashboard },
+    { href: "/my-work", label: "My Work", icon: ClipboardCheck },
     { href: "/projects", label: "Projects", icon: FolderKanban },
     { href: "/customers", label: "Customers", icon: Users },
     { href: "/schedule", label: "Schedule", icon: Calendar },
@@ -39,6 +43,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   
   const adminItems = [
     { href: "/admin/users", label: "User Management", icon: Shield },
+    { href: "/admin/workflows", label: "Workflows", icon: Zap },
     { href: "/admin/billing", label: "Billing", icon: Receipt },
     { href: "/admin/reports", label: "Reports", icon: BarChart3 },
     { href: "/admin/documents", label: "Documents", icon: Files },
@@ -49,6 +54,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
     <div className="min-h-screen bg-background flex flex-col">
       {/* Mobile Fixed Menu Button (Top Right) */}
       <div className="md:hidden fixed top-4 right-4 z-50 flex items-center gap-2 pl-4 pb-4 safe-area-inset-top" data-mobile-menu-container>
+        <div className="bg-background/95 backdrop-blur rounded-lg shadow-lg">
+          <NotificationBell />
+        </div>
         <ThemeToggle />
         <Button 
           variant="default" 
@@ -66,11 +74,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <aside className={cn(
           "hidden md:flex fixed inset-y-0 left-0 z-50 bg-card border-r border-border w-64 flex-col"
         )}>
-          <div className="p-6 flex items-center gap-3">
+          <div className="p-6 pr-4 flex items-center gap-3">
             <img src={siteTechLogo} alt="SiteTech" className="h-10 w-auto" data-testid="img-logo-sidebar" />
-            <div className="flex flex-col">
+            <div className="flex flex-col flex-1 min-w-0">
               <span className="text-xs text-muted-foreground uppercase tracking-widest">Sitework Management</span>
             </div>
+            <NotificationBell />
           </div>
 
           <nav className="flex-1 px-4 py-4 space-y-1">

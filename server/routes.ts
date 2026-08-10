@@ -9,6 +9,9 @@ import type { User } from "@shared/schema";
 import { insertAuthorizedUserSchema, insertRfiSchema, insertTaskTitleSchema } from "@shared/schema";
 import { isAdmin, isAuthorizedUser } from "./middleware/auth";
 import { sendInviteEmail } from "./services/email";
+import { handleProjectStatusChange } from "./services/workflowEngine";
+import { logActivity, actorFromUser } from "./services/activityLog";
+import { insertWorkflowRuleSchema } from "@shared/schema";
 import { generateUploadSignature, deleteFromCloudinary } from "./services/cloudinary";
 import {
   isOutlookConfigured, getAuthUrl, exchangeCodeForTokens, getRedirectUri,
@@ -696,18 +699,560 @@ export async function registerRoutes(
   });
 
   app.put(api.projects.update.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
+    let project;
+    let previousStatus: string | null = null;
+    let input;
     try {
-      const input = api.projects.update.input.parse(req.body);
-      const project = await storage.updateProject(Number(req.params.id), input);
-      res.json(project);
+      input = api.projects.update.input.parse(req.body);
+      // Captures the prior status atomically (row lock) so concurrent duplicate
+      // requests cannot both observe the same status transition.
+      const result = await storage.updateProjectWithStatusTracking(Number(req.params.id), input);
+      project = result.project;
+      previousStatus = result.previousStatus;
     } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0].message });
+      }
       return res.status(404).json({ message: "Project not found" });
     }
+
+    // Project status workflow automation — fires only on a true status transition.
+    // Re-saving the same status never triggers.
+    if (input.status !== undefined && previousStatus !== null && input.status !== previousStatus) {
+      try {
+        const dbUser = await storage.getUser((req.user as any).claims.sub);
+        await handleProjectStatusChange({
+          project,
+          previousStatus,
+          newStatus: project.status,
+          actor: actorFromUser(dbUser),
+          today: typeof req.query.clientDate === "string" ? req.query.clientDate : undefined,
+        });
+      } catch (err) {
+        // The project update itself succeeded; workflow failures must not fail the request
+        console.error("[Workflow] Failed to process status change:", err);
+      }
+    }
+
+    res.json(project);
   });
 
   app.delete(api.projects.delete.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
     await storage.deleteProject(Number(req.params.id));
     res.status(204).send();
+  });
+
+  // ============================================================
+  // Todos (centralized action items)
+  // ============================================================
+
+  const getCurrentUser = async (req: any) => storage.getUser(req.user.claims.sub);
+  const canManageTodo = (user: { id: string; role: string | null }, todo: { createdByUserId: string | null }) =>
+    user.role === "admin" || user.role === "manager" || todo.createdByUserId === user.id;
+  // Project todos are visible to anyone who can view the project (same as the
+  // project Todos tab); personal todos only to creator/assignee/managers.
+  const canViewTodo = (user: { id: string; role: string | null }, todo: { assignedToUserId: string; createdByUserId: string | null; projectId: number | null }) =>
+    user.role === "admin" || user.role === "manager" ||
+    todo.assignedToUserId === user.id || todo.createdByUserId === user.id ||
+    todo.projectId !== null;
+
+  app.get(api.todos.list.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
+    const user = await getCurrentUser(req);
+    if (!user) return res.status(401).json({ message: "User not found" });
+    const isPrivileged = user.role === "admin" || user.role === "manager";
+
+    const q = req.query;
+    const requestedAssignee = q.assignedToUserId === "me" ? user.id : (typeof q.assignedToUserId === "string" && q.assignedToUserId ? q.assignedToUserId : undefined);
+    const projectId = typeof q.projectId === "string" && q.projectId ? Number(q.projectId) : undefined;
+
+    // Read scope: regular users may list their own todos, or todos within a
+    // project (project data is visible to all approved users, matching every
+    // other per-project endpoint). Cross-user and unscoped "all todos"
+    // queries require admin/manager.
+    let assignedToUserId = requestedAssignee;
+    if (!isPrivileged && projectId === undefined) {
+      if (requestedAssignee !== undefined && requestedAssignee !== user.id) {
+        return res.status(403).json({ message: "You can only view your own todos" });
+      }
+      assignedToUserId = user.id;
+    }
+
+    const filters: import("./storage").TodoFilters = {
+      assignedToUserId,
+      projectId,
+      status: typeof q.status === "string" && q.status ? q.status : undefined,
+      priority: typeof q.priority === "string" && q.priority ? q.priority : undefined,
+      due: typeof q.due === "string" && q.due ? (q.due as any) : undefined,
+      today: typeof q.today === "string" && /^\d{4}-\d{2}-\d{2}$/.test(q.today) ? q.today : undefined,
+    };
+    const todos = await storage.getTodos(filters);
+    res.json(todos);
+  });
+
+  app.get(api.todos.myWorkSummary.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
+    const today = typeof req.query.today === "string" && /^\d{4}-\d{2}-\d{2}$/.test(req.query.today)
+      ? req.query.today
+      : new Date().toISOString().slice(0, 10);
+    const summary = await storage.getMyWorkSummary((req.user as any).claims.sub, today);
+    res.json(summary);
+  });
+
+  app.get(api.todos.get.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
+    const user = await getCurrentUser(req);
+    if (!user) return res.status(401).json({ message: "User not found" });
+    const todo = await storage.getTodo(Number(req.params.id));
+    if (!todo) return res.status(404).json({ message: "Todo not found" });
+    if (!canViewTodo(user, todo)) return res.status(403).json({ message: "You don't have permission to view this todo" });
+    res.json(todo);
+  });
+
+  app.post(api.todos.create.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
+    try {
+      const input = api.todos.create.input.parse(req.body);
+      const user = await getCurrentUser(req);
+      if (!user) return res.status(401).json({ message: "User not found" });
+
+      // Assignee must be a real, approved user
+      const assigneeUser = input.assignedToUserId === user.id ? user : await storage.getUser(input.assignedToUserId);
+      if (!assigneeUser || assigneeUser.isAuthorized !== "approved") {
+        return res.status(400).json({ message: "Assignee must be an approved, active user" });
+      }
+
+      const todo = await storage.createTodo({
+        ...input,
+        description: input.description || null,
+        dueDate: input.dueDate || null,
+        projectId: input.projectId ?? null,
+        relatedEntityType: input.projectId ? "project" : null,
+        relatedEntityId: input.projectId ?? null,
+        createdByUserId: user.id,
+        source: "manual",
+      });
+
+      const actor = actorFromUser(user);
+      const assignee = assigneeUser;
+      const assigneeName = [assignee.firstName, assignee.lastName].filter(Boolean).join(" ").trim() || assignee.email || "Unknown user";
+
+      await logActivity({
+        projectId: todo.projectId,
+        entityType: "todo",
+        entityId: todo.id,
+        action: "todo_created",
+        actor,
+        description: todo.assignedToUserId === user.id
+          ? `${actor.name} created a todo: ${todo.title}.`
+          : `${actor.name} assigned ${assigneeName} a todo: ${todo.title}.`,
+      });
+
+      // In-app notification for assignment to someone else (never for self-assignment)
+      if (todo.assignedToUserId !== user.id) {
+        await storage.createNotification({
+          userId: todo.assignedToUserId,
+          type: "todo_assigned",
+          title: `You were assigned: ${todo.title}`,
+          message: `${actor.name} assigned you a todo${todo.dueDate ? `, due ${todo.dueDate}` : ""}.`,
+          projectId: todo.projectId,
+          todoId: todo.id,
+          relatedEntityType: todo.projectId ? "project" : null,
+          relatedEntityId: todo.projectId,
+          isRead: false,
+        });
+      }
+
+      res.status(201).json(todo);
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0].message });
+      }
+      throw err;
+    }
+  });
+
+  app.put(api.todos.update.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
+    try {
+      const input = api.todos.update.input.parse(req.body);
+      const todoId = Number(req.params.id);
+      const existing = await storage.getTodo(todoId);
+      if (!existing) return res.status(404).json({ message: "Todo not found" });
+
+      const user = await getCurrentUser(req);
+      if (!user) return res.status(401).json({ message: "User not found" });
+
+      const isAssignee = existing.assignedToUserId === user.id;
+      const fullEdit = canManageTodo(user, existing);
+
+      if (!fullEdit) {
+        if (!isAssignee) return res.status(403).json({ message: "You don't have permission to edit this todo" });
+        // Assignees can only update status (start / complete / reopen)
+        const attemptedFields = Object.keys(input).filter(k => (input as any)[k] !== undefined);
+        const disallowed = attemptedFields.filter(f => f !== "status");
+        if (disallowed.length > 0) {
+          return res.status(403).json({ message: "As the assignee you can only update the status of this todo" });
+        }
+      }
+
+      // Reassignment target must be a real, approved user
+      if (input.assignedToUserId && input.assignedToUserId !== existing.assignedToUserId) {
+        const newAssignee = input.assignedToUserId === user.id ? user : await storage.getUser(input.assignedToUserId);
+        if (!newAssignee || newAssignee.isAuthorized !== "approved") {
+          return res.status(400).json({ message: "Assignee must be an approved, active user" });
+        }
+      }
+
+      const updates: Record<string, any> = { ...input };
+      if ("description" in updates) updates.description = updates.description || null;
+      if ("dueDate" in updates) updates.dueDate = updates.dueDate || null;
+
+      let todo = await storage.updateTodo(todoId, updates);
+      const becameCompleted = input.status === "completed" && existing.status !== "completed";
+      if (becameCompleted) {
+        todo = await storage.completeTodo(todoId, user.id);
+      }
+
+      const actor = actorFromUser(user);
+
+      // Meaningful activity entries (not noise)
+      if (becameCompleted) {
+        await logActivity({
+          projectId: todo.projectId, entityType: "todo", entityId: todo.id,
+          action: "todo_completed", actor,
+          description: `${actor.name} completed todo: ${todo.title}.`,
+        });
+      } else if (input.status === "cancelled" && existing.status !== "cancelled") {
+        await logActivity({
+          projectId: todo.projectId, entityType: "todo", entityId: todo.id,
+          action: "todo_cancelled", actor,
+          description: `${actor.name} cancelled todo: ${todo.title}.`,
+        });
+      } else if (input.status && input.status !== existing.status) {
+        await logActivity({
+          projectId: todo.projectId, entityType: "todo", entityId: todo.id,
+          action: "todo_status_changed", actor,
+          description: `${actor.name} moved todo "${todo.title}" to ${input.status === "in_progress" ? "In Progress" : input.status === "open" ? "Open" : input.status}.`,
+        });
+      }
+
+      if (input.assignedToUserId && input.assignedToUserId !== existing.assignedToUserId) {
+        const newAssignee = await storage.getUser(input.assignedToUserId);
+        const newAssigneeName = newAssignee ? ([newAssignee.firstName, newAssignee.lastName].filter(Boolean).join(" ").trim() || newAssignee.email || "Unknown user") : "Unknown user";
+        await logActivity({
+          projectId: todo.projectId, entityType: "todo", entityId: todo.id,
+          action: "todo_reassigned", actor,
+          description: `${actor.name} reassigned todo "${todo.title}" to ${newAssigneeName}.`,
+        });
+        // Notify the new assignee (never for self-assignment)
+        if (input.assignedToUserId !== user.id) {
+          await storage.createNotification({
+            userId: input.assignedToUserId,
+            type: "todo_assigned",
+            title: `You were assigned: ${todo.title}`,
+            message: `${actor.name} assigned you a todo${todo.dueDate ? `, due ${todo.dueDate}` : ""}.`,
+            projectId: todo.projectId,
+            todoId: todo.id,
+            relatedEntityType: todo.projectId ? "project" : null,
+            relatedEntityId: todo.projectId,
+            isRead: false,
+          });
+        }
+      }
+
+      if ("dueDate" in input && (input.dueDate || null) !== existing.dueDate && !becameCompleted) {
+        await logActivity({
+          projectId: todo.projectId, entityType: "todo", entityId: todo.id,
+          action: "todo_due_date_changed", actor,
+          description: input.dueDate
+            ? `${actor.name} set the due date of "${todo.title}" to ${input.dueDate}.`
+            : `${actor.name} removed the due date from "${todo.title}".`,
+        });
+      }
+
+      res.json(todo);
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0].message });
+      }
+      throw err;
+    }
+  });
+
+  app.post(api.todos.complete.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
+    const todoId = Number(req.params.id);
+    const existing = await storage.getTodo(todoId);
+    if (!existing) return res.status(404).json({ message: "Todo not found" });
+
+    const user = await getCurrentUser(req);
+    if (!user) return res.status(401).json({ message: "User not found" });
+
+    const allowed = existing.assignedToUserId === user.id || canManageTodo(user, existing);
+    if (!allowed) return res.status(403).json({ message: "You don't have permission to complete this todo" });
+
+    if (existing.status === "completed") return res.json(existing); // idempotent
+
+    const todo = await storage.completeTodo(todoId, user.id);
+    const actor = actorFromUser(user);
+    await logActivity({
+      projectId: todo.projectId, entityType: "todo", entityId: todo.id,
+      action: "todo_completed", actor,
+      description: `${actor.name} completed todo: ${todo.title}.`,
+    });
+    res.json(todo);
+  });
+
+  app.delete(api.todos.delete.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
+    const todoId = Number(req.params.id);
+    const existing = await storage.getTodo(todoId);
+    if (!existing) return res.status(404).json({ message: "Todo not found" });
+
+    const user = await getCurrentUser(req);
+    if (!user) return res.status(401).json({ message: "User not found" });
+
+    if (user.role !== "admin" && existing.createdByUserId !== user.id) {
+      return res.status(403).json({ message: "Only the creator or an admin can delete a todo" });
+    }
+    // Completed todos are historical records and are never deleted
+    if (existing.status === "completed") {
+      return res.status(400).json({ message: "Completed todos cannot be deleted" });
+    }
+
+    await storage.deleteTodo(todoId);
+    const actor = actorFromUser(user);
+    await logActivity({
+      projectId: existing.projectId, entityType: "todo", entityId: existing.id,
+      action: "todo_deleted", actor,
+      description: `${actor.name} deleted todo: ${existing.title}.`,
+    });
+    res.status(204).send();
+  });
+
+  // ============================================================
+  // Notifications (header bell)
+  // ============================================================
+
+  app.get(api.notifications.list.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
+    const limit = typeof req.query.limit === "string" ? Math.min(Number(req.query.limit) || 20, 50) : 20;
+    const items = await storage.getNotifications((req.user as any).claims.sub, limit);
+    res.json(items);
+  });
+
+  app.get(api.notifications.unreadCount.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
+    const count = await storage.getUnreadNotificationCount((req.user as any).claims.sub);
+    res.json({ count });
+  });
+
+  app.post(api.notifications.markRead.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
+    const notification = await storage.markNotificationRead(Number(req.params.id), (req.user as any).claims.sub);
+    if (!notification) return res.status(404).json({ message: "Notification not found" });
+    res.json(notification);
+  });
+
+  app.post(api.notifications.markAllRead.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
+    const updated = await storage.markAllNotificationsRead((req.user as any).claims.sub);
+    res.json({ updated });
+  });
+
+  // ============================================================
+  // Workflow Rules (admin only)
+  // ============================================================
+
+  // ============================================================
+  // Todo Updates (notes / progress timeline on a todo)
+  // ============================================================
+
+  app.get(api.todoUpdates.list.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
+    const user = await getCurrentUser(req);
+    if (!user) return res.status(401).json({ message: "User not found" });
+    const todo = await storage.getTodo(Number(req.params.id));
+    if (!todo) return res.status(404).json({ message: "Todo not found" });
+    if (!canViewTodo(user, todo)) return res.status(403).json({ message: "You don't have permission to view this todo" });
+
+    const limitRaw = Number(req.query.limit);
+    const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(Math.trunc(limitRaw), 200) : 25;
+    const offsetRaw = Number(req.query.offset);
+    const offset = Number.isFinite(offsetRaw) && offsetRaw > 0 ? Math.trunc(offsetRaw) : 0;
+
+    const [items, total] = await Promise.all([
+      storage.getTodoUpdates(todo.id, { limit, offset }),
+      storage.countTodoUpdates(todo.id),
+    ]);
+    res.json({ items, total });
+  });
+
+  app.post(api.todoUpdates.create.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
+    try {
+      const user = await getCurrentUser(req);
+      if (!user) return res.status(401).json({ message: "User not found" });
+      const todo = await storage.getTodo(Number(req.params.id));
+      if (!todo) return res.status(404).json({ message: "Todo not found" });
+      // Reuse todo access rules — anyone who can view the todo may record an
+      // update (spec: no separate permission system). Completed todos still
+      // accept updates so work can be documented after the fact.
+      if (!canViewTodo(user, todo)) return res.status(403).json({ message: "You don't have permission to add updates to this todo" });
+
+      const { body } = api.todoUpdates.create.input.parse(req.body);
+      const update = await storage.createTodoUpdate({ todoId: todo.id, body, createdByUserId: user.id });
+
+      const actor = actorFromUser(user);
+      await logActivity({
+        projectId: todo.projectId, entityType: "todo", entityId: todo.id,
+        action: "todo_update_added", actor,
+        description: `${actor.name} added an update to "${todo.title}".`,
+        metadata: { todoUpdateId: update.id },
+      });
+
+      // In-app notification for the assignee when someone else adds an update
+      // (no email — spec §13; never notify yourself)
+      if (todo.assignedToUserId !== user.id) {
+        await storage.createNotification({
+          userId: todo.assignedToUserId,
+          type: "todo_update",
+          title: `${actor.name} added an update to: ${todo.title}`,
+          message: body.length > 140 ? `${body.slice(0, 140)}…` : body,
+          projectId: todo.projectId,
+          todoId: todo.id,
+          relatedEntityType: todo.projectId ? "project" : null,
+          relatedEntityId: todo.projectId,
+          isRead: false,
+        });
+      }
+
+      const authorName = [user.firstName, user.lastName].filter(Boolean).join(" ").trim() || user.email || null;
+      res.status(201).json({ ...update, authorName });
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0].message });
+      }
+      throw err;
+    }
+  });
+
+  app.put(api.todoUpdates.update.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
+    try {
+      const user = await getCurrentUser(req);
+      if (!user) return res.status(401).json({ message: "User not found" });
+      const existing = await storage.getTodoUpdate(Number(req.params.id));
+      if (!existing) return res.status(404).json({ message: "Update not found" });
+      // History integrity: only the author (or an admin) may edit; edited
+      // updates are permanently marked "Edited" via editedAt.
+      if (existing.createdByUserId !== user.id && user.role !== "admin") {
+        return res.status(403).json({ message: "You can only edit your own updates" });
+      }
+      const { body } = api.todoUpdates.update.input.parse(req.body);
+      const updated = await storage.updateTodoUpdateBody(existing.id, body);
+      res.json(updated);
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0].message });
+      }
+      throw err;
+    }
+  });
+
+  app.delete(api.todoUpdates.delete.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
+    const user = await getCurrentUser(req);
+    if (!user) return res.status(401).json({ message: "User not found" });
+    const existing = await storage.getTodoUpdate(Number(req.params.id));
+    if (!existing) return res.status(404).json({ message: "Update not found" });
+    if (existing.createdByUserId !== user.id && user.role !== "admin") {
+      return res.status(403).json({ message: "You can only remove your own updates" });
+    }
+    await storage.softDeleteTodoUpdate(existing.id); // soft delete — history preserved
+    res.status(204).send();
+  });
+
+  app.get(api.workflowRules.list.path, isAuthenticated, isAdmin, async (_req, res) => {
+    const rules = await storage.getWorkflowRules();
+    res.json(rules);
+  });
+
+  app.post(api.workflowRules.create.path, isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const input = api.workflowRules.create.input.parse(req.body);
+      const assignee = await storage.getUser(input.assignedToUserId);
+      if (!assignee || assignee.isAuthorized !== "approved") {
+        return res.status(400).json({ message: "Rule assignee must be an approved, active user" });
+      }
+      const rule = await storage.createWorkflowRule({ ...input, createdByUserId: (req.user as any).claims.sub });
+      res.status(201).json(rule);
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0].message });
+      }
+      throw err;
+    }
+  });
+
+  app.put(api.workflowRules.update.path, isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const input = insertWorkflowRuleSchema.innerType().partial().parse(req.body);
+      const existing = await storage.getWorkflowRule(Number(req.params.id));
+      if (!existing) return res.status(404).json({ message: "Workflow rule not found" });
+
+      // Same business validation as create, applied to the merged result
+      const merged = { ...existing, ...input };
+      if (merged.createTodo && (!merged.todoTitle || !merged.todoTitle.trim())) {
+        return res.status(400).json({ message: "Todo title is required when creating a todo" });
+      }
+      if (merged.dueOffsetType === "days" && (merged.dueOffsetDays === null || merged.dueOffsetDays === undefined)) {
+        return res.status(400).json({ message: "Number of days is required" });
+      }
+      if (input.assignedToUserId && input.assignedToUserId !== existing.assignedToUserId) {
+        const assignee = await storage.getUser(input.assignedToUserId);
+        if (!assignee || assignee.isAuthorized !== "approved") {
+          return res.status(400).json({ message: "Rule assignee must be an approved, active user" });
+        }
+      }
+
+      const rule = await storage.updateWorkflowRule(Number(req.params.id), input);
+      res.json(rule);
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0].message });
+      }
+      throw err;
+    }
+  });
+
+  app.delete(api.workflowRules.delete.path, isAuthenticated, isAdmin, async (req, res) => {
+    const existing = await storage.getWorkflowRule(Number(req.params.id));
+    if (!existing) return res.status(404).json({ message: "Workflow rule not found" });
+    await storage.deleteWorkflowRule(Number(req.params.id));
+    res.status(204).send();
+  });
+
+  // ============================================================
+  // Project Activity & Status History
+  // ============================================================
+
+  app.get(api.activity.listForProject.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
+    const project = await storage.getProject(Number(req.params.projectId));
+    if (!project) return res.status(404).json({ message: "Project not found" });
+    const activity = await storage.getProjectActivity(project.id);
+    res.json(activity);
+  });
+
+  app.get(api.projectStatusHistory.list.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
+    const project = await storage.getProject(Number(req.params.projectId));
+    if (!project) return res.status(404).json({ message: "Project not found" });
+    const history = await storage.getProjectStatusHistory(project.id);
+    res.json(history);
+  });
+
+  // Users (for assignee dropdowns) — approved users only, safe fields only
+  app.get(api.users.list.path, isAuthenticated, isAuthorizedUser, async (_req, res) => {
+    const allUsers = await storage.getAllUsers();
+    const approved = allUsers
+      .filter(u => u.isAuthorized === "approved")
+      .map(u => ({
+        id: u.id,
+        email: u.email,
+        firstName: u.firstName,
+        lastName: u.lastName,
+        profileImageUrl: u.profileImageUrl,
+        role: u.role ?? "user",
+        isAuthorized: u.isAuthorized ?? "pending",
+      }))
+      .sort((a, b) => `${a.firstName || ""} ${a.lastName || ""}`.localeCompare(`${b.firstName || ""} ${b.lastName || ""}`));
+    res.json(approved);
   });
 
   // Tasks - all routes protected by authorization

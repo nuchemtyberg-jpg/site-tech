@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, buildUrl } from "@shared/routes";
+import { localToday } from "@/hooks/use-todos";
 import type { InsertProject } from "@shared/schema";
 
 export function useProjects() {
@@ -52,7 +53,8 @@ export function useUpdateProject() {
   return useMutation({
     mutationFn: async ({ id, ...updates }: { id: number } & Partial<InsertProject>) => {
       const validated = api.projects.update.input.parse(updates);
-      const url = buildUrl(api.projects.update.path, { id });
+      // clientDate lets workflow automation compute due dates in the user's timezone
+      const url = `${buildUrl(api.projects.update.path, { id })}?clientDate=${localToday()}`;
       const res = await fetch(url, {
         method: api.projects.update.method,
         headers: { "Content-Type": "application/json" },
@@ -65,6 +67,13 @@ export function useUpdateProject() {
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: [api.projects.list.path] });
       queryClient.invalidateQueries({ queryKey: [api.projects.get.path, data.id] });
+      // A status change may have run workflow rules (todos, notifications, activity)
+      queryClient.invalidateQueries({ queryKey: [api.todos.list.path] });
+      queryClient.invalidateQueries({ queryKey: [api.todos.myWorkSummary.path] });
+      queryClient.invalidateQueries({ queryKey: [api.activity.listForProject.path] });
+      queryClient.invalidateQueries({ queryKey: [api.projectStatusHistory.list.path] });
+      queryClient.invalidateQueries({ queryKey: [api.notifications.list.path] });
+      queryClient.invalidateQueries({ queryKey: [api.notifications.unreadCount.path] });
     },
   });
 }

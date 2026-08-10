@@ -3,9 +3,11 @@ import {
   insertProjectSchema, insertTaskSchema, insertEquipmentSchema, insertAllocationSchema,
   insertCustomerSchema, insertDailyReportSchema, insertMaintenanceLogSchema, insertCommunicationSchema,
   insertPhotoAlbumSchema, insertReportTaskSchema, insertLaborEntrySchema, insertEquipmentEntrySchema, insertDeliverySchema,
-  insertScheduleEntrySchema,
+  insertScheduleEntrySchema, insertTodoSchema, insertTodoUpdateSchema, insertWorkflowRuleSchema,
   projects, tasks, equipment, allocations, customers, dailyReports, maintenanceLogs, communications, photoAlbums,
-  reportTasks, laborEntries, equipmentEntries, deliveries, scheduleEntries
+  reportTasks, laborEntries, equipmentEntries, deliveries, scheduleEntries, todos, workflowRules, notifications, activityLogs, projectStatusHistory,
+  type TodoWithDetails, type MyWorkSummary, type WorkflowRuleWithDetails,
+  type TodoUpdate, type TodoUpdateWithAuthor, type TodoUpdatesPage
 } from './schema';
 
 export const errorSchemas = {
@@ -599,6 +601,230 @@ export const api = {
       path: '/api/equipment-entries/:id',
       responses: {
         204: z.void(),
+      },
+    },
+  },
+
+  // Todos (centralized action items)
+  todos: {
+    list: {
+      method: 'GET' as const,
+      path: '/api/todos',
+      // Query params: assignedToUserId, projectId, status ('active' | todo status | 'all'), priority, due, today
+      responses: {
+        200: z.array(z.custom<TodoWithDetails>()),
+      },
+    },
+    myWorkSummary: {
+      method: 'GET' as const,
+      path: '/api/todos/my-work-summary',
+      // Query params: today (YYYY-MM-DD, client-local date)
+      responses: {
+        200: z.custom<MyWorkSummary>(),
+      },
+    },
+    get: {
+      method: 'GET' as const,
+      path: '/api/todos/:id',
+      responses: {
+        200: z.custom<TodoWithDetails>(),
+        404: errorSchemas.notFound,
+      },
+    },
+    create: {
+      method: 'POST' as const,
+      path: '/api/todos',
+      input: insertTodoSchema.omit({ createdByUserId: true, source: true, workflowRuleId: true }),
+      responses: {
+        201: z.custom<typeof todos.$inferSelect>(),
+        400: errorSchemas.validation,
+      },
+    },
+    update: {
+      method: 'PUT' as const,
+      path: '/api/todos/:id',
+      input: insertTodoSchema.omit({ createdByUserId: true, source: true, workflowRuleId: true }).partial(),
+      responses: {
+        200: z.custom<typeof todos.$inferSelect>(),
+        400: errorSchemas.validation,
+        403: errorSchemas.validation,
+        404: errorSchemas.notFound,
+      },
+    },
+    complete: {
+      method: 'POST' as const,
+      path: '/api/todos/:id/complete',
+      responses: {
+        200: z.custom<typeof todos.$inferSelect>(),
+        403: errorSchemas.validation,
+        404: errorSchemas.notFound,
+      },
+    },
+    delete: {
+      method: 'DELETE' as const,
+      path: '/api/todos/:id',
+      responses: {
+        204: z.void(),
+        400: errorSchemas.validation,
+        403: errorSchemas.validation,
+        404: errorSchemas.notFound,
+      },
+    },
+  },
+
+  // Todo Updates — chronological notes / progress timeline on a todo
+  todoUpdates: {
+    list: {
+      method: 'GET' as const,
+      path: '/api/todos/:id/updates',
+      // Query params: limit (default 25, max 200), offset
+      responses: {
+        200: z.custom<TodoUpdatesPage>(),
+        403: errorSchemas.validation,
+        404: errorSchemas.notFound,
+      },
+    },
+    create: {
+      method: 'POST' as const,
+      path: '/api/todos/:id/updates',
+      input: insertTodoUpdateSchema.pick({ body: true }),
+      responses: {
+        201: z.custom<TodoUpdateWithAuthor>(),
+        400: errorSchemas.validation,
+        403: errorSchemas.validation,
+        404: errorSchemas.notFound,
+      },
+    },
+    update: {
+      method: 'PUT' as const,
+      path: '/api/todo-updates/:id',
+      input: insertTodoUpdateSchema.pick({ body: true }),
+      responses: {
+        200: z.custom<TodoUpdate>(),
+        400: errorSchemas.validation,
+        403: errorSchemas.validation,
+        404: errorSchemas.notFound,
+      },
+    },
+    delete: {
+      method: 'DELETE' as const,
+      path: '/api/todo-updates/:id',
+      responses: {
+        204: z.void(),
+        403: errorSchemas.validation,
+        404: errorSchemas.notFound,
+      },
+    },
+  },
+
+  // Notifications
+  notifications: {
+    list: {
+      method: 'GET' as const,
+      path: '/api/notifications',
+      responses: {
+        200: z.array(z.custom<typeof notifications.$inferSelect>()),
+      },
+    },
+    unreadCount: {
+      method: 'GET' as const,
+      path: '/api/notifications/unread-count',
+      responses: {
+        200: z.object({ count: z.number() }),
+      },
+    },
+    markRead: {
+      method: 'POST' as const,
+      path: '/api/notifications/:id/read',
+      responses: {
+        200: z.custom<typeof notifications.$inferSelect>(),
+        404: errorSchemas.notFound,
+      },
+    },
+    markAllRead: {
+      method: 'POST' as const,
+      path: '/api/notifications/read-all',
+      responses: {
+        200: z.object({ updated: z.number() }),
+      },
+    },
+  },
+
+  // Workflow Rules (admin)
+  workflowRules: {
+    list: {
+      method: 'GET' as const,
+      path: '/api/workflow-rules',
+      responses: {
+        200: z.array(z.custom<WorkflowRuleWithDetails>()),
+      },
+    },
+    create: {
+      method: 'POST' as const,
+      path: '/api/workflow-rules',
+      input: insertWorkflowRuleSchema,
+      responses: {
+        201: z.custom<typeof workflowRules.$inferSelect>(),
+        400: errorSchemas.validation,
+      },
+    },
+    update: {
+      method: 'PUT' as const,
+      path: '/api/workflow-rules/:id',
+      input: z.custom<Partial<z.infer<typeof insertWorkflowRuleSchema>>>(),
+      responses: {
+        200: z.custom<typeof workflowRules.$inferSelect>(),
+        400: errorSchemas.validation,
+        404: errorSchemas.notFound,
+      },
+    },
+    delete: {
+      method: 'DELETE' as const,
+      path: '/api/workflow-rules/:id',
+      responses: {
+        204: z.void(),
+        404: errorSchemas.notFound,
+      },
+    },
+  },
+
+  // Project Activity (reusable activity log)
+  activity: {
+    listForProject: {
+      method: 'GET' as const,
+      path: '/api/projects/:projectId/activity',
+      responses: {
+        200: z.array(z.custom<typeof activityLogs.$inferSelect>()),
+      },
+    },
+  },
+
+  // Project Status History
+  projectStatusHistory: {
+    list: {
+      method: 'GET' as const,
+      path: '/api/projects/:projectId/status-history',
+      responses: {
+        200: z.array(z.custom<typeof projectStatusHistory.$inferSelect>()),
+      },
+    },
+  },
+
+  // Users (approved users for assignee dropdowns)
+  users: {
+    list: {
+      method: 'GET' as const,
+      path: '/api/users',
+      responses: {
+        200: z.array(z.object({
+          id: z.string(),
+          email: z.string().nullable(),
+          firstName: z.string().nullable(),
+          lastName: z.string().nullable(),
+          profileImageUrl: z.string().nullable(),
+          role: z.string(),
+          isAuthorized: z.string(),
+        })),
       },
     },
   },

@@ -22,6 +22,8 @@ import PendingAccessPage from "@/pages/PendingAccessPage";
 import PDFViewerPage from "@/pages/PDFViewerPage";
 import DailyReportPage from "@/pages/DailyReportPage";
 import UserManagement from "@/pages/UserManagement";
+import MyWork from "@/pages/MyWork";
+import WorkflowRules from "@/pages/WorkflowRules";
 import EmailSetup from "@/pages/EmailSetup";
 import Billing from "@/pages/Billing";
 import Employees from "@/pages/Employees";
@@ -91,6 +93,7 @@ function Router() {
       <Route path="/projects/:projectId/pdf/:fileId" component={() => <ProtectedFullScreenRoute component={PDFViewerPage} />} />
       <Route path="/projects/:projectId/reports/new" component={() => <ProtectedFullScreenRoute component={DailyReportPage} />} />
       <Route path="/projects/:projectId/reports/:reportId" component={() => <ProtectedFullScreenRoute component={DailyReportPage} />} />
+      <Route path="/my-work" component={() => <ProtectedRoute component={MyWork} />} />
       <Route path="/customers" component={() => <ProtectedRoute component={Customers} />} />
       <Route path="/customers/:id" component={() => <ProtectedRoute component={CustomerDetails} />} />
       <Route path="/schedule" component={() => <ProtectedRoute component={Schedule} />} />
@@ -99,6 +102,7 @@ function Router() {
       <Route path="/employees" component={() => <ProtectedRoute component={Employees} />} />
       <Route path="/settings" component={() => <ProtectedRoute component={Settings} />} />
       <Route path="/admin/users" component={() => <ProtectedRoute component={UserManagement} adminOnly />} />
+      <Route path="/admin/workflows" component={() => <ProtectedRoute component={WorkflowRules} adminOnly />} />
       <Route path="/admin/email-setup" component={() => <ProtectedRoute component={EmailSetup} adminOnly />} />
       <Route path="/admin/billing" component={() => <ProtectedRoute component={Billing} adminOnly />} />
       <Route path="/admin/documents" component={() => <ProtectedRoute component={CompanyDocuments} adminOnly />} />

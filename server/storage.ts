@@ -7,6 +7,7 @@ import {
   fingercheckEmployees, fingercheckTimePunches, fingercheckProjectMappings,
   rfis, rfiResponses, userOutlookConnections, projectDailyReportRecipients, companyFolders, companyFiles,
   payApplications, payApplicationItems,
+  todos, todoUpdates, workflowRules, workflowExecutions, notifications, activityLogs, projectStatusHistory,
   type InsertProject, type InsertTask, type InsertEquipment, type InsertAllocation, type InsertFolder, type InsertFileMetadata, type InsertPhoto,
   type InsertCustomer, type InsertDailyReport, type InsertMaintenanceLog, type InsertCommunication, type InsertTaskStatusHistory, type InsertPhotoAlbum,
   type InsertReportTask, type InsertLaborEntry, type InsertEquipmentEntry, type InsertReportTaskPhoto, type InsertDelivery, type InsertDeliveryPhoto,
@@ -16,6 +17,9 @@ import {
   type InsertFingercheckEmployee, type InsertFingercheckTimePunch, type InsertFingercheckProjectMapping,
   type InsertRfi, type InsertRfiResponse, type InsertProjectDailyReportRecipient, type InsertCompanyFolder, type InsertCompanyFile,
   type InsertPayApplication, type InsertPayApplicationItem, type InsertTaskTitle,
+  type InsertTodo, type InsertTodoUpdate, type InsertWorkflowRule, type InsertWorkflowExecution, type InsertNotification, type InsertActivityLog, type InsertProjectStatusHistory,
+  type Todo, type TodoWithDetails, type TodoUpdate, type TodoUpdateWithAuthor, type MyWorkSummary, type WorkflowRule, type WorkflowRuleWithDetails, type WorkflowExecution,
+  type Notification, type ActivityLog, type ProjectStatusHistory,
   type Project, type Task, type Equipment, type Allocation, type Folder, type FileMetadata, type Photo,
   type Customer, type DailyReport, type MaintenanceLog, type Communication, type TaskStatusHistory, type PhotoAlbum,
   type ReportTask, type LaborEntry, type EquipmentEntry, type ReportTaskPhoto, type Delivery, type DeliveryPhoto,
@@ -28,7 +32,7 @@ import {
   type User, type UpsertUser, type AuthorizedUser
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, asc, and, or, isNull, sql, lt, ilike, inArray } from "drizzle-orm";
+import { eq, desc, asc, and, or, isNull, isNotNull, sql, lt, gt, gte, lte, ne, ilike, inArray, aliasedTable } from "drizzle-orm";
 
 const PROJECT_EMAIL_DOMAIN = "updates.sitetechnj.com";
 
@@ -340,7 +344,64 @@ export interface IStorage {
   updatePayApplicationItem(id: number, item: Partial<InsertPayApplicationItem>): Promise<PayApplicationItem>;
   deletePayApplicationItem(id: number): Promise<void>;
   bulkUpsertPayApplicationItems(payApplicationId: number, items: InsertPayApplicationItem[]): Promise<PayApplicationItem[]>;
+
+  // Projects (status transition detection)
+  updateProjectWithStatusTracking(id: number, updates: Partial<InsertProject>): Promise<{ project: Project; previousStatus: string | null }>;
+
+  // Todos
+  getTodos(filters: TodoFilters): Promise<TodoWithDetails[]>;
+  getTodo(id: number): Promise<TodoWithDetails | undefined>;
+  createTodo(todo: InsertTodo): Promise<Todo>;
+  updateTodo(id: number, updates: Partial<InsertTodo>): Promise<Todo>;
+  completeTodo(id: number, userId: string): Promise<Todo>;
+  deleteTodo(id: number): Promise<void>;
+  getMyWorkSummary(userId: string, today: string): Promise<MyWorkSummary>;
+
+  // Todo Updates (notes / progress timeline)
+  getTodoUpdates(todoId: number, opts?: { limit?: number; offset?: number }): Promise<TodoUpdateWithAuthor[]>;
+  countTodoUpdates(todoId: number): Promise<number>;
+  getTodoUpdate(id: number): Promise<TodoUpdate | undefined>;
+  createTodoUpdate(update: InsertTodoUpdate): Promise<TodoUpdate>;
+  updateTodoUpdateBody(id: number, body: string): Promise<TodoUpdate>;
+  softDeleteTodoUpdate(id: number): Promise<void>;
+
+  // Workflow Rules
+  getWorkflowRules(): Promise<WorkflowRuleWithDetails[]>;
+  getWorkflowRule(id: number): Promise<WorkflowRule | undefined>;
+  getActiveWorkflowRulesForStatus(triggerStatus: string): Promise<WorkflowRule[]>;
+  createWorkflowRule(rule: InsertWorkflowRule & { createdByUserId?: string | null }): Promise<WorkflowRule>;
+  updateWorkflowRule(id: number, updates: Partial<InsertWorkflowRule>): Promise<WorkflowRule>;
+  deleteWorkflowRule(id: number): Promise<void>;
+
+  // Workflow Executions (idempotency + audit)
+  claimWorkflowExecution(execution: InsertWorkflowExecution): Promise<WorkflowExecution | undefined>;
+  updateWorkflowExecution(id: number, updates: Partial<InsertWorkflowExecution>): Promise<WorkflowExecution>;
+
+  // Project Status History
+  createProjectStatusHistory(history: InsertProjectStatusHistory): Promise<ProjectStatusHistory>;
+  getProjectStatusHistory(projectId: number): Promise<ProjectStatusHistory[]>;
+
+  // Notifications
+  getNotifications(userId: string, limit?: number): Promise<Notification[]>;
+  getUnreadNotificationCount(userId: string): Promise<number>;
+  createNotification(notification: InsertNotification): Promise<Notification>;
+  markNotificationRead(id: number, userId: string): Promise<Notification | undefined>;
+  markAllNotificationsRead(userId: string): Promise<number>;
+
+  // Activity Logs
+  createActivityLog(log: InsertActivityLog): Promise<ActivityLog>;
+  getProjectActivity(projectId: number, limit?: number): Promise<ActivityLog[]>;
 }
+
+export type TodoFilters = {
+  assignedToUserId?: string;
+  projectId?: number;
+  status?: string; // 'active' (open + in_progress), specific status, or 'all'
+  priority?: string;
+  due?: "overdue" | "today" | "this_week" | "next_7_days" | "no_due_date";
+  today?: string; // client-local date YYYY-MM-DD used for due bucketing
+  limit?: number;
+};
 
 export class DatabaseStorage implements IStorage {
   // Auth
@@ -1670,6 +1731,355 @@ export class DatabaseStorage implements IStorage {
     if (items.length === 0) return [];
     const results = await db.insert(payApplicationItems).values(items.map(item => ({ ...item, payApplicationId }))).returning();
     return results;
+  }
+
+  // ============================================================
+  // Todos, Workflow Automation, Notifications & Activity Log
+  // ============================================================
+
+  // Atomically updates a project while capturing the prior status under a row
+  // lock, so concurrent duplicate requests cannot both observe the same
+  // transition (workflow duplicate protection).
+  async updateProjectWithStatusTracking(id: number, updates: Partial<InsertProject>): Promise<{ project: Project; previousStatus: string | null }> {
+    return await db.transaction(async (tx) => {
+      const [existing] = await tx.select().from(projects).where(eq(projects.id, id)).for("update");
+      if (!existing) throw new Error("Project not found");
+      const [project] = await tx.update(projects).set(updates).where(eq(projects.id, id)).returning();
+      return { project, previousStatus: existing.status ?? null };
+    });
+  }
+
+  // Todos
+  private todoDetailsSelection() {
+    const assignee = aliasedTable(users, "todo_assignee");
+    const creator = aliasedTable(users, "todo_creator");
+    const completer = aliasedTable(users, "todo_completer");
+    return { assignee, creator, completer };
+  }
+
+  private userDisplayName(u: typeof users) {
+    return sql<string | null>`trim(concat(coalesce(${u.firstName}, ''), ' ', coalesce(${u.lastName}, '')))`;
+  }
+
+  async getTodos(filters: TodoFilters): Promise<TodoWithDetails[]> {
+    const { assignee, creator, completer } = this.todoDetailsSelection();
+    const conditions = [isNull(todos.deletedAt)];
+
+    if (filters.assignedToUserId) conditions.push(eq(todos.assignedToUserId, filters.assignedToUserId));
+    if (filters.projectId !== undefined) conditions.push(eq(todos.projectId, filters.projectId));
+    if (filters.priority) conditions.push(eq(todos.priority, filters.priority));
+
+    if (filters.status && filters.status !== "all") {
+      if (filters.status === "active") {
+        conditions.push(inArray(todos.status, ["open", "in_progress"]));
+      } else {
+        conditions.push(eq(todos.status, filters.status));
+      }
+    }
+
+    const today = filters.today || new Date().toISOString().slice(0, 10);
+    if (filters.due) {
+      switch (filters.due) {
+        case "overdue":
+          conditions.push(and(isNotNull(todos.dueDate), lt(todos.dueDate, today))!);
+          break;
+        case "today":
+          conditions.push(eq(todos.dueDate, today));
+          break;
+        case "this_week": {
+          // through end of current week (Sunday-based week: today..today+ (6-dow))
+          conditions.push(and(isNotNull(todos.dueDate), gte(todos.dueDate, today), lte(todos.dueDate, sql`(${today}::date + (6 - extract(dow from ${today}::date))::int)::text`))!);
+          break;
+        }
+        case "next_7_days":
+          conditions.push(and(isNotNull(todos.dueDate), gte(todos.dueDate, today), lte(todos.dueDate, sql`(${today}::date + 7)::text`))!);
+          break;
+        case "no_due_date":
+          conditions.push(isNull(todos.dueDate));
+          break;
+      }
+    }
+
+    const rows = await db
+      .select({
+        todo: todos,
+        assignedToName: this.userDisplayName(assignee as any),
+        createdByName: this.userDisplayName(creator as any),
+        completedByName: this.userDisplayName(completer as any),
+        projectName: projects.name,
+        updateCount: sql<number>`(select count(*)::int from todo_updates tu where tu.todo_id = ${todos.id} and tu.deleted_at is null)`,
+      })
+      .from(todos)
+      .leftJoin(assignee, eq(todos.assignedToUserId, assignee.id))
+      .leftJoin(creator, eq(todos.createdByUserId, creator.id))
+      .leftJoin(completer, eq(todos.completedByUserId, completer.id))
+      .leftJoin(projects, eq(todos.projectId, projects.id))
+      .where(and(...conditions))
+      .orderBy(
+        // Grouped default sort: overdue -> due today -> upcoming -> no due date, completed/cancelled last
+        sql`case when ${todos.status} in ('completed', 'cancelled') then 1 else 0 end`,
+        sql`case when ${todos.dueDate} is null then 1 else 0 end`,
+        asc(todos.dueDate),
+        desc(todos.createdAt),
+      )
+      .limit(filters.limit ?? 500);
+
+    return rows.map(r => ({
+      ...r.todo,
+      assignedToName: r.assignedToName || null,
+      createdByName: r.todo.createdByUserId ? (r.createdByName || null) : "System",
+      completedByName: r.completedByName || null,
+      projectName: r.projectName ?? null,
+      updateCount: r.updateCount ?? 0,
+    }));
+  }
+
+  async getTodo(id: number): Promise<TodoWithDetails | undefined> {
+    const { assignee, creator, completer } = this.todoDetailsSelection();
+    const [row] = await db
+      .select({
+        todo: todos,
+        assignedToName: this.userDisplayName(assignee as any),
+        createdByName: this.userDisplayName(creator as any),
+        completedByName: this.userDisplayName(completer as any),
+        projectName: projects.name,
+        updateCount: sql<number>`(select count(*)::int from todo_updates tu where tu.todo_id = ${todos.id} and tu.deleted_at is null)`,
+      })
+      .from(todos)
+      .leftJoin(assignee, eq(todos.assignedToUserId, assignee.id))
+      .leftJoin(creator, eq(todos.createdByUserId, creator.id))
+      .leftJoin(completer, eq(todos.completedByUserId, completer.id))
+      .leftJoin(projects, eq(todos.projectId, projects.id))
+      .where(and(eq(todos.id, id), isNull(todos.deletedAt)));
+    if (!row) return undefined;
+    return {
+      ...row.todo,
+      assignedToName: row.assignedToName || null,
+      createdByName: row.todo.createdByUserId ? (row.createdByName || null) : "System",
+      completedByName: row.completedByName || null,
+      projectName: row.projectName ?? null,
+      updateCount: row.updateCount ?? 0,
+    };
+  }
+
+  async createTodo(todo: InsertTodo): Promise<Todo> {
+    const [result] = await db.insert(todos).values(todo).returning();
+    return result;
+  }
+
+  async updateTodo(id: number, updates: Partial<InsertTodo>): Promise<Todo> {
+    const set: Record<string, unknown> = { ...updates, updatedAt: new Date() };
+    // Transitioning into completed records completion metadata via completeTodo;
+    // moving out of completed clears it.
+    if (updates.status && updates.status !== "completed") {
+      set.completedAt = null;
+      set.completedByUserId = null;
+    }
+    const [result] = await db.update(todos).set(set).where(and(eq(todos.id, id), isNull(todos.deletedAt))).returning();
+    return result;
+  }
+
+  async completeTodo(id: number, userId: string): Promise<Todo> {
+    const [result] = await db
+      .update(todos)
+      .set({ status: "completed", completedAt: new Date(), completedByUserId: userId, updatedAt: new Date() })
+      .where(and(eq(todos.id, id), isNull(todos.deletedAt)))
+      .returning();
+    return result;
+  }
+
+  async deleteTodo(id: number): Promise<void> {
+    await db.update(todos).set({ deletedAt: new Date() }).where(eq(todos.id, id));
+  }
+
+  // ---------- Todo Updates ----------
+
+  async getTodoUpdates(todoId: number, opts?: { limit?: number; offset?: number }): Promise<TodoUpdateWithAuthor[]> {
+    const rows = await db
+      .select({
+        update: todoUpdates,
+        authorName: this.userDisplayName(users),
+        authorEmail: users.email,
+      })
+      .from(todoUpdates)
+      .leftJoin(users, eq(todoUpdates.createdByUserId, users.id))
+      .where(and(eq(todoUpdates.todoId, todoId), isNull(todoUpdates.deletedAt)))
+      .orderBy(desc(todoUpdates.createdAt), desc(todoUpdates.id)) // newest first
+      .limit(opts?.limit ?? 25)
+      .offset(opts?.offset ?? 0);
+    return rows.map(r => ({ ...r.update, authorName: r.authorName || r.authorEmail || null }));
+  }
+
+  async countTodoUpdates(todoId: number): Promise<number> {
+    const [row] = await db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(todoUpdates)
+      .where(and(eq(todoUpdates.todoId, todoId), isNull(todoUpdates.deletedAt)));
+    return row?.n ?? 0;
+  }
+
+  async getTodoUpdate(id: number): Promise<TodoUpdate | undefined> {
+    const [row] = await db.select().from(todoUpdates).where(and(eq(todoUpdates.id, id), isNull(todoUpdates.deletedAt)));
+    return row;
+  }
+
+  async createTodoUpdate(update: InsertTodoUpdate): Promise<TodoUpdate> {
+    const [row] = await db.insert(todoUpdates).values(update).returning();
+    return row;
+  }
+
+  async updateTodoUpdateBody(id: number, body: string): Promise<TodoUpdate> {
+    const [row] = await db.update(todoUpdates)
+      .set({ body, editedAt: new Date(), updatedAt: new Date() }) // editedAt drives the "Edited" marker
+      .where(and(eq(todoUpdates.id, id), isNull(todoUpdates.deletedAt)))
+      .returning();
+    return row;
+  }
+
+  async softDeleteTodoUpdate(id: number): Promise<void> {
+    // Soft delete only — updates are historical records
+    await db.update(todoUpdates).set({ deletedAt: new Date(), updatedAt: new Date() }).where(eq(todoUpdates.id, id));
+  }
+
+  async getMyWorkSummary(userId: string, today: string): Promise<MyWorkSummary> {
+    const [row] = await db
+      .select({
+        overdue: sql<number>`count(*) filter (where ${todos.dueDate} is not null and ${todos.dueDate} < ${today})`,
+        dueToday: sql<number>`count(*) filter (where ${todos.dueDate} = ${today})`,
+        upcoming: sql<number>`count(*) filter (where ${todos.dueDate} is not null and ${todos.dueDate} > ${today})`,
+        noDueDate: sql<number>`count(*) filter (where ${todos.dueDate} is null)`,
+        open: sql<number>`count(*)`,
+      })
+      .from(todos)
+      .where(and(
+        isNull(todos.deletedAt),
+        eq(todos.assignedToUserId, userId),
+        inArray(todos.status, ["open", "in_progress"]),
+      ));
+    return {
+      overdue: Number(row?.overdue ?? 0),
+      dueToday: Number(row?.dueToday ?? 0),
+      upcoming: Number(row?.upcoming ?? 0),
+      noDueDate: Number(row?.noDueDate ?? 0),
+      open: Number(row?.open ?? 0),
+    };
+  }
+
+  // Workflow Rules
+  async getWorkflowRules(): Promise<WorkflowRuleWithDetails[]> {
+    const rows = await db
+      .select({
+        rule: workflowRules,
+        assignedToName: this.userDisplayName(users),
+        assignedToEmail: users.email,
+        assigneeIsAuthorized: users.isAuthorized,
+      })
+      .from(workflowRules)
+      .leftJoin(users, eq(workflowRules.assignedToUserId, users.id))
+      .where(isNull(workflowRules.deletedAt))
+      .orderBy(asc(workflowRules.triggerStatus), asc(workflowRules.name));
+    return rows.map(r => ({
+      ...r.rule,
+      assignedToName: r.assignedToName || null,
+      assignedToEmail: r.assignedToEmail ?? null,
+      assigneeIsActive: r.assigneeIsAuthorized === "approved",
+    }));
+  }
+
+  async getWorkflowRule(id: number): Promise<WorkflowRule | undefined> {
+    const [rule] = await db.select().from(workflowRules).where(and(eq(workflowRules.id, id), isNull(workflowRules.deletedAt)));
+    return rule;
+  }
+
+  async getActiveWorkflowRulesForStatus(triggerStatus: string): Promise<WorkflowRule[]> {
+    return db.select().from(workflowRules).where(and(
+      isNull(workflowRules.deletedAt),
+      eq(workflowRules.isActive, true),
+      eq(workflowRules.triggerType, "project_status_change"),
+      eq(workflowRules.triggerStatus, triggerStatus),
+    ));
+  }
+
+  async createWorkflowRule(rule: InsertWorkflowRule & { createdByUserId?: string | null }): Promise<WorkflowRule> {
+    const [result] = await db.insert(workflowRules).values(rule).returning();
+    return result;
+  }
+
+  async updateWorkflowRule(id: number, updates: Partial<InsertWorkflowRule>): Promise<WorkflowRule> {
+    const [result] = await db.update(workflowRules).set({ ...updates, updatedAt: new Date() }).where(and(eq(workflowRules.id, id), isNull(workflowRules.deletedAt))).returning();
+    return result;
+  }
+
+  async deleteWorkflowRule(id: number): Promise<void> {
+    await db.update(workflowRules).set({ deletedAt: new Date() }).where(eq(workflowRules.id, id));
+  }
+
+  // Workflow Executions — claim is idempotent: returns undefined when this
+  // rule already executed for the given status transition.
+  async claimWorkflowExecution(execution: InsertWorkflowExecution): Promise<WorkflowExecution | undefined> {
+    const [result] = await db.insert(workflowExecutions).values(execution).onConflictDoNothing().returning();
+    return result;
+  }
+
+  async updateWorkflowExecution(id: number, updates: Partial<InsertWorkflowExecution>): Promise<WorkflowExecution> {
+    const [result] = await db.update(workflowExecutions).set(updates).where(eq(workflowExecutions.id, id)).returning();
+    return result;
+  }
+
+  // Project Status History
+  async createProjectStatusHistory(history: InsertProjectStatusHistory): Promise<ProjectStatusHistory> {
+    const [result] = await db.insert(projectStatusHistory).values(history).returning();
+    return result;
+  }
+
+  async getProjectStatusHistory(projectId: number): Promise<ProjectStatusHistory[]> {
+    return db.select().from(projectStatusHistory).where(eq(projectStatusHistory.projectId, projectId)).orderBy(desc(projectStatusHistory.changedAt));
+  }
+
+  // Notifications
+  async getNotifications(userId: string, limit = 20): Promise<Notification[]> {
+    return db.select().from(notifications).where(eq(notifications.userId, userId)).orderBy(desc(notifications.createdAt)).limit(limit);
+  }
+
+  async getUnreadNotificationCount(userId: string): Promise<number> {
+    const [row] = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(notifications)
+      .where(and(eq(notifications.userId, userId), eq(notifications.isRead, false)));
+    return Number(row?.count ?? 0);
+  }
+
+  async createNotification(notification: InsertNotification): Promise<Notification> {
+    const [result] = await db.insert(notifications).values(notification).returning();
+    return result;
+  }
+
+  async markNotificationRead(id: number, userId: string): Promise<Notification | undefined> {
+    const [result] = await db
+      .update(notifications)
+      .set({ isRead: true, readAt: new Date() })
+      .where(and(eq(notifications.id, id), eq(notifications.userId, userId)))
+      .returning();
+    return result;
+  }
+
+  async markAllNotificationsRead(userId: string): Promise<number> {
+    const result = await db
+      .update(notifications)
+      .set({ isRead: true, readAt: new Date() })
+      .where(and(eq(notifications.userId, userId), eq(notifications.isRead, false)))
+      .returning({ id: notifications.id });
+    return result.length;
+  }
+
+  // Activity Logs
+  async createActivityLog(log: InsertActivityLog): Promise<ActivityLog> {
+    const [result] = await db.insert(activityLogs).values(log).returning();
+    return result;
+  }
+
+  async getProjectActivity(projectId: number, limit = 100): Promise<ActivityLog[]> {
+    return db.select().from(activityLogs).where(eq(activityLogs.projectId, projectId)).orderBy(desc(activityLogs.createdAt)).limit(limit);
   }
 }
 

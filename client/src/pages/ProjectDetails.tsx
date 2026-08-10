@@ -9,6 +9,8 @@ const PhotosTab = lazy(() => import("@/components/PhotosTab"));
 import { FloatingProjectTools } from "@/components/FloatingProjectTools";
 import { CommunicationsTab } from "@/components/CommunicationsTab";
 import { RfiTab } from "@/components/RfiTab";
+import { ProjectTodosTab } from "@/components/ProjectTodosTab";
+import { ProjectActivityTab } from "@/components/ProjectActivityTab";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { 
@@ -164,17 +166,8 @@ const PREDEFINED_TASK_TITLES = [
   "Trucking of Soil",
 ];
 
-const PROJECT_STATUSES = [
-  { value: "new", label: "New", color: "#3b82f6" },
-  { value: "bidding", label: "Bidding", color: "#6366f1" },
-  { value: "takeoff_done", label: "Takeoff Done", color: "#8b5cf6" },
-  { value: "takeoff_reviewed", label: "Takeoff Reviewed", color: "#a855f7" },
-  { value: "proposal_sent", label: "Proposal Sent", color: "#06b6d4" },
-  { value: "active", label: "Active", color: "#f97316" },
-  { value: "completed", label: "Completed", color: "#22c55e" },
-  { value: "bid_lost", label: "Bid Lost", color: "#ef4444" },
-  { value: "archive", label: "Archive", color: "#6b7280" },
-];
+// Canonical status list shared with the server and workflow rules
+import { PROJECT_STATUSES } from "@shared/projectStatus";
 
 const editProjectSchema = z.object({
   name: z.string().min(1, "Project name is required"),
@@ -442,7 +435,7 @@ export default function ProjectDetails() {
   const activeTab = useMemo(() => {
     const params = new URLSearchParams(search);
     const tab = params.get("tab");
-    return tab && ["tasks", "documents", "photos", "daily-reports", "communications", "rfis", "settings"].includes(tab) ? tab : "documents";
+    return tab && ["tasks", "todos", "documents", "photos", "daily-reports", "communications", "rfis", "activity", "settings"].includes(tab) ? tab : "documents";
   }, [search]);
 
   // Update URL when tab changes using wouter navigation
@@ -2781,6 +2774,14 @@ export default function ProjectDetails() {
 
         <TabsContent value="rfis">
           {project && <RfiTab project={project} />}
+        </TabsContent>
+
+        <TabsContent value="todos" className="overflow-x-hidden">
+          <ProjectTodosTab projectId={projectId} />
+        </TabsContent>
+
+        <TabsContent value="activity" className="overflow-x-hidden">
+          <ProjectActivityTab projectId={projectId} />
         </TabsContent>
 
         <TabsContent value="settings">

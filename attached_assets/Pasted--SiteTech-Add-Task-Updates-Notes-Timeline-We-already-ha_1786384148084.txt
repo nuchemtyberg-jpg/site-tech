@@ -1,0 +1,600 @@
+# SiteTech — Add Task Updates / Notes Timeline
+
+We already have the SiteTech Todo / Action Item system implemented.
+
+Add a new feature allowing users to add **text updates, notes, and progress comments** to individual Todos for future reference.
+
+This should function as a chronological history/timeline attached to each Todo.
+
+Do NOT replace or reuse the Todo description field for this purpose.
+
+The Todo description explains what the task is.
+
+Task Updates document what happened afterward.
+
+---
+
+# 1. GOAL
+
+Users should be able to open any Todo and record notes such as:
+
+* Spoke with engineer — waiting for revised detail.
+* Sent updated pricing to customer.
+* Called GC, they expect approval tomorrow.
+* Waiting for supplier pricing.
+* Revised plans received and reviewed.
+* Customer requested another option.
+* Permit application submitted.
+* Followed up with John — no response yet.
+
+These notes should remain attached to the Todo permanently for future reference.
+
+---
+
+# 2. TASK UPDATE DATA MODEL
+
+Create a separate Task/Todo Update entity.
+
+Each update should contain at minimum:
+
+* Unique ID
+* Todo ID
+* Text/body
+* Created by user
+* Created date/time
+* Updated date/time if editing is supported
+* Deleted/archived status if needed
+
+Use naming that fits the application's existing conventions.
+
+Possible names include:
+
+* todo_updates
+* task_updates
+* todo_notes
+
+Prefer "Todo Update" terminology internally if the current system calls these records Todos.
+
+Do not store all updates as one combined text field on the Todo.
+
+Each update must be its own database record.
+
+---
+
+# 3. TODO DETAIL SCREEN
+
+Add an **Updates** or **Activity & Notes** section inside the Todo detail view.
+
+Preferred title:
+
+## Updates
+
+At the top provide:
+
+[ Add an update... ]
+
+or a multiline text area.
+
+Below it, show all previous updates in chronological timeline format.
+
+Example:
+
+---
+
+### Nuchem Tyberg
+
+Aug 10, 2026 · 1:32 PM
+
+Spoke with engineer. They are revising the sewer connection detail and expect to send it tomorrow.
+
+---
+
+### Adam
+
+Aug 9, 2026 · 4:18 PM
+
+Sent revised takeoff quantities to the supplier for pricing.
+
+---
+
+### Nuchem Tyberg
+
+Aug 8, 2026 · 10:06 AM
+
+Reviewed Addendum #2. Pricing needs to be updated.
+
+---
+
+The newest update should appear first by default unless the application's existing activity patterns strongly favor oldest-first.
+
+---
+
+# 4. ADDING AN UPDATE
+
+Users with access to the Todo should see:
+
+### Add Update
+
+Provide:
+
+* Multiline text box
+* Add Update button
+
+Requirements:
+
+* Text is required.
+* Trim blank whitespace.
+* Do not allow empty updates.
+* Support normal line breaks.
+* Preserve entered formatting reasonably.
+* Sanitize content before displaying.
+* Do not require the Todo itself to be placed into edit mode.
+
+Adding an update should be fast.
+
+A user should be able to:
+
+1. Open Todo.
+2. Type update.
+3. Click Add Update.
+4. Immediately see it in the timeline.
+
+---
+
+# 5. AUTHOR AND TIMESTAMP
+
+Every update must automatically record:
+
+* The logged-in user
+* Exact creation date/time
+
+Users should not manually select the author.
+
+Display author name and timestamp clearly.
+
+Example:
+
+Adam
+Aug 10, 2026 at 1:42 PM
+
+Use the application's existing timezone/date formatting conventions.
+
+---
+
+# 6. UPDATE HISTORY SHOULD BE PRESERVED
+
+The purpose of this feature is historical reference.
+
+Therefore, avoid allowing users to silently overwrite old updates.
+
+Preferred behavior:
+
+Users may edit their own update for a limited amount of time if that fits the existing application's permissions, but edited records should clearly display:
+
+"Edited"
+
+Administrators may edit/remove updates when necessary.
+
+If deleting is supported, strongly prefer a soft-delete/archive approach rather than permanently removing historical database records.
+
+Do not allow ordinary users to modify another user's update.
+
+---
+
+# 7. PERMISSIONS
+
+Reuse the existing SiteTech permissions and Project/Todo access rules.
+
+A user may add an update only if they have permission to view/access the Todo.
+
+Do not create a separate permission system solely for Todo Updates.
+
+Server-side authorization is required.
+
+Knowing a Todo ID or Update ID must not allow unauthorized access.
+
+---
+
+# 8. ACTIVITY LOG INTEGRATION
+
+The existing SiteTech system includes activity/audit logging.
+
+When an update is added, record a meaningful activity event such as:
+
+"Adam added an update to 'Complete project pricing'."
+
+Do not duplicate the full note unnecessarily in the global activity log if that creates clutter.
+
+The actual update text should remain in the Todo's Updates section.
+
+If appropriate, activity metadata can reference the Todo Update record.
+
+---
+
+# 9. UPDATE COUNT
+
+Where useful, show the number of updates associated with a Todo.
+
+Example:
+
+Updates (4)
+
+Do not make the UI noisy.
+
+This could appear:
+
+* On the Todo detail page
+* Optionally as a small comment/update icon with count on Todo cards
+
+Do not add the count everywhere unless it fits the current UI cleanly.
+
+---
+
+# 10. MY WORK / TODO LIST
+
+Do not display the full update history in the My Work list.
+
+Keep My Work compact.
+
+Optionally show:
+
+* small updates/comment icon
+* number of updates
+* latest update preview
+
+Example:
+
+💬 3 updates
+
+or:
+
+Latest: Waiting for engineer response...
+
+If this makes the list too cluttered, only show the update count and keep the full content inside the Todo.
+
+---
+
+# 11. LATEST UPDATE
+
+Add architecture allowing the application to efficiently retrieve the latest update associated with a Todo.
+
+This will be useful later for dashboards and reports.
+
+Avoid loading every historical update just to determine the latest one.
+
+Use proper indexed queries or relationships.
+
+---
+
+# 12. PROJECT HISTORY
+
+Todo Updates must remain associated with the Todo even after:
+
+* Todo is completed
+* Todo becomes overdue
+* Todo is reassigned
+* Todo is cancelled
+* Project status changes
+
+Completed Todos should retain their entire update history.
+
+This is important for future project reference.
+
+---
+
+# 13. NOTIFICATIONS
+
+For the first version:
+
+Do NOT send emails every time someone adds a note.
+
+That would quickly become excessive.
+
+However, when a user other than the assigned user adds an update to the Todo, create an in-app notification for the assigned user.
+
+Example:
+
+"Nuchem added an update to: Complete project pricing"
+
+Clicking the notification should open the Todo and ideally scroll/show the Updates section.
+
+Do not notify a user when they add an update to their own assigned Todo.
+
+Do not create duplicate notifications.
+
+---
+
+# 14. FUTURE @MENTIONS
+
+Do NOT build @mentions in this phase unless an existing mention system already exists.
+
+However, design the update architecture so @mentions could be added later.
+
+Future example:
+
+"@Adam please review the revised pricing."
+
+This could eventually generate a notification for Adam.
+
+Do not over-engineer this now.
+
+---
+
+# 15. FUTURE ATTACHMENTS
+
+For this phase, updates are TEXT ONLY.
+
+Do not add file/photo attachments yet unless the current application already has a generic attachment component that can be integrated extremely cleanly.
+
+However, do not design the database in a way that would prevent updates from having linked files/photos in the future.
+
+Possible future example:
+
+Update:
+"Received revised sewer detail."
+
+Attachment:
+Revised-Sewer-Detail.pdf
+
+This is not required now.
+
+---
+
+# 16. MOBILE UX
+
+This feature must work very well from a phone.
+
+Mobile requirements:
+
+* Multiline input fits screen width.
+* No horizontal scrolling.
+* Large Add Update button.
+* Timeline readable without zooming.
+* Author and timestamp easy to distinguish.
+* Long updates wrap naturally.
+* Keyboard opening should not hide the important controls.
+* User should not have to navigate through multiple screens just to add a note.
+
+The primary field use case is:
+
+Open Todo → type quick update → save → continue working.
+
+---
+
+# 17. DATABASE / PERFORMANCE
+
+Use a proper one-to-many relationship:
+
+Todo
+→ many Todo Updates
+
+Add appropriate indexes such as:
+
+* todo_id
+* created_at
+* created_by
+
+Updates should load efficiently.
+
+For Todos with very large histories, support reasonable pagination or incremental loading rather than assuming there will only ever be a few notes.
+
+For the initial UI, loading the latest 25–50 updates is acceptable if needed.
+
+---
+
+# 18. API / BACKEND
+
+Create appropriate backend/service/API functionality for:
+
+* Get Todo Updates
+* Create Todo Update
+* Edit Todo Update if permitted
+* Delete/archive Todo Update if permitted
+
+Validate:
+
+* authenticated user
+* Todo existence
+* user access to Project/Todo
+* update text length/content
+* ownership/permissions for editing
+
+Do not rely only on frontend validation.
+
+---
+
+# 19. EMPTY STATE
+
+If a Todo has no updates, show a useful empty state such as:
+
+"No updates yet."
+
+Then prominently show the Add Update field.
+
+Do not show a large empty table.
+
+---
+
+# 20. TODO DETAIL LAYOUT
+
+Recommended layout:
+
+TODO TITLE
+
+Status | Priority | Assigned To | Due Date
+
+## Description
+
+Original task description here.
+
+## UPDATES
+
+[ Add an update...                  ]
+[                                  ]
+[                       Add Update ]
+
+Nuchem
+Aug 10, 2026 · 1:32 PM
+Spoke with engineer. Revised detail expected tomorrow.
+
+Adam
+Aug 9, 2026 · 4:18 PM
+Sent quantities to supplier for pricing.
+
+---
+
+Activity / other existing Todo information can remain where appropriate.
+
+Do not significantly redesign the Todo page unless needed.
+
+---
+
+# 21. DISTINGUISH DESCRIPTION FROM UPDATES
+
+This distinction is important.
+
+### Description
+
+Answers:
+
+"What needs to be done?"
+
+Example:
+
+Review revised civil plans and confirm stormwater quantities.
+
+### Updates
+
+Answer:
+
+"What has happened with this task?"
+
+Examples:
+
+Aug 8:
+Received revised plans.
+
+Aug 9:
+Reviewed drainage changes.
+
+Aug 10:
+Sent questions to engineer.
+
+Keep these concepts separate in both database and UI.
+
+---
+
+# 22. TESTING
+
+Test at minimum:
+
+### Add Update
+
+1. Open Todo.
+2. Add text update.
+3. Update appears immediately.
+4. Correct author appears.
+5. Correct timestamp appears.
+6. Refresh page.
+7. Update remains.
+
+### Multiple Updates
+
+1. User A adds update.
+2. User B adds update.
+3. Both appear in correct order.
+4. Authors are correct.
+
+### Completed Todo
+
+1. Complete Todo.
+2. Open Todo history.
+3. Updates remain accessible.
+4. New updates should still be allowed if permissions allow historical notes, unless current application rules specifically lock completed Todos.
+
+Preferred behavior: allow adding updates to completed Todos because users may need to document something afterward.
+
+### Permissions
+
+1. Unauthorized user attempts API access.
+2. Access is rejected server-side.
+3. User cannot edit someone else's update unless administrator permissions allow it.
+
+### Notification
+
+1. User A owns Todo.
+2. User B adds update.
+3. User A receives one in-app notification.
+4. Clicking it opens the appropriate Todo.
+
+### Mobile
+
+Verify at common phone widths:
+
+* Reading updates
+* Adding update
+* Long text
+* Multiple lines
+* Scrolling
+* Saving update
+
+No horizontal scrolling.
+
+---
+
+# 23. DO NOT BUILD
+
+Do not add in this phase:
+
+* Chat system
+* Direct messaging
+* @mentions unless already supported
+* Email replies
+* File attachments
+* Photos
+* Voice notes
+* Customer-facing comments
+* Automated AI summaries
+
+This is a simple, durable project-record feature.
+
+---
+
+# 24. FUTURE USE
+
+Design this cleanly because this same type of update/comment architecture may later be useful for:
+
+* RFPs
+* Estimates
+* Proposals
+* Change Orders
+* T&M Tickets
+* Submittals
+* RFIs
+* Inspections
+* Equipment issues
+* Project records
+
+If practical, consider whether the underlying architecture should eventually support generic entity comments/updates.
+
+However, for this implementation, build the user-facing feature specifically for Todos and avoid unnecessary abstraction that adds complexity without benefit.
+
+---
+
+# COMPLETION CRITERIA
+
+This feature is complete when:
+
+* Every Todo has an Updates section.
+* Users can quickly add text updates.
+* Each update records author and timestamp.
+* Updates remain permanently associated with the Todo.
+* Update history survives Todo completion.
+* Users cannot improperly modify another user's updates.
+* Activity logging integrates cleanly.
+* Assigned users receive useful in-app notifications when another user adds an update.
+* Mobile experience is clean.
+* Existing Todo functionality continues working.
+* No existing SiteTech data or functionality is broken.
+
+Before implementation, inspect the existing Todo, activity-log, notification, authentication, and permission architecture and reuse those systems rather than creating duplicate infrastructure.
