@@ -1,0 +1,1381 @@
+# SiteTech — Phase 4: Opportunity / RFP Data Architecture
+
+We are continuing development of the existing SiteTech construction-management application.
+
+The following foundation already exists:
+
+* Users and authentication
+* Projects
+* Customers / Companies
+* Multiple Contacts under Customers
+* Todos / My Work
+* Workflow automation
+* Notifications
+* Email infrastructure
+* Activity / audit logging
+* Communications
+
+The next major feature is the **Opportunity / RFP / Bidding system**.
+
+This phase is focused primarily on creating the correct **database architecture, backend services, relationships, permissions, status model, and basic CRUD foundation**.
+
+Do NOT build the full visual bidding pipeline/dashboard yet. That will be the next phase.
+
+---
+
+# 1. PRIMARY GOAL
+
+Create a new core entity called:
+
+# Opportunity
+
+An Opportunity represents a potential SiteTech project that is being evaluated, estimated, bid, negotiated, won, lost, or declined.
+
+Examples:
+
+* Sitework RFP received from a GC
+* Invitation to bid on a project
+* Customer asks SiteTech for excavation pricing
+* Existing customer asks for preliminary budget pricing
+* Negotiated project opportunity
+* Private project being evaluated before a formal proposal
+
+An Opportunity should exist independently from an active Project.
+
+Do NOT create a Project simply because an RFP is received.
+
+A Project should eventually be created when an Opportunity is awarded.
+
+---
+
+# 2. TERMINOLOGY
+
+Use:
+
+**Opportunity**
+
+as the core technical/database entity.
+
+Future UI may use terminology such as:
+
+* Bidding
+* Opportunities
+* RFPs
+
+Do not name the core data model only "RFP" because not every opportunity will necessarily originate from a formal RFP.
+
+---
+
+# 3. OPPORTUNITY LIFECYCLE
+
+The architecture should support a lifecycle similar to:
+
+New / RFP Received
+→ Under Review
+→ Estimating
+→ Proposal Ready
+→ Proposal Sent
+→ Follow-Up / Negotiation
+→ Awarded
+
+or:
+
+→ Lost
+
+or:
+
+→ No Bid / Declined
+
+or:
+
+→ On Hold
+
+Create the following initial statuses:
+
+* New
+* Under Review
+* Estimating
+* Proposal Ready
+* Proposal Sent
+* Follow-Up
+* On Hold
+* Awarded
+* Lost
+* No Bid
+
+Do not hard-code business logic throughout the application based on text labels.
+
+Use stable IDs, enums, status records, or another clean architecture consistent with the existing application.
+
+The status architecture should be expandable later.
+
+---
+
+# 4. LOST VS NO BID
+
+Treat these as different outcomes.
+
+## Lost
+
+SiteTech submitted or pursued the opportunity but did not receive the project.
+
+## No Bid
+
+SiteTech deliberately chose not to submit pricing.
+
+This distinction is important for future reporting.
+
+Examples:
+
+Lost:
+"We submitted $750,000 but another contractor was selected."
+
+No Bid:
+"Schedule is too aggressive; we decided not to price."
+
+---
+
+# 5. OPPORTUNITY DATA MODEL
+
+Each Opportunity should support at minimum:
+
+* Unique ID
+* Opportunity number
+* Opportunity name / project name
+* Customer / Company
+* Primary contact if selected
+* Opportunity status
+* Estimator / responsible SiteTech user
+* Project address
+* Address line 2
+* City
+* State
+* ZIP
+* RFP received date
+* Bid due date
+* Bid due time
+* Estimated project start date
+* Opportunity source
+* Project type
+* Scope summary
+* Internal notes
+* Expected / preliminary value if known
+* Probability / confidence if used
+* Lost reason
+* No Bid reason
+* Award date
+* Created by
+* Created date/time
+* Updated date/time
+* Archived status if needed
+
+Do not require every field.
+
+The minimum required information should preferably be:
+
+* Opportunity name
+* Customer
+* Status
+
+Other information can be added as it becomes known.
+
+---
+
+# 6. OPPORTUNITY NUMBER
+
+Every Opportunity should receive a unique human-readable Opportunity number.
+
+Example:
+
+OPP-2026-0012
+
+or another format consistent with SiteTech.
+
+Requirements:
+
+* Unique
+* Automatically generated
+* Cannot accidentally duplicate
+* Should not depend only on client-side logic
+* Should remain unchanged even if project name changes
+
+Do not reuse Project IDs as Opportunity numbers.
+
+Build numbering so the format could be changed later without changing primary database IDs.
+
+---
+
+# 7. CUSTOMER RELATIONSHIP
+
+Each Opportunity should normally belong to one Customer / Company from the existing Customer database.
+
+Use the existing Customer entity.
+
+Do NOT create duplicate customer/company records inside the Opportunity module.
+
+Example:
+
+Customer:
+ABC Construction
+
+Opportunity:
+100 South Main Street Sitework
+
+---
+
+# 8. MULTIPLE CONTACTS PER OPPORTUNITY
+
+An Opportunity may involve multiple Contacts from the selected Customer.
+
+Example:
+
+ABC Construction
+
+Opportunity Contacts:
+
+John Smith
+Estimator
+
+Mike Jones
+Project Executive
+
+David Brown
+Contract Signer
+
+Create an Opportunity ↔ Contact relationship capable of supporting multiple contacts.
+
+Conceptually:
+
+OPPORTUNITY_CONTACTS
+
+* opportunity_id
+* contact_id
+* opportunity_role
+* is_primary
+* timestamps if appropriate
+
+Do not duplicate Contact information into the Opportunity table except where a historical snapshot is later specifically required.
+
+---
+
+# 9. OPPORTUNITY CONTACT ROLE
+
+The same Contact may serve different purposes on different Opportunities.
+
+Support an optional Opportunity-specific role such as:
+
+* Estimator
+* Project Manager
+* Project Executive
+* Superintendent
+* Purchasing
+* Accounting
+* Contract Signer
+* Owner
+* Other
+
+Do not confuse this with the Contact's general company-level job title or Contact Role.
+
+Example:
+
+John Smith
+
+Company Job Title:
+Vice President
+
+Company Roles:
+Estimating, Executive
+
+Opportunity Role:
+Estimator
+
+---
+
+# 10. PRIMARY OPPORTUNITY CONTACT
+
+Allow one Contact to be designated:
+
+Primary Opportunity Contact
+
+This does not change the Customer's overall Primary Contact.
+
+Example:
+
+ABC Construction's company-level primary Contact may be the owner.
+
+But for this particular bid, John the estimator may be the Primary Opportunity Contact.
+
+Keep those concepts separate.
+
+---
+
+# 11. PROJECT ADDRESS
+
+The Opportunity project address must be independent from the Customer's office address.
+
+Do not copy the Customer address into the Opportunity automatically unless the user intentionally chooses it.
+
+Store structured fields:
+
+* Address
+* Address line 2
+* City
+* State
+* ZIP
+
+Architecture should allow coordinates/geolocation later if needed.
+
+---
+
+# 12. OPPORTUNITY SOURCE
+
+Add an Opportunity Source field.
+
+Initial options might include:
+
+* Existing Customer
+* Invitation to Bid
+* Email RFP
+* Referral
+* Website / Inbound
+* Repeat Project
+* Developer / Owner
+* Public Bid
+* Other
+
+Make this configurable or expandable where practical.
+
+This will eventually allow reporting such as:
+
+"Where are our successful opportunities coming from?"
+
+---
+
+# 13. PROJECT TYPE
+
+Add a Project Type field.
+
+Initial examples:
+
+* Commercial
+* Multifamily
+* Residential
+* Industrial
+* Institutional
+* Municipal / Public
+* Infrastructure
+* Mixed Use
+* Other
+
+Avoid excessive complexity initially.
+
+This should be expandable later.
+
+---
+
+# 14. SCOPE SUMMARY
+
+Provide an Opportunity-level Scope Summary text field.
+
+Example:
+
+Site clearing, foundation excavation, sanitary sewer, water service, stormwater system and final grading.
+
+This is only a high-level summary.
+
+Do NOT build the detailed Scope/Pricing Checklist in this phase.
+
+That is a future step.
+
+---
+
+# 15. INTERNAL NOTES
+
+Add an Internal Notes field for general Opportunity-level information.
+
+Examples:
+
+Customer wants VE option for stormwater.
+
+Plans appear incomplete.
+
+Need trucking prices before committing to bid.
+
+Do not use this field as a chronological activity log.
+
+Ongoing events should be recorded through:
+
+* Communications
+* Activity
+* Todos
+
+---
+
+# 16. BID DUE DATE AND TIME
+
+Support:
+
+* Bid due date
+* Bid due time
+
+Time should be optional.
+
+Examples:
+
+August 21, 2026
+2:00 PM
+
+Do not store only a formatted text string.
+
+Use proper date/time fields.
+
+Respect the application's timezone conventions.
+
+---
+
+# 17. RFP RECEIVED DATE
+
+Store when the opportunity/RFP was received.
+
+This will later support reporting such as:
+
+* Average days from RFP received to bid submission
+* Number of bids received per month
+
+This may default to today's date when an Opportunity is created but should remain editable.
+
+---
+
+# 18. ESTIMATED START DATE
+
+Allow an optional estimated project start date.
+
+This is preliminary and does not become the actual Project schedule automatically.
+
+---
+
+# 19. ESTIMATOR / RESPONSIBLE USER
+
+Each Opportunity should support a responsible SiteTech user.
+
+Examples:
+
+Estimator
+Preconstruction Manager
+Owner handling the bid
+
+Use the existing User system.
+
+Do not create a separate estimator table.
+
+The responsible user should be changeable.
+
+---
+
+# 20. WORKFLOW ENGINE INTEGRATION
+
+Use the existing SiteTech Workflow Automation system.
+
+Opportunity statuses must be designed so they can trigger workflow rules.
+
+Future examples:
+
+Opportunity created
+→ Assign estimator
+→ Create Todo
+
+Status changes to Estimating
+→ Create "Complete estimate" Todo
+
+Status changes to Proposal Sent
+→ Create follow-up Todo due in 5 days
+
+Status changes to Awarded
+→ Notify management
+
+Do not hard-code these automations directly into the Opportunity module if the existing generic Workflow system can handle them.
+
+Extend the Workflow system so Opportunity status changes can be a trigger type.
+
+---
+
+# 21. TODOS
+
+Use the existing universal Todo system.
+
+Todos should be able to link to:
+
+* Opportunity
+* Customer
+* Future Estimate
+* Future Proposal
+
+For this phase, ensure Todo generic entity linking supports Opportunity records.
+
+Example:
+
+Todo:
+Review RFP documents
+
+Project:
+None
+
+Related Entity:
+Opportunity #OPP-2026-0012
+
+This is important because the Opportunity may not yet have a Project.
+
+---
+
+# 22. MY WORK
+
+Opportunity-linked Todos should automatically appear in the existing My Work dashboard.
+
+Do not create a separate opportunity task system.
+
+Where My Work currently displays Project, it should gracefully support a Todo that belongs to an Opportunity without an active Project.
+
+Example:
+
+Review RFP documents
+
+Opportunity:
+100 South Main Street
+
+Due:
+Aug 13
+
+---
+
+# 23. ACTIVITY LOG
+
+Use the existing reusable Activity/Audit system.
+
+Record meaningful Opportunity actions including:
+
+* Opportunity created
+* Opportunity edited
+* Customer changed
+* Contact added
+* Contact removed
+* Responsible user changed
+* Bid due date changed
+* Status changed
+* Lost
+* No Bid
+* Awarded
+* Communication logged
+* Important document added later
+
+Do not create a separate Opportunity-only activity engine.
+
+---
+
+# 24. STATUS HISTORY
+
+Maintain explicit Opportunity Status history.
+
+For every status transition record:
+
+* Opportunity
+* Previous status
+* New status
+* User
+* Date/time
+* Related workflow executions
+
+Do not trigger status automation when the record is saved without an actual status change.
+
+---
+
+# 25. COMMUNICATIONS
+
+Extend the existing Communications system so a Communication can optionally link to an Opportunity.
+
+A Communication may therefore have:
+
+* Customer
+* Contact
+* Opportunity
+* Project if applicable
+
+Before award, a Communication may have:
+
+Customer:
+ABC Construction
+
+Contact:
+John Smith
+
+Opportunity:
+100 South Main Street
+
+Project:
+None
+
+After award, future communications may link to the Project as well.
+
+Do not duplicate Communication records.
+
+---
+
+# 26. CUSTOMER DETAIL FUTURE RELATIONSHIP
+
+The Customer detail architecture should now support:
+
+* Contacts
+* Projects
+* Communications
+* Opportunities
+* Activity
+
+Do not necessarily build the full Opportunities tab UI during this backend-focused phase if that belongs more appropriately in Phase 5.
+
+However, make sure the relationship/query architecture exists.
+
+---
+
+# 27. OPPORTUNITY DOCUMENT ARCHITECTURE
+
+Opportunities will eventually contain:
+
+* RFP invitation
+* Plans
+* Specifications
+* Addenda
+* Geotechnical reports
+* Bid forms
+* Vendor quotes
+* Takeoff documents
+* Proposal files
+
+Do NOT build a separate file-storage system.
+
+Inspect the existing SiteTech Documents/File infrastructure.
+
+Ensure an existing file/document can eventually be linked to an Opportunity.
+
+If the existing file architecture already supports generic entity relationships, extend it to Opportunity.
+
+If it does not, document the recommended approach before making broad changes.
+
+Do not build the full document interface in this phase.
+
+---
+
+# 28. FUTURE SCOPE ITEMS
+
+The next future feature will allow structured Scope to Price records such as:
+
+* Site Clearing
+* Demolition
+* Excavation
+* Foundation Excavation
+* Sewer
+* Water
+* Storm
+* Grading
+* Paving
+* SOE
+* Other
+
+Do NOT build the detailed Scope/Pricing Checklist now.
+
+But Opportunity architecture must support:
+
+Opportunity
+→ Many Scope Items
+
+without redesign later.
+
+---
+
+# 29. FUTURE TAKEOFF
+
+The future Takeoff system will belong to the Opportunity and/or Estimate.
+
+Do not implement takeoff functionality now.
+
+Architecture should support:
+
+Opportunity
+→ Estimate
+→ Takeoff
+
+and potentially multiple Estimate versions.
+
+---
+
+# 30. FUTURE ESTIMATES
+
+An Opportunity may eventually have multiple Estimate versions.
+
+Example:
+
+Estimate V1
+Original Plans
+
+Estimate V2
+Addendum #1
+
+Estimate V3
+VE Revision
+
+Do not put estimate totals directly into a way that assumes only one permanent Estimate.
+
+The Opportunity may contain a preliminary expected value, but formal estimate data will later live in Estimate records.
+
+---
+
+# 31. FUTURE PROPOSALS
+
+One Opportunity may eventually have multiple Proposal versions.
+
+Example:
+
+Proposal V1
+Sent Aug 12
+
+Proposal V2
+Revised Aug 17
+
+Proposal V3
+Final Negotiated
+
+Do not design Opportunity as having only one proposal file or proposal price.
+
+Future architecture should support:
+
+Opportunity
+→ Many Proposals
+
+---
+
+# 32. AWARDED STATUS
+
+An Opportunity should be able to reach:
+
+Awarded
+
+However, the full:
+
+Opportunity → Project conversion
+
+will be implemented in a later phase.
+
+For now:
+
+* Support Awarded status
+* Store Award date
+* Preserve all Opportunity information
+
+Optionally add a nullable:
+
+converted_project_id
+
+or equivalent relationship if appropriate.
+
+Do not automatically create Projects yet unless existing roadmap implementation specifically requires it.
+
+---
+
+# 33. FUTURE CONVERSION TO PROJECT
+
+When implemented later, Awarding an Opportunity will eventually create or link to a Project.
+
+Information likely carried forward will include:
+
+* Opportunity name
+* Customer
+* Project address
+* Selected contacts
+* Documents
+* Scope
+* Award information
+* Proposal/contract
+* Activity references where appropriate
+
+Do not duplicate all historical data into the Project unnecessarily.
+
+Some records should remain associated with the Opportunity and be referenced from the Project.
+
+Design for one clean source of truth.
+
+---
+
+# 34. LOST OPPORTUNITY
+
+When status changes to Lost, support:
+
+Lost reason
+
+Suggested initial Lost Reason options:
+
+* Price
+* Competitor Selected
+* Customer Cancelled Project
+* Schedule
+* Scope Changed
+* Relationship
+* No Response
+* Unknown
+* Other
+
+Allow optional text notes.
+
+Do not require a competitor name.
+
+---
+
+# 35. NO BID
+
+When status becomes No Bid, support:
+
+No Bid reason
+
+Suggested options:
+
+* Outside Scope
+* Insufficient Time
+* Schedule Conflict
+* Too Far / Geography
+* Project Risk
+* Customer / Credit Concern
+* Insufficient Information
+* Capacity
+* Not Competitive
+* Other
+
+Allow additional notes.
+
+This data will be useful for future reporting.
+
+---
+
+# 36. LOST / NO BID HISTORY
+
+Lost and No Bid Opportunities should remain searchable and reportable.
+
+Do not delete them.
+
+They represent valuable business history.
+
+---
+
+# 37. ARCHIVING
+
+Awarded, Lost, and No Bid are business statuses.
+
+Archive is different.
+
+Archiving should simply hide old records from default views without destroying them.
+
+Do not automatically archive immediately when an Opportunity becomes Lost or Awarded.
+
+---
+
+# 38. PERMISSIONS
+
+Use the existing SiteTech permission system.
+
+Design permissions around abilities such as:
+
+* View Opportunities
+* Create Opportunities
+* Edit Opportunities
+* Change Opportunity Status
+* Assign Opportunity Responsible User
+* View Financial/Expected Value fields if needed
+* Archive Opportunities
+
+Do not create an entirely separate authentication system.
+
+All authorization must be enforced server-side.
+
+---
+
+# 39. DATA ACCESS SECURITY
+
+A user should not be able to access an Opportunity just by knowing its ID.
+
+Respect existing organization/account/project access patterns.
+
+Validate:
+
+* User authentication
+* Customer existence
+* Contact belongs to Customer
+* Responsible user is valid
+* Opportunity status is valid
+* Related IDs are valid
+
+---
+
+# 40. CUSTOMER CONTACT VALIDATION
+
+If Customer is:
+
+ABC Construction
+
+the user should not be able to assign a Contact belonging to:
+
+XYZ Development
+
+as an Opportunity Contact.
+
+Enforce this server-side.
+
+If Customer changes, existing Opportunity Contacts that no longer belong to the selected Customer must be handled safely.
+
+Do not silently retain invalid relationships.
+
+---
+
+# 41. CUSTOMER CHANGE
+
+If the user changes the Customer after creating an Opportunity:
+
+Warn them if Contacts, Communications, or related records already reference the previous Customer.
+
+Do not automatically delete historical data.
+
+Use a safe strategy consistent with existing data-integrity patterns.
+
+---
+
+# 42. DATABASE CONCEPT
+
+Conceptually, the data model may resemble:
+
+OPPORTUNITIES
+
+* id
+* opportunity_number
+* name
+* customer_id
+* status
+* responsible_user_id
+* address
+* address_2
+* city
+* state
+* zip
+* rfp_received_date
+* bid_due_date
+* bid_due_time
+* estimated_start_date
+* source
+* project_type
+* scope_summary
+* internal_notes
+* preliminary_value
+* probability
+* lost_reason
+* no_bid_reason
+* award_date
+* converted_project_id
+* archived
+* created_by
+* created_at
+* updated_at
+
+OPPORTUNITY_CONTACTS
+
+* id
+* opportunity_id
+* contact_id
+* opportunity_role
+* is_primary
+* timestamps
+
+OPPORTUNITY_STATUS_HISTORY
+
+* id
+* opportunity_id
+* previous_status
+* new_status
+* changed_by
+* changed_at
+
+Follow existing SiteTech naming and database conventions rather than blindly copying these names.
+
+---
+
+# 43. DATABASE INDEXES
+
+Create appropriate indexes.
+
+Likely commonly queried fields include:
+
+* opportunity number
+* customer
+* status
+* responsible user
+* bid due date
+* created date
+* archived
+* project state/location if future filtering requires it
+
+Opportunity Contacts:
+
+* opportunity ID
+* contact ID
+
+Status History:
+
+* opportunity ID
+* changed date
+
+Avoid unnecessary indexes.
+
+---
+
+# 44. EXPECTED VALUE
+
+Allow an optional:
+
+Preliminary / Expected Value
+
+This is NOT the formal estimate.
+
+It is simply a rough expected project value if known.
+
+Example:
+
+Estimated opportunity size:
+$500,000
+
+This may later support pipeline forecasting.
+
+Do not treat this number as actual contract value.
+
+---
+
+# 45. WIN PROBABILITY
+
+Optionally support:
+
+Win Probability
+
+0–100%
+
+This should not be required.
+
+If implemented, validate range server-side.
+
+Do not build complex sales forecasting around it yet.
+
+---
+
+# 46. BASIC CRUD
+
+For this phase, create the backend/service/API support necessary to:
+
+* Create Opportunity
+* Read Opportunity
+* Update Opportunity
+* Change Opportunity Status
+* Add/remove Opportunity Contacts
+* Assign responsible user
+* Archive Opportunity
+* Retrieve Opportunity history
+
+A simple functional UI for testing CRUD is acceptable if needed.
+
+Do not spend this phase building the polished pipeline board.
+
+---
+
+# 47. API / SERVICE ARCHITECTURE
+
+Do not place all business logic directly in frontend components.
+
+Use the existing SiteTech application structure.
+
+Centralize important logic such as:
+
+* Opportunity number generation
+* Status transition handling
+* Workflow triggering
+* Activity logging
+* Status history
+* Customer/contact validation
+
+This prevents different screens from handling status changes differently.
+
+---
+
+# 48. STATUS CHANGE SERVICE
+
+Opportunity status changes should run through one centralized backend/service method.
+
+That method should:
+
+1. Validate permission
+2. Validate new status
+3. Compare old vs new status
+4. Update status
+5. Record status history
+6. Record activity
+7. Trigger applicable workflows
+8. Return updated Opportunity
+
+Do not scatter this behavior across UI pages.
+
+---
+
+# 49. WORKFLOW DUPLICATE PREVENTION
+
+Use the duplicate/idempotency protection already implemented in the Workflow system.
+
+Changing:
+
+Estimating → Proposal Ready
+
+should trigger Proposal Ready workflow once.
+
+Saving Proposal Ready → Proposal Ready should not trigger another workflow.
+
+---
+
+# 50. ACTIVITY EXAMPLES
+
+Future Opportunity activity may appear as:
+
+Aug 10, 2026 · 2:15 PM
+Nuchem created Opportunity OPP-2026-0012.
+
+Aug 10, 2026 · 2:17 PM
+Nuchem added John Smith as Primary Contact.
+
+Aug 11, 2026 · 9:32 AM
+Adam changed status from Under Review to Estimating.
+
+Aug 11, 2026 · 9:32 AM
+System created Todo "Complete estimate."
+
+Use the existing activity system.
+
+---
+
+# 51. DO NOT BUILD YET
+
+Do NOT build in this phase:
+
+* Full Bidding pipeline dashboard
+* Kanban board
+* Scope pricing checklist
+* Takeoff
+* Estimate line items
+* Cost database
+* Proposal generation
+* Proposal PDF
+* Proposal emailing
+* Proposal tracking
+* Electronic signatures
+* Contract creation
+* Automatic Project conversion
+* T&M
+* Change Orders
+* Submittals
+
+Those belong to later roadmap phases.
+
+---
+
+# 52. MIGRATION / EXISTING DATA
+
+Do not automatically convert existing Projects with status "Bidding" into Opportunities without reviewing the current data architecture.
+
+There may currently be Projects representing bids.
+
+Inspect the existing application and report whether there are existing Projects/statuses that conceptually overlap with Opportunities.
+
+Do not destructively migrate those records without an explicit migration plan.
+
+Existing Projects must continue working.
+
+---
+
+# 53. IMPORTANT EXISTING "BIDDING" PROJECTS
+
+If existing Project statuses include values such as:
+
+* New
+* Bidding
+
+do not simply remove them.
+
+Document:
+
+* how current Projects use these statuses
+* how the new Opportunity system should eventually replace pre-award Projects
+* whether existing historical records need migration later
+
+For this phase, preserve existing functionality.
+
+---
+
+# 54. TESTING
+
+Test at minimum:
+
+## Opportunity Creation
+
+Create:
+
+Customer:
+ABC Construction
+
+Opportunity:
+100 South Main Street Sitework
+
+Status:
+New
+
+Responsible User:
+Adam
+
+Confirm:
+
+* Unique Opportunity number generated
+* Customer relationship correct
+* User relationship correct
+* Activity recorded
+
+## Multiple Contacts
+
+Add:
+
+John Smith — Estimator — Primary
+
+Mike Jones — Project Executive
+
+Confirm both belong to the same Opportunity.
+
+## Contact Validation
+
+Attempt to add Contact from another Customer.
+
+Server must reject it.
+
+## Status Change
+
+New → Under Review
+
+Confirm:
+
+* Opportunity updated
+* Status history created
+* Activity recorded
+* Workflow triggers correctly if configured
+
+Save again without changing status.
+
+Confirm:
+
+* No duplicate history
+* No duplicate workflow
+
+## Lost
+
+Change to Lost.
+
+Record Lost Reason.
+
+Confirm record remains available.
+
+## No Bid
+
+Change another Opportunity to No Bid.
+
+Record reason.
+
+Confirm it remains available.
+
+## Todo
+
+Create Todo linked to Opportunity.
+
+Confirm:
+
+* Todo appears under Opportunity relationship
+* Todo appears in My Work
+* Project is not required
+
+## Communication
+
+Create Communication linked to:
+
+Customer
+Contact
+Opportunity
+
+Confirm all relationships remain correct.
+
+## Permissions
+
+Unauthorized user attempts to edit Opportunity.
+
+Server rejects request.
+
+---
+
+# 55. REGRESSION TESTING
+
+Verify existing:
+
+* Projects
+* Customers
+* Contacts
+* Communications
+* Todos
+* My Work
+* Workflows
+* Notifications
+* Activity
+
+continue operating normally.
+
+Do not break existing Customer → Project relationships.
+
+---
+
+# COMPLETION CRITERIA
+
+This phase is complete when:
+
+* Opportunity exists as a separate entity from Project.
+* Opportunities link to existing Customers.
+* Opportunities support multiple Contacts.
+* Opportunity-specific Contact roles work.
+* Opportunity numbers are generated safely.
+* Opportunity statuses and status history work.
+* Responsible users can be assigned.
+* Bid dates and basic RFP information can be stored.
+* Lost and No Bid reasons can be recorded.
+* Todos can link to Opportunities.
+* My Work supports Opportunity-linked Todos.
+* Communications can link to Opportunities.
+* Activity logging works.
+* Workflow automation can respond to Opportunity status changes.
+* Existing SiteTech functionality remains intact.
+* Architecture supports future Takeoffs, Estimates, Proposals and Project conversion.
+
+---
+
+# FINAL INSTRUCTION
+
+Before implementing database changes, inspect the existing SiteTech codebase and database.
+
+Pay particular attention to how current Projects with statuses such as "new" or "bidding" are being used.
+
+Do not destroy or automatically migrate existing Projects.
+
+This phase should establish a clean distinction:
+
+Opportunity = work SiteTech is pursuing
+
+Project = work SiteTech has actually been awarded / is managing
+
+Build the Opportunity foundation as reusable production architecture, not as a temporary screen that will need to be replaced when estimating and proposals are added.
