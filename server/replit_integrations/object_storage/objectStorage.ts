@@ -104,7 +104,7 @@ export class ObjectStorageService {
       const isPublic = aclPolicy?.visibility === "public";
       const headers: Record<string, string> = {
         "Content-Type": metadata.contentType || "application/octet-stream",
-        "Content-Length": metadata.size,
+        "Content-Length": String(metadata.size ?? 0),
         "Cache-Control": `${
           isPublic ? "public" : "private"
         }, max-age=${cacheTtlSec}`,

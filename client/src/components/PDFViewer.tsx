@@ -33,7 +33,7 @@ interface PDFViewerProps {
   url: string;
   fileName: string;
   onClose: () => void;
-  onShare: () => void;
+  onShare?: () => void;
 }
 
 type MarkupTool = "none" | "pen" | "highlighter" | "text" | "eraser" | "rectangle" | "arrow" | "line" | "select";

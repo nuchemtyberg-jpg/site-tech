@@ -72,13 +72,10 @@ export default function EquipmentDetails() {
 
   const createMaintenanceMutation = useMutation({
     mutationFn: async (data: MaintenanceFormData) => {
-      return apiRequest(`/api/equipment/${id}/maintenance`, {
-        method: "POST",
-        body: JSON.stringify({
-          ...data,
-          cost: data.cost ? parseInt(data.cost) : null,
-          nextDueDate: data.nextDueDate || null,
-        }),
+      return apiRequest("POST", `/api/equipment/${id}/maintenance`, {
+        ...data,
+        cost: data.cost ? parseInt(data.cost) : null,
+        nextDueDate: data.nextDueDate || null,
       });
     },
     onSuccess: () => {
@@ -94,7 +91,7 @@ export default function EquipmentDetails() {
 
   const deleteMutation = useMutation({
     mutationFn: async () => {
-      return apiRequest(`/api/equipment/${id}`, { method: "DELETE" });
+      return apiRequest("DELETE", `/api/equipment/${id}`);
     },
     onSuccess: () => {
       navigate("/equipment");

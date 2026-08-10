@@ -21,6 +21,7 @@ const buttonVariants = cva(
         secondary: "border bg-secondary text-secondary-foreground border border-secondary-border ",
         // Add a transparent border so that when someone toggles a border on later, it doesn't shift layout/size.
         ghost: "border border-transparent",
+        link: "border border-transparent text-primary underline-offset-4 hover:underline",
       },
       // Heights are min heights with mobile-friendly sizing (44px minimum on mobile)
       size: {

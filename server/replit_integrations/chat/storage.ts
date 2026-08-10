@@ -1,6 +1,21 @@
 import { db } from "../../db";
-import { conversations, messages } from "@shared/schema";
+import { pgTable, serial, text, integer, timestamp } from "drizzle-orm/pg-core";
 import { eq, desc } from "drizzle-orm";
+
+// Local table definitions for the chat integration (not part of @shared/schema).
+const conversations = pgTable("conversations", {
+  id: serial("id").primaryKey(),
+  title: text("title").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+const messages = pgTable("messages", {
+  id: serial("id").primaryKey(),
+  conversationId: integer("conversation_id").notNull(),
+  role: text("role").notNull(),
+  content: text("content").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
 
 export interface IChatStorage {
   getConversation(id: number): Promise<typeof conversations.$inferSelect | undefined>;

@@ -728,7 +728,7 @@ export default function DailyReportPage() {
 
   // Photo mutations
   const createPhotoMutation = useMutation({
-    mutationFn: async (data: { taskEntryId?: number; deliveryEntryId?: number; inspectionEntryId?: number; url: string; cloudinaryPublicId?: string; cloudinaryUrl?: string; fileName?: string; takenAt?: string }) => {
+    mutationFn: async (data: { reportId?: number; taskEntryId?: number; deliveryEntryId?: number; inspectionEntryId?: number; url: string; cloudinaryPublicId?: string; cloudinaryUrl?: string; fileName?: string; takenAt?: string }) => {
       return apiRequest("POST", `/api/daily-report-photos`, data);
     },
     onSuccess: () => refetchReport(),

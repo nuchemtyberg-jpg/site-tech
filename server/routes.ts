@@ -123,7 +123,7 @@ export async function registerRoutes(
       if (role) updates.role = role;
       if (isAuthorized) updates.isAuthorized = isAuthorized;
       
-      const user = await storage.updateUser(req.params.id, updates);
+      const user = await storage.updateUser(String(req.params.id), updates);
       res.json(user);
     } catch (err) {
       res.status(500).json({ message: "Failed to update user" });
@@ -192,7 +192,7 @@ export async function registerRoutes(
   app.patch("/api/admin/authorized-users/:id", isAuthenticated, isAdmin, async (req, res) => {
     try {
       const updates = req.body;
-      const updated = await storage.updateAuthorizedUser(req.params.id, updates);
+      const updated = await storage.updateAuthorizedUser(String(req.params.id), updates);
       if (!updated) {
         return res.status(404).json({ message: "Authorized user not found" });
       }
@@ -204,7 +204,7 @@ export async function registerRoutes(
 
   // Delete authorized email (admin only)
   app.delete("/api/admin/authorized-users/:id", isAuthenticated, isAdmin, async (req, res) => {
-    await storage.deleteAuthorizedUser(req.params.id);
+    await storage.deleteAuthorizedUser(String(req.params.id));
     res.status(204).send();
   });
 
@@ -3763,7 +3763,7 @@ export async function registerRoutes(
 
   // Check if report exists for a specific date
   app.get('/api/projects/:projectId/reports/by-date/:date', isAuthenticated, isAuthorizedUser, async (req, res) => {
-    const report = await storage.getDailyReportByDate(Number(req.params.projectId), req.params.date);
+    const report = await storage.getDailyReportByDate(Number(req.params.projectId), String(req.params.date));
     if (!report) return res.status(404).json({ message: "No report for this date" });
     res.json(report);
   });
@@ -4087,7 +4087,7 @@ export async function registerRoutes(
         if (!ok) return res.status(404).json({ message: "Attachment file not found" });
         res.setHeader("Content-Type", att.contentType || "application/octet-stream");
         res.setHeader("Content-Disposition", `attachment; filename="${att.name}"`);
-        res.send(Buffer.from(value));
+        res.send(Buffer.from(value[0]));
       } else if (att.outlookAttachmentId && email.outlookMessageId) {
         const content = await getAttachmentContent(projectId, email.outlookMessageId, att.outlookAttachmentId);
         if (!content) return res.status(404).json({ message: "Attachment content not available" });

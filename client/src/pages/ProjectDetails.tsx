@@ -497,7 +497,7 @@ export default function ProjectDetails() {
   };
 
   const handleShareFile = async (file: FileMetadata | Photo) => {
-    const proxyPath = getProxyUrl(file.objectPath);
+    const proxyPath = getProxyUrl(file.objectPath ?? "");
     try {
       // Try to share the actual file
       const response = await fetch(proxyPath);
@@ -2922,7 +2922,7 @@ export default function ProjectDetails() {
       {/* PDF Viewer with markup tools */}
       {viewingFile && isPdfFile(viewingFile.contentType) && (
         <PDFViewer 
-          url={getProxyUrlWithFilename(viewingFile.objectPath, viewingFile.name)}
+          url={getProxyUrlWithFilename(viewingFile.objectPath ?? "", viewingFile.name)}
           fileName={viewingFile.name}
           onClose={() => setViewingFile(null)}
           onShare={() => handleShareFile(viewingFile)}
@@ -2940,7 +2940,7 @@ export default function ProjectDetails() {
             <X className="w-6 h-6" />
           </button>
           <img
-            src={getProxyUrl(viewingFile.objectPath)}
+            src={getProxyUrl(viewingFile.objectPath ?? "")}
             alt={viewingFile.name}
             className="max-w-full max-h-full object-contain"
             onClick={(e) => e.stopPropagation()}
@@ -2959,7 +2959,7 @@ export default function ProjectDetails() {
             <X className="w-6 h-6" />
           </button>
           <video
-            src={getProxyUrl(viewingFile.objectPath)}
+            src={getProxyUrl(viewingFile.objectPath ?? "")}
             controls
             autoPlay
             className="max-w-full max-h-full"
@@ -2977,7 +2977,7 @@ export default function ProjectDetails() {
             <p className="text-muted-foreground mb-4">This file type cannot be previewed.</p>
             <div className="flex gap-2 justify-center">
               <a
-                href={getProxyUrlWithFilename(viewingFile.objectPath, viewingFile.name, true)}
+                href={getProxyUrlWithFilename(viewingFile.objectPath ?? "", viewingFile.name, true)}
                 download={viewingFile.name}
                 className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
               >
