@@ -50,3 +50,7 @@ defaultBucketID = "replit-objstore-8b10f27f-9687-4b65-bae8-e1f1aa64e143"
 [userenv.shared]
 APP_BASE_URL = "https://sitetech-app.replit.app"
 MAILGUN_DOMAIN = "updates.sitetechnj.com"
+
+[postMerge]
+path = "scripts/post-merge.sh"
+timeoutMs = 120000
