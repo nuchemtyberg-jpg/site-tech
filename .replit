@@ -30,6 +30,14 @@ author = "agent"
 task = "workflow.run"
 args = "Start application"
 
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "workflow-engine"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "http-api"
+
 [[workflows.workflow]]
 name = "Start application"
 author = "agent"
@@ -38,6 +46,28 @@ author = "agent"
 task = "shell.exec"
 args = "npm run dev"
 waitForPort = 5000
+
+[[workflows.workflow]]
+name = "workflow-engine"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "npx tsx scripts/test-workflow-engine.ts"
+
+[workflows.workflow.metadata]
+isValidation = true
+
+[[workflows.workflow]]
+name = "http-api"
+author = "agent"
+
+[workflows.workflow.metadata]
+isValidation = true
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "bash scripts/run-http-api-tests.sh"
 
 [agent]
 integrations = ["javascript_log_in_with_replit:2.0.0", "javascript_object_storage:2.0.0", "sendgrid:1.0.0", "outlook:1.0.0", "javascript_openai_ai_integrations:2.0.0"]
