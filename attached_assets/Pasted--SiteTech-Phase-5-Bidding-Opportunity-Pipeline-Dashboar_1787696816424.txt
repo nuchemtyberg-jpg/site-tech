@@ -1,0 +1,1574 @@
+# SiteTech — Phase 5: Bidding / Opportunity Pipeline Dashboard
+
+We have already implemented the core Opportunity / RFP architecture in SiteTech.
+
+Existing related systems include:
+
+- Customers / Companies
+- Multiple Contacts
+- Projects
+- Opportunities
+- Opportunity statuses
+- Opportunity status history
+- Opportunity Contacts
+- Todos / My Work
+- Workflow automation
+- Notifications
+- Email infrastructure
+- Communications
+- Activity / audit logging
+- User permissions
+
+The next phase is to build the primary user-facing Bidding / Opportunity management experience.
+
+This phase should create the interface that SiteTech employees use every day to manage incoming RFPs and bids from initial receipt through Awarded, Lost, or No Bid.
+
+Do NOT build estimating, takeoff, proposal generation, or pricing functionality yet.
+
+The goal of this phase is visibility, organization, workflow, and efficient management of Opportunities.
+
+--------------------------------------------------
+1. PRIMARY NAVIGATION
+--------------------------------------------------
+
+Add a main navigation item called:
+
+Bidding
+
+or:
+
+Opportunities
+
+Preferred user-facing name:
+
+Bidding
+
+The technical entity can remain Opportunity.
+
+The Bidding section should open to the main Bidding Dashboard.
+
+Do not put pre-award work into the Projects navigation.
+
+Maintain the architectural distinction:
+
+Opportunity = potential/pre-award work
+
+Project = awarded work
+
+--------------------------------------------------
+2. MAIN BIDDING DASHBOARD
+--------------------------------------------------
+
+Create a main page:
+
+BIDDING
+
+Subtitle:
+
+Manage opportunities, RFPs and active bids
+
+At the top include:
+
+[ + New Opportunity ]
+
+The dashboard should make it immediately clear:
+
+- What opportunities are active
+- What bids are due soon
+- Which opportunities need attention
+- Which estimator/user owns each opportunity
+- Where each opportunity is in the pipeline
+
+--------------------------------------------------
+3. DASHBOARD SUMMARY CARDS
+--------------------------------------------------
+
+At the top of the Bidding dashboard show useful summary cards.
+
+Recommended initial cards:
+
+Active Opportunities
+Bids Due This Week
+Proposal Sent
+Awarded This Month
+
+Optionally include:
+
+Overdue Bid Dates
+
+if useful.
+
+Example:
+
+[ 18 Active ]
+[ 5 Due This Week ]
+[ 4 Proposal Sent ]
+[ 3 Awarded This Month ]
+
+Clicking a card should apply the corresponding filter.
+
+Do not create vanity metrics that do not help daily operations.
+
+--------------------------------------------------
+4. PIPELINE VIEW
+--------------------------------------------------
+
+Create a Pipeline / Kanban view grouped by Opportunity Status.
+
+Use the existing Opportunity statuses.
+
+Initial active pipeline columns may include:
+
+New
+Under Review
+Estimating
+Proposal Ready
+Proposal Sent
+Follow-Up
+On Hold
+
+Awarded, Lost and No Bid should generally not clutter the default active pipeline.
+
+Provide easy access to completed/outcome statuses through filters.
+
+Do not duplicate status definitions in the frontend.
+
+Use the Opportunity status architecture already implemented.
+
+--------------------------------------------------
+5. PIPELINE CARD
+--------------------------------------------------
+
+Each Opportunity card should show enough information to identify the bid without becoming overloaded.
+
+Recommended information:
+
+Opportunity Name
+Customer
+Opportunity Number
+Project Location
+Bid Due Date
+Responsible User / Estimator
+Preliminary Value if available
+Priority/attention indicator where appropriate
+
+Example:
+
+100 SOUTH MAIN STREET
+
+ABC Construction
+OPP-2026-0041
+
+Brooklyn, NY
+
+Bid Due:
+Aug 18 · 2:00 PM
+
+Estimator:
+Adam
+
+$850K
+
+If the Opportunity has an overdue bid date and is still active, make that visually obvious.
+
+--------------------------------------------------
+6. BID DUE DATE VISIBILITY
+--------------------------------------------------
+
+Bid due dates are one of the most important pieces of information in this system.
+
+Use clear indicators for:
+
+Overdue
+Due Today
+Due Tomorrow
+Due This Week
+
+Do not rely only on color.
+
+Examples:
+
+OVERDUE · Aug 8
+
+DUE TODAY · 2:00 PM
+
+DUE TOMORROW
+
+Aug 18 · 2:00 PM
+
+Make this easy to scan.
+
+--------------------------------------------------
+7. DRAG AND DROP STATUS CHANGES
+--------------------------------------------------
+
+On desktop, allow Opportunity cards to be dragged between pipeline columns if it can be implemented reliably.
+
+IMPORTANT:
+
+Dragging a card into another status must use the existing centralized Opportunity Status Change backend/service.
+
+Do NOT directly update the database status from the frontend.
+
+The status change must continue to:
+
+- validate permissions
+- record status history
+- record activity
+- trigger workflow rules
+- generate Todos
+- generate notifications
+- prevent duplicate automation
+
+If a status requires additional information, do not silently complete the status change.
+
+Examples:
+
+Lost
+→ require Lost Reason
+
+No Bid
+→ require No Bid Reason
+
+Awarded
+→ may require Award Date
+
+Open an appropriate modal before completing the transition.
+
+--------------------------------------------------
+8. MOBILE STATUS CHANGES
+--------------------------------------------------
+
+Do not depend on drag-and-drop on mobile.
+
+On phones, provide a clear:
+
+Change Status
+
+control.
+
+Use:
+
+dropdown
+modal
+bottom sheet
+
+or another mobile-friendly pattern consistent with SiteTech.
+
+All backend status-change logic must remain identical.
+
+--------------------------------------------------
+9. LIST VIEW
+--------------------------------------------------
+
+Provide a second dashboard view:
+
+Pipeline | List
+
+The List view is important for users who need to sort and compare many bids.
+
+Recommended columns on desktop:
+
+Opportunity
+Customer
+Status
+Responsible User
+Bid Due
+Location
+Preliminary Value
+Last Activity
+
+Allow sorting by:
+
+Bid Due
+Opportunity Name
+Customer
+Status
+Responsible User
+Created Date
+Preliminary Value
+
+Do not force a wide desktop table onto mobile.
+
+On mobile use cards.
+
+--------------------------------------------------
+10. VIEW PREFERENCE
+--------------------------------------------------
+
+If practical, remember the user's most recently selected view:
+
+Pipeline
+or
+List
+
+Do not make this complicated.
+
+If no preference exists:
+
+Desktop default:
+Pipeline
+
+Mobile default:
+List or grouped cards
+
+--------------------------------------------------
+11. SEARCH
+--------------------------------------------------
+
+Add fast Opportunity search.
+
+Search should match:
+
+Opportunity name
+Opportunity number
+Customer/company
+Opportunity Contact name
+Project address
+City
+ZIP
+
+Example:
+
+Searching:
+
+ABC
+
+should find Opportunities for ABC Construction.
+
+Searching:
+
+John Smith
+
+should find Opportunities where John Smith is an Opportunity Contact.
+
+Use server-side/database searching where appropriate.
+
+Do not load the entire opportunity database and search only in the browser.
+
+--------------------------------------------------
+12. FILTERS
+--------------------------------------------------
+
+Provide useful filters.
+
+Recommended:
+
+Status
+Responsible User
+Customer
+Bid Due Date
+Project Type
+Opportunity Source
+State
+Outcome
+Archived
+
+Quick filters should include:
+
+All Active
+Due Today
+Due This Week
+Overdue
+My Opportunities
+Proposal Sent
+Awarded
+Lost
+No Bid
+
+Avoid an excessively complicated filter panel.
+
+The most commonly used filters should be immediately accessible.
+
+--------------------------------------------------
+13. MY OPPORTUNITIES
+--------------------------------------------------
+
+Provide a quick filter:
+
+My Opportunities
+
+This shows Opportunities where the currently logged-in user is the responsible user.
+
+This is different from My Work.
+
+My Work = individual assigned Todos
+
+My Opportunities = bids/opportunities the user owns
+
+Both systems should remain connected.
+
+--------------------------------------------------
+14. RESPONSIBLE USER
+--------------------------------------------------
+
+Display the Responsible User prominently.
+
+Allow authorized users to change the Responsible User directly from:
+
+Opportunity detail page
+
+and optionally through quick controls on the dashboard.
+
+Use the existing User system.
+
+Changing the Responsible User should record Activity.
+
+If existing workflow rules generate related actions, preserve that behavior.
+
+--------------------------------------------------
+15. OPPORTUNITY DETAIL PAGE
+--------------------------------------------------
+
+Build a strong Opportunity detail page.
+
+Recommended header:
+
+100 SOUTH MAIN STREET SITEWORK
+
+OPP-2026-0041
+
+ABC Construction
+
+[ Status: Estimating ]
+
+Bid Due:
+Aug 18, 2026 · 2:00 PM
+
+Responsible:
+Adam
+
+[ Edit Opportunity ]
+[ Change Status ]
+
+Do not overcrowd the header.
+
+--------------------------------------------------
+16. OPPORTUNITY DETAIL TABS
+--------------------------------------------------
+
+Recommended tabs:
+
+Overview
+Contacts
+Todos
+Communications
+Activity
+
+Future tabs will include:
+
+Scope
+Takeoff
+Estimate
+Proposals
+Documents
+
+Do not build future functionality in this phase.
+
+If the existing generic Documents system can already be linked to Opportunities cleanly, a Documents tab may be included.
+
+Otherwise defer it.
+
+--------------------------------------------------
+17. OVERVIEW TAB
+--------------------------------------------------
+
+The Opportunity Overview should display:
+
+Customer
+Project address
+RFP received date
+Bid due date/time
+Estimated start date
+Responsible User
+Opportunity Source
+Project Type
+Preliminary Value
+Win Probability if used
+Scope Summary
+Internal Notes
+Status
+Created date
+Created by
+
+Use a clean grouped layout rather than presenting a long raw field list.
+
+--------------------------------------------------
+18. EDIT OPPORTUNITY
+--------------------------------------------------
+
+Provide an Edit Opportunity action.
+
+Users with permission should be able to edit applicable fields such as:
+
+Opportunity name
+Customer
+Project address
+RFP received date
+Bid due date/time
+Estimated start date
+Responsible user
+Source
+Project type
+Preliminary value
+Probability
+Scope summary
+Internal notes
+
+Status changes should preferably go through the dedicated Change Status workflow rather than being treated as an ordinary field edit.
+
+This ensures workflow automation is always executed correctly.
+
+--------------------------------------------------
+19. CONTACTS TAB
+--------------------------------------------------
+
+Show all Contacts associated with the Opportunity.
+
+Example:
+
+John Smith
+Senior Estimator
+Opportunity Role: Estimator
+PRIMARY
+
+Mike Jones
+Project Executive
+
+Allow authorized users to:
+
+Add Contact
+Remove Contact
+Change Opportunity Role
+Set Primary Opportunity Contact
+
+Contacts must come from the selected Customer.
+
+Do not create duplicate Contact records here.
+
+Provide quick access to:
+
+Email
+Phone
+
+where appropriate.
+
+--------------------------------------------------
+20. TODOS TAB
+--------------------------------------------------
+
+Use the existing universal Todo system.
+
+Show Todos related to this Opportunity.
+
+Provide:
+
+[ + Add Todo ]
+
+Display:
+
+Open
+In Progress
+Completed
+
+Each Todo should show:
+
+Title
+Assigned user
+Due date
+Priority
+Status
+
+Todos created here should automatically populate:
+
+Related Entity = Opportunity
+
+No Project should be required.
+
+These Todos must continue to appear in My Work.
+
+--------------------------------------------------
+21. COMMUNICATIONS TAB
+--------------------------------------------------
+
+Use the existing Communications system.
+
+Show Communications linked to this Opportunity.
+
+Provide:
+
+[ + Log Communication ]
+
+When opened from the Opportunity page, automatically populate:
+
+Customer
+Opportunity
+
+Allow selection of:
+
+Contact
+Communication Type
+Date/time
+Notes
+
+Potential communication types may use existing values such as:
+
+Phone
+Email
+Meeting
+Text
+Other
+
+Do not duplicate the Communications system.
+
+--------------------------------------------------
+22. ACTIVITY TAB
+--------------------------------------------------
+
+Use the existing Activity/Audit system.
+
+Display chronological meaningful events including:
+
+Opportunity created
+Status changed
+Responsible user changed
+Contact added
+Contact removed
+Bid due date changed
+Todo created
+Communication logged
+Workflow executed
+Opportunity awarded
+Opportunity lost
+Opportunity marked No Bid
+
+Do not display insignificant technical/database changes.
+
+--------------------------------------------------
+23. RECENT ACTIVITY ON DASHBOARD
+--------------------------------------------------
+
+Optionally include a small Recent Activity section on the Bidding dashboard if it can be done without clutter.
+
+Example:
+
+Adam moved 100 South Main Street to Estimating.
+
+Nuchem logged a communication on 123 Main Street.
+
+Proposal Sent workflow created a follow-up Todo.
+
+This should be secondary to the actual pipeline.
+
+--------------------------------------------------
+24. BIDS DUE SECTION
+--------------------------------------------------
+
+Consider adding a prominent section:
+
+Upcoming Bid Deadlines
+
+This may show the next 5–10 active Opportunities sorted by bid due date.
+
+Example:
+
+TODAY
+
+2:00 PM
+100 South Main Street
+ABC Construction
+
+TOMORROW
+
+11:00 AM
+45 River Road
+XYZ Development
+
+FRIDAY
+
+3:00 PM
+Lakewood Medical Center
+Smith Builders
+
+This is highly useful operationally.
+
+If implemented, avoid duplicating the exact same information excessively between this section and pipeline cards.
+
+--------------------------------------------------
+25. OVERDUE BID DATE
+--------------------------------------------------
+
+If an active Opportunity passes its Bid Due date without reaching an appropriate later status such as:
+
+Proposal Sent
+Awarded
+Lost
+No Bid
+
+flag it as:
+
+Bid Date Overdue
+
+Do NOT automatically change its status.
+
+A delayed or incorrect bid date may simply need manual correction.
+
+--------------------------------------------------
+26. NEW OPPORTUNITY BUTTON
+--------------------------------------------------
+
+Provide a prominent:
+
++ New Opportunity
+
+button.
+
+Use the Opportunity creation functionality built in Phase 4.
+
+Recommended creation experience:
+
+Step 1:
+Basic information
+
+Opportunity Name
+Customer
+Responsible User
+Status
+
+Step 2 or same form:
+Project address
+RFP received
+Bid due
+Source
+Project Type
+Scope Summary
+
+Contacts can either be selected during creation or added afterward.
+
+Do not make the user fill every possible field before saving.
+
+Allow incomplete Opportunities.
+
+--------------------------------------------------
+27. FAST CREATE
+--------------------------------------------------
+
+The system should allow rapid entry of a newly received RFP.
+
+Minimum fields:
+
+Opportunity Name
+Customer
+Bid Due Date if known
+
+Optional:
+
+Responsible User
+
+Default status:
+
+New
+
+This lets office staff record an RFP immediately and fill in details later.
+
+--------------------------------------------------
+28. CUSTOMER CREATION FROM OPPORTUNITY
+--------------------------------------------------
+
+When creating an Opportunity and the Customer does not yet exist, provide a clean method to:
+
+Create New Customer
+
+Preferably use the existing Customer creation component/modal.
+
+After creation, automatically select that new Customer.
+
+Do not create a duplicate customer-creation form inside Bidding.
+
+--------------------------------------------------
+29. CUSTOMER CONTACT SELECTION
+--------------------------------------------------
+
+Once Customer is selected, only show Contacts belonging to that Customer.
+
+Allow adding multiple Opportunity Contacts.
+
+Do not allow Contacts from unrelated Customers.
+
+Reuse the validation already implemented in Phase 4.
+
+--------------------------------------------------
+30. PIPELINE COUNTS
+--------------------------------------------------
+
+Display the number of Opportunities in each pipeline column.
+
+Example:
+
+Estimating (6)
+
+Proposal Sent (4)
+
+Do not count archived opportunities unless explicitly filtered.
+
+--------------------------------------------------
+31. PIPELINE VALUE
+--------------------------------------------------
+
+If Preliminary Value exists, optionally show total pipeline value per status.
+
+Example:
+
+Estimating
+6 Opportunities
+$3.4M
+
+Do not treat this as formal contract value or accounting data.
+
+If values are missing, do not present misleading totals.
+
+--------------------------------------------------
+32. AWARDED
+--------------------------------------------------
+
+When moving an Opportunity to Awarded:
+
+Show a confirmation modal.
+
+Allow:
+
+Award Date
+
+Potentially display:
+
+"Project conversion will be available in a future phase."
+
+Do NOT build full Opportunity → Project conversion yet unless it has separately been implemented.
+
+Do not automatically create a Project in this phase.
+
+--------------------------------------------------
+33. LOST
+--------------------------------------------------
+
+When moving to Lost:
+
+Require or strongly prompt for:
+
+Lost Reason
+
+Allow:
+
+Additional Notes
+
+Use the existing Lost Reason options from Phase 4.
+
+Record:
+
+Status history
+Activity
+Workflow events
+
+Remove Lost opportunities from the default active pipeline.
+
+They remain accessible through filters/reporting.
+
+--------------------------------------------------
+34. NO BID
+--------------------------------------------------
+
+When moving to No Bid:
+
+Require or strongly prompt for:
+
+No Bid Reason
+
+Allow:
+
+Additional Notes
+
+Record history/activity.
+
+Remove from default active pipeline.
+
+Do not delete.
+
+--------------------------------------------------
+35. ON HOLD
+--------------------------------------------------
+
+On Hold opportunities should remain accessible but may be visually separated from actively progressing opportunities.
+
+Provide quick filtering for:
+
+On Hold
+
+Do not automatically mark them inactive or archived.
+
+--------------------------------------------------
+36. PROPOSAL SENT STATUS
+--------------------------------------------------
+
+Proposal Sent is an important milestone.
+
+When an Opportunity reaches Proposal Sent, existing workflow rules may:
+
+Create follow-up Todo
+Assign user
+Send notification
+
+Do not build proposal generation yet.
+
+For now this is simply a status indicating pricing/proposal was sent externally.
+
+--------------------------------------------------
+37. FOLLOW-UP
+--------------------------------------------------
+
+Follow-Up should represent an Opportunity where pricing has been submitted and SiteTech is actively following up.
+
+It should be easy to identify:
+
+How long since proposal was sent
+
+Latest communication
+
+Next assigned Todo
+
+If these can be retrieved efficiently.
+
+Do not build complex sales CRM functionality yet.
+
+--------------------------------------------------
+38. LAST ACTIVITY
+--------------------------------------------------
+
+Add a calculated/display field:
+
+Last Activity
+
+This may consider meaningful Activity or Communication timestamps.
+
+Use this to identify opportunities that have gone stale.
+
+Example:
+
+Last Activity:
+8 days ago
+
+Do not update Opportunity records unnecessarily just to maintain this label if it can be derived efficiently.
+
+--------------------------------------------------
+39. STALE OPPORTUNITY INDICATOR
+--------------------------------------------------
+
+Optionally flag Opportunities with no activity for a configurable/simple period.
+
+For initial implementation, a simple threshold such as:
+
+14+ days with no meaningful activity
+
+may show:
+
+No recent activity
+
+Do NOT automatically generate Todos or notifications unless a workflow rule specifically does so.
+
+Avoid hard-coding business automation into dashboard visuals.
+
+--------------------------------------------------
+40. QUICK ACTIONS
+--------------------------------------------------
+
+Where useful, provide quick actions on Opportunity cards or detail page:
+
+Open
+Change Status
+Add Todo
+Log Communication
+
+Avoid adding too many icons/buttons to each card.
+
+The most important action is:
+
+Open Opportunity
+
+--------------------------------------------------
+41. CUSTOMER PAGE INTEGRATION
+--------------------------------------------------
+
+Update the existing Customer detail page to include:
+
+Opportunities
+
+alongside existing:
+
+Contacts
+Projects
+Communications
+Activity
+
+The Opportunities tab should show Opportunities belonging to that Customer.
+
+Display:
+
+Opportunity Name
+Status
+Bid Due
+Responsible User
+Preliminary Value
+
+Clicking opens the Opportunity.
+
+--------------------------------------------------
+42. DASHBOARD INTEGRATION
+--------------------------------------------------
+
+If the main SiteTech Dashboard already supports summary widgets, optionally add useful Bidding information such as:
+
+Bids Due Today
+Bids Due This Week
+Active Opportunities
+
+Do not redesign the entire Dashboard as part of this phase.
+
+The primary detailed experience belongs inside Bidding.
+
+--------------------------------------------------
+43. NOTIFICATIONS
+--------------------------------------------------
+
+Do not create duplicate notification logic.
+
+Continue using the existing Workflow and Notification systems.
+
+Bidding UI should surface existing notifications and Todo assignments.
+
+Do not send emails simply because someone viewed or edited an Opportunity.
+
+--------------------------------------------------
+44. WORKFLOW RULE SETTINGS
+--------------------------------------------------
+
+Verify that administrators can create Workflow Rules using:
+
+Entity Type:
+Opportunity
+
+Trigger:
+Opportunity Status changes to [status]
+
+Examples:
+
+New
+→ notify estimator
+
+Estimating
+→ create pricing Todo
+
+Proposal Sent
+→ create follow-up Todo
+
+Awarded
+→ notify management
+
+Do not hard-code these rules.
+
+--------------------------------------------------
+45. PERMISSIONS
+--------------------------------------------------
+
+Use the existing permission architecture.
+
+Support appropriate permissions for:
+
+View Bidding
+Create Opportunities
+Edit Opportunities
+Change Status
+Assign Responsible User
+View Preliminary Values
+Archive Opportunities
+
+The dashboard must respect permissions.
+
+Server-side validation remains required.
+
+--------------------------------------------------
+46. FINANCIAL VALUE PERMISSIONS
+--------------------------------------------------
+
+If SiteTech's existing permission structure allows financial visibility restrictions, make Preliminary Value compatible with those permissions.
+
+A user without permission should not receive the value from the backend merely because the frontend hides it.
+
+If no such financial permission exists, do not over-engineer a new complex financial security system during this phase unless needed.
+
+--------------------------------------------------
+47. URL / ROUTING
+--------------------------------------------------
+
+Use clean application routes consistent with existing architecture.
+
+Conceptually:
+
+/bidding
+
+/bidding/:opportunityId
+
+or equivalent.
+
+Do not expose database architecture unnecessarily.
+
+Browser back navigation should work normally.
+
+Returning from an Opportunity should preserve dashboard filters/view where practical.
+
+--------------------------------------------------
+48. RESPONSIVE DESIGN
+--------------------------------------------------
+
+Desktop:
+
+Pipeline Kanban can use horizontal space.
+
+List view may use a table.
+
+Mobile:
+
+Do NOT create horizontal scrolling across pipeline columns as the primary experience.
+
+Instead use:
+
+Grouped Opportunity cards
+Status filter
+List view
+
+Each mobile card should clearly show:
+
+Opportunity
+Customer
+Status
+Bid Due
+Responsible User
+
+Use touch-friendly controls.
+
+--------------------------------------------------
+49. MOBILE OPPORTUNITY DETAIL
+--------------------------------------------------
+
+On mobile:
+
+Stack information vertically.
+
+Keep key information near the top:
+
+Status
+Bid Due
+Responsible User
+
+Tabs may become horizontally scrollable navigation if necessary, but the page itself should not have uncontrolled horizontal scrolling.
+
+Forms must fit screen width.
+
+--------------------------------------------------
+50. PERFORMANCE
+--------------------------------------------------
+
+The Bidding dashboard must remain responsive with hundreds or thousands of Opportunities.
+
+Do not:
+
+Load every Opportunity and filter everything client-side.
+
+Use proper server/database:
+
+Filtering
+Sorting
+Pagination
+Aggregation
+
+Pipeline view should efficiently query the active records needed for each status.
+
+Dashboard counts should not require excessive repeated queries.
+
+--------------------------------------------------
+51. PAGINATION / LOADING
+--------------------------------------------------
+
+List view should support pagination or incremental loading.
+
+Pipeline columns may initially load a sensible number of cards with:
+
+View More
+
+if needed.
+
+Do not attempt to render thousands of cards simultaneously.
+
+--------------------------------------------------
+52. URL FILTER STATE
+--------------------------------------------------
+
+Where practical, encode useful dashboard filters in the URL/query state.
+
+Example:
+
+/bidding?status=estimating&user=123
+
+This allows:
+
+Back navigation
+Bookmarking
+Sharing internal views
+
+Do not make this excessively complicated.
+
+--------------------------------------------------
+53. EMPTY STATES
+--------------------------------------------------
+
+Create useful empty states.
+
+Examples:
+
+No active opportunities.
+
+No bids are due this week.
+
+No opportunities match these filters.
+
+Provide appropriate actions such as:
+
++ New Opportunity
+
+Do not show empty tables with no explanation.
+
+--------------------------------------------------
+54. LOADING AND ERROR STATES
+--------------------------------------------------
+
+Use the existing SiteTech patterns for:
+
+Loading
+API errors
+Permission errors
+Empty state
+
+Do not leave screens blank while data loads.
+
+Do not expose raw database/API errors to users.
+
+--------------------------------------------------
+55. ACTIVITY AND AUDIT
+--------------------------------------------------
+
+Dashboard actions must continue to produce appropriate audit history.
+
+Especially:
+
+Status changes
+Responsible user changes
+Contact modifications
+Bid due date edits
+Archiving
+
+Do not create duplicate Activity events from both frontend and backend.
+
+Prefer backend/service-layer activity recording.
+
+--------------------------------------------------
+56. ARCHIVED OPPORTUNITIES
+--------------------------------------------------
+
+Archived Opportunities should not appear in normal active pipeline views.
+
+Provide filter:
+
+Include Archived
+
+or an Archived view.
+
+Archive is not the same as:
+
+Awarded
+Lost
+No Bid
+
+Preserve this distinction.
+
+--------------------------------------------------
+57. OUTCOME VIEWS
+--------------------------------------------------
+
+Provide a clean way to view completed outcomes.
+
+Potential filters/tabs:
+
+Active
+Awarded
+Lost
+No Bid
+All
+
+Do not create a completely separate database or page for each outcome.
+
+Use the same Opportunity system.
+
+--------------------------------------------------
+58. DO NOT BUILD YET
+--------------------------------------------------
+
+Do NOT build:
+
+Detailed scope/pricing checklist
+Takeoff
+Estimate line items
+Cost calculations
+Labor/equipment pricing
+Proposal generator
+Proposal templates
+Proposal PDFs
+Proposal email sending
+Proposal view tracking
+Electronic signature
+Contract conversion
+Automatic Project creation
+T&M
+Change Orders
+Submittals
+
+Those are future phases.
+
+Do not put temporary pricing fields everywhere that will interfere with the future Estimate system.
+
+--------------------------------------------------
+59. TESTING — PIPELINE
+--------------------------------------------------
+
+Test:
+
+Create multiple Opportunities in different statuses.
+
+Confirm:
+
+Correct pipeline columns
+Correct counts
+Correct customer
+Correct responsible user
+Correct bid dates
+
+Move an Opportunity:
+
+New → Estimating
+
+Confirm:
+
+Status history created
+Activity created
+Workflow executes
+Todo created if configured
+Notification created if configured
+Card moves correctly
+
+Refresh.
+
+Confirm state persists.
+
+--------------------------------------------------
+60. TESTING — DRAG DROP
+--------------------------------------------------
+
+Drag:
+
+Estimating → Proposal Sent
+
+Confirm backend status service is used.
+
+Do not allow frontend-only status updates.
+
+Attempt:
+
+Proposal Sent → Lost
+
+Confirm Lost Reason prompt appears.
+
+Cancel.
+
+Confirm status does not change.
+
+Complete with reason.
+
+Confirm status changes correctly.
+
+--------------------------------------------------
+61. TESTING — FILTERS
+--------------------------------------------------
+
+Test:
+
+My Opportunities
+Due Today
+Due This Week
+Overdue
+Customer
+Responsible User
+Status
+Project Type
+
+Confirm combinations work correctly.
+
+Clear filters.
+
+Confirm default active pipeline returns.
+
+--------------------------------------------------
+62. TESTING — SEARCH
+--------------------------------------------------
+
+Search using:
+
+Opportunity Name
+Opportunity Number
+Company Name
+Contact Name
+Address
+City
+
+Confirm correct opportunities appear.
+
+--------------------------------------------------
+63. TESTING — CUSTOMER PAGE
+--------------------------------------------------
+
+Open Customer.
+
+Confirm Opportunities tab shows only Opportunities belonging to that Customer.
+
+Open Opportunity.
+
+Confirm navigation works.
+
+--------------------------------------------------
+64. TESTING — TODOS
+--------------------------------------------------
+
+From Opportunity:
+
+Create Todo.
+
+Assign to another user.
+
+Confirm:
+
+Todo linked to Opportunity
+Todo appears in Opportunity Todos
+Todo appears in assignee My Work
+Notification works using existing system
+
+--------------------------------------------------
+65. TESTING — COMMUNICATIONS
+--------------------------------------------------
+
+From Opportunity:
+
+Log Communication.
+
+Select Opportunity Contact.
+
+Confirm:
+
+Customer automatically populated
+Opportunity automatically populated
+Communication appears on Opportunity
+Communication appears on Customer
+No duplicate record created
+
+--------------------------------------------------
+66. TESTING — MOBILE
+--------------------------------------------------
+
+Test common phone widths.
+
+Verify:
+
+Bidding dashboard
+Opportunity cards
+Filters
+Search
+New Opportunity
+Opportunity detail
+Status change
+Contacts
+Todos
+Communications
+Activity
+
+No uncontrolled horizontal scrolling.
+
+Do not require drag-and-drop.
+
+--------------------------------------------------
+67. REGRESSION TESTING
+--------------------------------------------------
+
+Verify existing:
+
+Projects
+Customers
+Contacts
+My Work
+Todos
+Workflows
+Notifications
+Communications
+Activity
+User Management
+
+continue functioning correctly.
+
+--------------------------------------------------
+68. COMPLETION CRITERIA
+--------------------------------------------------
+
+Phase 5 is complete when:
+
+- Bidding exists as a primary SiteTech module.
+- Users can see all active Opportunities.
+- Pipeline view works.
+- List view works.
+- Bid deadlines are highly visible.
+- Search and filters work.
+- My Opportunities works.
+- Opportunity detail page is useful.
+- Opportunity Contacts work.
+- Opportunity Todos work.
+- Opportunity Communications work.
+- Opportunity Activity works.
+- Customer pages show Opportunities.
+- Status changes use existing backend workflow logic.
+- Lost and No Bid workflows capture reasons.
+- Desktop and mobile interfaces are clean.
+- Existing SiteTech functionality remains intact.
+- No estimating/proposal functionality has been prematurely built.
+
+--------------------------------------------------
+FINAL IMPLEMENTATION INSTRUCTION
+--------------------------------------------------
+
+Before coding, inspect the Opportunity architecture implemented in Phase 4 and reuse it.
+
+Do not create a second Opportunity model or duplicate status logic.
+
+The most important operational goals of this screen are:
+
+1. Know what SiteTech is currently bidding.
+2. Know when each bid is due.
+3. Know who is responsible.
+4. Know what stage each opportunity is in.
+5. Know what needs attention.
+
+Keep those goals ahead of decorative dashboard features.
+
+Build the Bidding interface as a practical construction preconstruction tool that can later expand into Scope, Takeoff, Estimating and Proposal functionality without requiring a redesign.
