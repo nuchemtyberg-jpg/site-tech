@@ -7,4 +7,4 @@ description: db:push can silently stall on create-vs-rename prompts; verify tabl
 
 **Why:** A new `project_contacts` table was never created despite two "successful" push runs; the DB also contains tables (like `data_migrations`) not in `shared/schema.ts`, which push offers to drop — always abort that.
 
-**How to apply:** After any schema push, verify with `psql "$DATABASE_URL" -c "select to_regclass('<table>');"`. If push stalls on prompts, create the table/indexes with hand-written SQL matching the drizzle definition instead.
+**How to apply:** After any schema push, verify with `psql "$DATABASE_URL" -c "select to_regclass('<table>');"`. If push stalls on "create or rename" prompts, run it under a pty while feeding carriage returns to accept the default (create): `(while true; do printf '\r'; sleep 2; done) | timeout 240 script -qec "npx drizzle-kit push --force" /dev/null` — plain `\n` via pipe does not work. Only safe when every prompt's default (create) is correct; abort if push offers to drop/rename existing tables you want kept.
