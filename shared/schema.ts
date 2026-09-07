@@ -1304,6 +1304,35 @@ export type OpportunityWithDetails = Opportunity & {
   responsibleUserName: string | null;
   primaryContactId: number | null;
   primaryContactName: string | null;
+  /** Most recent direct or opportunity-linked activity. Present on dashboard rows. */
+  lastActivityAt?: Date | null;
+};
+
+export type OpportunityDashboardSummary = {
+  total: number;
+  active: number;
+  /** Non-archived terminal outcomes matching the dashboard's non-outcome facets. */
+  outcomes: number;
+  archived: number;
+  unassigned: number;
+  overdue: number;
+  dueToday: number;
+  dueTomorrow: number;
+  dueNext7Days: number;
+  /** Null when preliminary value data is not visible to the current role. */
+  expectedValueTotal: number | null;
+  weightedValueTotal: number | null;
+};
+
+export type OpportunityDashboardResult = {
+  items: OpportunityWithDetails[];
+  total: number;
+  page: number;
+  pageSize: number;
+  pageCount: number;
+  statusCounts: Record<string, number>;
+  summary: OpportunityDashboardSummary;
+  canViewValues: boolean;
 };
 
 // Opportunity Contacts — links an Opportunity to contacts of its customer,

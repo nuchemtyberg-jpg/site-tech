@@ -4,7 +4,7 @@ import { apiRequest } from "@/lib/queryClient";
 import type {
   Opportunity, OpportunityWithDetails, OpportunityContactWithDetails,
   InsertOpportunity, InsertOpportunityContact, OpportunityStatusChangeInput,
-  OpportunityStatusHistory, ActivityLog,
+  OpportunityStatusHistory, ActivityLog, TodoWithDetails, Communication,
 } from "@shared/schema";
 import { localToday } from "@/hooks/use-todos";
 
@@ -12,8 +12,31 @@ export type OpportunityListFilters = {
   status?: string;
   customerId?: number;
   responsibleUserId?: string;
-  includeArchived?: boolean;
+  my?: boolean;
   search?: string;
+  source?: string;
+  projectType?: string;
+  bidDueFrom?: string;
+  bidDueTo?: string;
+  urgency?: "overdue" | "today" | "tomorrow" | "this_week" | "next_7_days" | "no_due_date";
+  archive?: "active" | "archived" | "all";
+  outcome?: string;
+  sortBy?: "name" | "opportunityNumber" | "customer" | "status" | "responsible" | "bidDueDate" | "expectedValue" | "createdAt" | "updatedAt" | "lastActivity";
+  sortDir?: "asc" | "desc";
+  page?: number;
+  pageSize?: number;
+  today?: string;
+};
+
+export type OpportunitySummary = {
+  total: number; active: number; archived: number; overdue: number; dueToday: number; dueTomorrow: number;
+  dueNext7Days: number; unassigned: number; outcomes: number; expectedValueTotal: number | null; weightedValueTotal: number | null;
+};
+
+export type OpportunityListResponse = {
+  items: OpportunityWithDetails[]; total: number; page: number; pageSize: number;
+  pageCount: number; statusCounts: Record<string, number>; summary: OpportunitySummary;
+  canViewValues: boolean;
 };
 
 function opportunityListUrl(filters: OpportunityListFilters): string {
@@ -21,22 +44,82 @@ function opportunityListUrl(filters: OpportunityListFilters): string {
   if (filters.status) params.set("status", filters.status);
   if (filters.customerId !== undefined) params.set("customerId", String(filters.customerId));
   if (filters.responsibleUserId) params.set("responsibleUserId", filters.responsibleUserId);
-  if (filters.includeArchived) params.set("includeArchived", "true");
+  if (filters.my) params.set("my", "true");
   if (filters.search) params.set("search", filters.search);
+  if (filters.source) params.set("source", filters.source);
+  if (filters.projectType) params.set("projectType", filters.projectType);
+  if (filters.bidDueFrom) params.set("bidDueFrom", filters.bidDueFrom);
+  if (filters.bidDueTo) params.set("bidDueTo", filters.bidDueTo);
+  if (filters.urgency) params.set("urgency", filters.urgency);
+  if (filters.archive) params.set("archive", filters.archive);
+  if (filters.outcome) params.set("outcome", filters.outcome);
+  if (filters.sortBy) params.set("sortBy", filters.sortBy);
+  if (filters.sortDir) params.set("sortDir", filters.sortDir);
+  if (filters.page) params.set("page", String(filters.page));
+  if (filters.pageSize) params.set("pageSize", String(filters.pageSize));
+  params.set("today", filters.today || localToday());
   const qs = params.toString();
-  return qs ? `${api.opportunities.list.path}?${qs}` : api.opportunities.list.path;
+  return qs ? `${api.opportunities.dashboard.path}?${qs}` : api.opportunities.dashboard.path;
 }
 
 export function useOpportunities(filters: OpportunityListFilters = {}) {
   const url = opportunityListUrl(filters);
-  return useQuery<OpportunityWithDetails[]>({
-    queryKey: [api.opportunities.list.path, filters],
+  return useQuery<OpportunityListResponse>({
+    queryKey: [api.opportunities.dashboard.path, filters],
     queryFn: async () => {
       const res = await fetch(url, { credentials: "include" });
       if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
-      return res.json();
+      return (await res.json()) as OpportunityListResponse;
     },
   });
+}
+
+function useOpportunitySubresource<T>(id: number | undefined, resource: string) {
+  return useQuery<T[]>({
+    queryKey: ["/api/opportunities", id, resource],
+    queryFn: async () => {
+      const res = await fetch(`/api/opportunities/${id}/${resource}`, { credentials: "include" });
+      if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
+      return res.json();
+    },
+    enabled: id !== undefined,
+  });
+}
+
+export function useOpportunityTodos(id: number | undefined) {
+  return useOpportunitySubresource<TodoWithDetails>(id, "todos");
+}
+
+export function useOpportunityCommunications(id: number | undefined) {
+  return useOpportunitySubresource<Communication>(id, "communications");
+}
+
+function useCreateOpportunitySubresource<TInput, TResult>(id: number, resource: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: TInput) => {
+      const res = await apiRequest("POST", `/api/opportunities/${id}/${resource}`, input);
+      return (await res.json()) as TResult;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/opportunities", id, resource] });
+      queryClient.invalidateQueries({ queryKey: [api.opportunities.activity.path, id] });
+    },
+  });
+}
+
+export function useCreateOpportunityTodo(id: number) {
+  return useCreateOpportunitySubresource<{
+    title: string; description?: string | null; assignedToUserId: string;
+    dueDate?: string | null; priority?: string;
+  }, TodoWithDetails>(id, "todos");
+}
+
+export function useCreateOpportunityCommunication(id: number) {
+  return useCreateOpportunitySubresource<{
+    type: string; subject?: string | null; notes: string; contactId?: number | null;
+    contactDate: string; followUpDate?: string | null;
+  }, Communication>(id, "communications");
 }
 
 export function useOpportunity(id: number | undefined) {
@@ -55,6 +138,7 @@ function useInvalidateOpportunities() {
   const queryClient = useQueryClient();
   return (id?: number) => {
     queryClient.invalidateQueries({ queryKey: [api.opportunities.list.path] });
+    queryClient.invalidateQueries({ queryKey: [api.opportunities.dashboard.path] });
     if (id !== undefined) {
       queryClient.invalidateQueries({ queryKey: [api.opportunities.get.path, id] });
       queryClient.invalidateQueries({ queryKey: [api.opportunities.statusHistory.path, id] });

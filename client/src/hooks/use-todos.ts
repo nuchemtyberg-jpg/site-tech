@@ -122,7 +122,14 @@ export function useCompleteTodo() {
       const res = await apiRequest("POST", buildUrl(api.todos.complete.path, { id }));
       return (await res.json()) as TodoWithDetails;
     },
-    onSuccess: () => invalidateTodoData(queryClient),
+    onSuccess: (todo) => {
+      invalidateTodoData(queryClient);
+      if (todo.relatedEntityType === "opportunity" && todo.relatedEntityId) {
+        queryClient.invalidateQueries({ queryKey: ["/api/opportunities", todo.relatedEntityId, "todos"] });
+        queryClient.invalidateQueries({ queryKey: [api.opportunities.activity.path, todo.relatedEntityId] });
+        queryClient.invalidateQueries({ queryKey: [api.opportunities.dashboard.path] });
+      }
+    },
   });
 }
 

@@ -1,4 +1,4 @@
-import { Switch, Route } from "wouter";
+import { Switch, Route, useLocation, useParams, useSearch } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -7,11 +7,13 @@ import { Layout } from "@/components/Layout";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { useAuth } from "@/hooks/use-auth";
 import { Loader2 } from "lucide-react";
+import { useEffect } from "react";
 
 // Pages
 import Dashboard from "@/pages/Dashboard";
 import Projects from "@/pages/Projects";
 import Opportunities from "@/pages/Opportunities";
+import OpportunityDetails from "@/pages/OpportunityDetails";
 import ProjectDetails from "@/pages/ProjectDetails";
 import Customers from "@/pages/Customers";
 import CustomerDetails from "@/pages/CustomerDetails";
@@ -85,14 +87,26 @@ function ProtectedFullScreenRoute({ component: Component }: { component: React.C
   return <Component />;
 }
 
+function LegacyOpportunityRedirect() {
+  const { id } = useParams<{ id?: string }>();
+  const search = useSearch();
+  const [, navigate] = useLocation();
+  useEffect(() => {
+    navigate(`/bidding${id ? `/${id}` : ""}${search ? `?${search}` : ""}`, { replace: true });
+  }, [id, search, navigate]);
+  return null;
+}
+
 function Router() {
   return (
     <Switch>
       <Route path="/" component={() => <ProtectedRoute component={Projects} />} />
       <Route path="/projects" component={() => <ProtectedRoute component={Projects} />} />
       <Route path="/projects/:id" component={() => <ProtectedRoute component={ProjectDetails} />} />
-      <Route path="/opportunities" component={() => <ProtectedRoute component={Opportunities} />} />
-      <Route path="/opportunities/:id" component={() => <ProtectedRoute component={Opportunities} />} />
+      <Route path="/bidding" component={() => <ProtectedRoute component={Opportunities} />} />
+      <Route path="/bidding/:id" component={() => <ProtectedRoute component={OpportunityDetails} />} />
+      <Route path="/opportunities" component={() => <ProtectedRoute component={LegacyOpportunityRedirect} />} />
+      <Route path="/opportunities/:id" component={() => <ProtectedRoute component={LegacyOpportunityRedirect} />} />
       <Route path="/projects/:projectId/pdf/:fileId" component={() => <ProtectedFullScreenRoute component={PDFViewerPage} />} />
       <Route path="/projects/:projectId/reports/new" component={() => <ProtectedFullScreenRoute component={DailyReportPage} />} />
       <Route path="/projects/:projectId/reports/:reportId" component={() => <ProtectedFullScreenRoute component={DailyReportPage} />} />

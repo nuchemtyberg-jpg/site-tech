@@ -20,6 +20,42 @@ export const OPPORTUNITY_STATUSES: OpportunityStatusOption[] = [
 
 export const OPPORTUNITY_STATUS_VALUES = OPPORTUNITY_STATUSES.map(s => s.value) as [string, ...string[]];
 
+/** Terminal business outcomes. These are retained for reporting, not active bidding work. */
+export const OPPORTUNITY_OUTCOME_STATUSES = ["awarded", "lost", "no_bid"] as const;
+/** Statuses shown by the default active-opportunity dashboard view. */
+export const OPPORTUNITY_ACTIVE_STATUSES = ["new", "under_review", "estimating", "proposal_ready", "proposal_sent", "follow_up", "on_hold"] as const;
+/** Pre-submission statuses for which a bid deadline requires attention. */
+export const OPPORTUNITY_DEADLINE_ELIGIBLE_STATUSES = ["new", "under_review", "estimating", "proposal_ready"] as const;
+
+export const OPPORTUNITY_OUTCOME_STATUS_SET: ReadonlySet<string> = new Set(OPPORTUNITY_OUTCOME_STATUSES);
+export const OPPORTUNITY_ACTIVE_STATUS_SET: ReadonlySet<string> = new Set(OPPORTUNITY_ACTIVE_STATUSES);
+export const OPPORTUNITY_DEADLINE_ELIGIBLE_STATUS_SET: ReadonlySet<string> = new Set(OPPORTUNITY_DEADLINE_ELIGIBLE_STATUSES);
+
+export type OpportunityDeadlineUrgency =
+  | "overdue" | "today" | "tomorrow" | "this_week" | "next_7_days" | "later" | "no_due_date";
+
+/**
+ * Classifies an ISO date-only bid deadline relative to an ISO date-only today.
+ * `this_week` means the remaining calendar week after tomorrow; `next_7_days`
+ * is a rolling window and intentionally includes tomorrow through day seven.
+ */
+export function getOpportunityDeadlineUrgency(
+  bidDueDate: string | null | undefined,
+  today: string,
+): OpportunityDeadlineUrgency {
+  if (!bidDueDate) return "no_due_date";
+  if (bidDueDate < today) return "overdue";
+  if (bidDueDate === today) return "today";
+  const todayDate = new Date(`${today}T00:00:00Z`);
+  const daysAhead = Math.round((new Date(`${bidDueDate}T00:00:00Z`).getTime() - todayDate.getTime()) / 86_400_000);
+  if (daysAhead === 1) return "tomorrow";
+  if (daysAhead <= 7) {
+    const daysUntilSunday = 7 - todayDate.getUTCDay();
+    return daysAhead <= daysUntilSunday ? "this_week" : "next_7_days";
+  }
+  return "later";
+}
+
 export function getOpportunityStatusLabel(value: string | null | undefined): string {
   const status = OPPORTUNITY_STATUSES.find(s => s.value === value);
   return status?.label ?? (value || "Unknown");

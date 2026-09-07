@@ -10,7 +10,7 @@ import {
   opportunities, opportunityStatusHistory,
   type TodoWithDetails, type MyWorkSummary, type WorkflowRuleWithDetails,
   type TodoUpdate, type TodoUpdateWithAuthor, type TodoUpdatesPage,
-  type OpportunityWithDetails, type OpportunityContactWithDetails
+  type OpportunityWithDetails, type OpportunityContactWithDetails, type OpportunityDashboardResult
 } from './schema';
 
 export const errorSchemas = {
@@ -834,6 +834,19 @@ export const api = {
 
   // Opportunities (Phase 4 — RFP / bidding foundation)
   opportunities: {
+    dashboard: {
+      method: 'GET' as const,
+      path: '/api/opportunities/dashboard',
+      // Composable query params:
+      // search, status (comma-separated), customerId, responsibleUserId (user id
+      // or 'unassigned'), unassigned ('true'), source,
+      // projectType, bidDueFrom, bidDueTo, dateField/dateFrom/dateTo, urgency, outcome, archive,
+      // my ('true'), today, sortBy, sortDir, page, pageSize.
+      responses: {
+        200: z.custom<OpportunityDashboardResult>(),
+        400: errorSchemas.validation,
+      },
+    },
     list: {
       method: 'GET' as const,
       path: '/api/opportunities',
@@ -853,10 +866,13 @@ export const api = {
     create: {
       method: 'POST' as const,
       path: '/api/opportunities',
-      input: insertOpportunitySchema,
+      // Initial records always enter the pipeline as New. Every later status
+      // transition must use changeStatus so reasons, history and workflows run.
+      input: insertOpportunitySchema.extend({ status: z.literal("new").optional() }),
       responses: {
         201: z.custom<typeof opportunities.$inferSelect>(),
         400: errorSchemas.validation,
+        403: errorSchemas.validation,
       },
     },
     update: {
@@ -870,6 +886,7 @@ export const api = {
       responses: {
         200: z.custom<typeof opportunities.$inferSelect>(),
         400: errorSchemas.validation,
+        403: errorSchemas.validation,
         404: errorSchemas.notFound,
         409: errorSchemas.validation, // customer change needs confirmation
       },
@@ -906,6 +923,45 @@ export const api = {
       path: '/api/opportunities/:id/activity',
       responses: {
         200: z.array(z.custom<typeof activityLogs.$inferSelect>()),
+        404: errorSchemas.notFound,
+      },
+    },
+    todos: {
+      method: 'GET' as const,
+      path: '/api/opportunities/:id/todos',
+      responses: {
+        200: z.array(z.custom<TodoWithDetails>()),
+        404: errorSchemas.notFound,
+      },
+    },
+    createTodo: {
+      method: 'POST' as const,
+      path: '/api/opportunities/:id/todos',
+      input: insertTodoSchema.omit({
+        createdByUserId: true, source: true, workflowRuleId: true,
+        projectId: true, relatedEntityType: true, relatedEntityId: true,
+      }),
+      responses: {
+        201: z.custom<typeof todos.$inferSelect>(),
+        400: errorSchemas.validation,
+        404: errorSchemas.notFound,
+      },
+    },
+    communications: {
+      method: 'GET' as const,
+      path: '/api/opportunities/:id/communications',
+      responses: {
+        200: z.array(z.custom<typeof communications.$inferSelect>()),
+        404: errorSchemas.notFound,
+      },
+    },
+    createCommunication: {
+      method: 'POST' as const,
+      path: '/api/opportunities/:id/communications',
+      input: insertCommunicationSchema.omit({ customerId: true, opportunityId: true }),
+      responses: {
+        201: z.custom<typeof communications.$inferSelect>(),
+        400: errorSchemas.validation,
         404: errorSchemas.notFound,
       },
     },

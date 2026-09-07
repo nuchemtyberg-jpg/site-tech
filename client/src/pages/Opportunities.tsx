@@ -1,514 +1,175 @@
-import { useState } from "react";
-import { useRoute } from "wouter";
-import { useQuery } from "@tanstack/react-query";
-import { Plus, Loader2, Target, Archive, ArchiveRestore, Pencil, Trash2, Star } from "lucide-react";
+import { useMemo, useState } from "react";
+import { Link, useLocation, useSearch } from "wouter";
+import { AlertCircle, Archive, ArrowDown, ArrowUp, CalendarClock, ChevronLeft, ChevronRight, Columns3, List, Plus, Search, Target, UserRoundX, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
-import { Checkbox } from "@/components/ui/checkbox";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { OpportunityFormDialog } from "@/components/OpportunityFormDialog";
+import { OpportunityStatusDialog } from "@/pages/OpportunityDetails";
+import { useOpportunities, type OpportunityListFilters } from "@/hooks/use-opportunities";
+import { localToday } from "@/hooks/use-todos";
+import { cn } from "@/lib/utils";
 import {
-  Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter,
-} from "@/components/ui/dialog";
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from "@/components/ui/select";
-import { useToast } from "@/hooks/use-toast";
-import { extractApiError, useAppUsers, userDisplayName } from "@/hooks/use-todos";
-import {
-  useOpportunities, useOpportunity, useCreateOpportunity, useUpdateOpportunity,
-  useChangeOpportunityStatus, useArchiveOpportunity, useOpportunityStatusHistory,
-  useOpportunityContacts, useAddOpportunityContact, useUpdateOpportunityContact,
-  useRemoveOpportunityContact,
-} from "@/hooks/use-opportunities";
-import {
-  OPPORTUNITY_STATUSES, getOpportunityStatusLabel, OPPORTUNITY_SOURCES,
-  OPPORTUNITY_PROJECT_TYPES, OPPORTUNITY_CONTACT_ROLES, OPPORTUNITY_LOST_REASONS,
-  OPPORTUNITY_NO_BID_REASONS, labelFor,
+  getOpportunityDeadlineUrgency, getOpportunityStatusColor, getOpportunityStatusLabel,
+  OPPORTUNITY_ACTIVE_STATUSES, OPPORTUNITY_ACTIVE_STATUS_SET, OPPORTUNITY_DEADLINE_ELIGIBLE_STATUS_SET,
+  OPPORTUNITY_OUTCOME_STATUSES, OPPORTUNITY_PROJECT_TYPES, OPPORTUNITY_SOURCES,
+  OPPORTUNITY_STATUSES,
 } from "@shared/opportunityStatus";
-import type { Customer, Contact, OpportunityWithDetails } from "@shared/schema";
+import type { OpportunityWithDetails } from "@shared/schema";
+import type { Customer } from "@shared/schema";
+import { useQuery } from "@tanstack/react-query";
 
-// Simple functional test UI for the Phase 4 Opportunity backend.
-// Deliberately plain — the polished bidding pipeline dashboard is Phase 5.
+const ACTIVE = OPPORTUNITY_STATUSES.filter(s => OPPORTUNITY_ACTIVE_STATUS_SET.has(s.value));
+const ACTIVE_STATUS_PARAM = OPPORTUNITY_ACTIVE_STATUSES.join(",");
+const ALL_STATUS_PARAM = OPPORTUNITY_STATUSES.map(s => s.value).join(",");
+type View = "pipeline" | "list";
 
-type FormState = {
-  name: string; customerId: string; status: string; responsibleUserId: string;
-  streetAddress: string; address2: string; city: string; state: string; zip: string;
-  rfpReceivedDate: string; bidDueDate: string; bidDueTime: string; estimatedStartDate: string;
-  source: string; projectType: string; scopeSummary: string; internalNotes: string;
-  expectedValue: string; probability: string;
-};
+function dueState(opportunity: OpportunityWithDetails) {
+  if (!OPPORTUNITY_DEADLINE_ELIGIBLE_STATUS_SET.has(opportunity.status)) return null;
+  switch (getOpportunityDeadlineUrgency(opportunity.bidDueDate, localToday())) {
+    case "overdue": return { label: "Overdue", className: "text-destructive bg-destructive/10" };
+    case "today": return { label: "Due today", className: "text-orange-700 dark:text-orange-300 bg-orange-500/10" };
+    case "tomorrow": return { label: "Due tomorrow", className: "text-amber-700 dark:text-amber-300 bg-amber-500/10" };
+    case "this_week":
+    case "next_7_days": return { label: "Due this week", className: "text-amber-700 dark:text-amber-300 bg-amber-500/10" };
+  }
+  return null;
+}
 
-const EMPTY_FORM: FormState = {
-  name: "", customerId: "", status: "new", responsibleUserId: "",
-  streetAddress: "", address2: "", city: "", state: "", zip: "",
-  rfpReceivedDate: "", bidDueDate: "", bidDueTime: "", estimatedStartDate: "",
-  source: "", projectType: "", scopeSummary: "", internalNotes: "",
-  expectedValue: "", probability: "",
-};
+function BidCard({ opportunity, compact = false, canViewValues = false, backQuery = "" }: { opportunity: OpportunityWithDetails; compact?: boolean; canViewValues?: boolean; backQuery?: string }) {
+  const urgency = dueState(opportunity);
+  const [statusOpen, setStatusOpen] = useState(false);
+  return (
+    <>
+      <Card className={cn("hover:border-primary/50 transition-colors min-w-0", opportunity.isArchived && "opacity-65")}>
+        <CardContent className={cn("p-4 space-y-2", compact && "p-3")}>
+          <Link href={`/bidding/${opportunity.id}${backQuery ? `?from=${encodeURIComponent(backQuery)}` : ""}`} className="block min-w-0">
+          <div className="flex justify-between gap-2 min-w-0"><span className="font-semibold text-sm break-words">{opportunity.name}</span>{canViewValues && opportunity.expectedValue != null && <span className="text-xs font-medium shrink-0">${opportunity.expectedValue.toLocaleString()}</span>}</div>
+          <p className="text-xs text-muted-foreground truncate">{opportunity.opportunityNumber} · {opportunity.customerName || "Unknown customer"}</p>
+          <div className="flex flex-wrap gap-1.5 items-center">
+            {!compact && <Badge variant="secondary">{getOpportunityStatusLabel(opportunity.status)}</Badge>}
+            {urgency && <Badge variant="outline" className={urgency.className}><AlertCircle className="w-3 h-3 mr-1" />{urgency.label}</Badge>}
+            {!opportunity.responsibleUserId && <Badge variant="outline"><UserRoundX className="w-3 h-3 mr-1" />Unassigned</Badge>}
+            {opportunity.isArchived && <Badge variant="outline">Archived</Badge>}
+          </div>
+          <p className="text-xs text-muted-foreground">{opportunity.bidDueDate ? `Bid due ${opportunity.bidDueDate}${opportunity.bidDueTime ? ` at ${opportunity.bidDueTime}` : ""}` : "No bid due date"}{opportunity.responsibleUserName ? ` · ${opportunity.responsibleUserName}` : ""}</p>
+          </Link>
+          <Button variant="outline" size="sm" className="min-h-11 w-full" onClick={() => setStatusOpen(true)} data-testid={`button-quick-status-${opportunity.id}`}>Change status</Button>
+        </CardContent>
+      </Card>
+      <OpportunityStatusDialog open={statusOpen} onOpenChange={setStatusOpen} id={opportunity.id} current={opportunity.status} />
+    </>
+  );
+}
 
 export default function Opportunities() {
-  const { toast } = useToast();
-  const [, params] = useRoute("/opportunities/:id"); // deep link (e.g. from workflow emails)
-  const routeId = params?.id ? Number(params.id) : undefined;
-  const [statusFilter, setStatusFilter] = useState<string>("all");
-  const [includeArchived, setIncludeArchived] = useState(false);
-  const [search, setSearch] = useState("");
-  const [selectedId, setSelectedId] = useState<number | undefined>(routeId);
+  const searchString = useSearch();
+  const [, navigate] = useLocation();
+  const params = useMemo(() => new URLSearchParams(searchString), [searchString]);
+  const get = (key: string, fallback = "") => params.get(key) || fallback;
+  const view = (get("view", "pipeline") as View);
+  const page = Math.max(1, Number(get("page", "1")) || 1);
+  const sort = get("sort", "bidDueDate") as OpportunityListFilters["sortBy"];
+  const direction = get("direction", "asc") as "asc" | "desc";
   const [formOpen, setFormOpen] = useState(false);
-  const [editing, setEditing] = useState<OpportunityWithDetails | null>(null);
-  const [form, setForm] = useState<FormState>(EMPTY_FORM);
-
-  const { data: opportunities = [], isLoading } = useOpportunities({
-    status: statusFilter === "all" ? undefined : statusFilter,
-    includeArchived,
-    search: search || undefined,
-  });
+  const [advancedOpen, setAdvancedOpen] = useState(false);
   const { data: customers = [] } = useQuery<Customer[]>({ queryKey: ["/api/customers"] });
-  const { data: users = [] } = useAppUsers();
 
-  const createOpp = useCreateOpportunity();
-  const updateOpp = useUpdateOpportunity();
-
-  const set = (k: keyof FormState) => (v: string) => setForm(f => ({ ...f, [k]: v }));
-
-  const openCreate = () => {
-    setEditing(null);
-    setForm(EMPTY_FORM);
-    setFormOpen(true);
+  const updateParams = (changes: Record<string, string | undefined>, resetPage = true) => {
+    const next = new URLSearchParams(searchString);
+    Object.entries(changes).forEach(([key, value]) => value ? next.set(key, value) : next.delete(key));
+    if (resetPage && !("page" in changes)) next.delete("page");
+    navigate(`/bidding${next.toString() ? `?${next}` : ""}`, { replace: true });
   };
-  const openEdit = (o: OpportunityWithDetails) => {
-    setEditing(o);
-    setForm({
-      name: o.name, customerId: String(o.customerId), status: o.status,
-      responsibleUserId: o.responsibleUserId ?? "",
-      streetAddress: o.streetAddress ?? "", address2: o.address2 ?? "",
-      city: o.city ?? "", state: o.state ?? "", zip: o.zip ?? "",
-      rfpReceivedDate: o.rfpReceivedDate ?? "", bidDueDate: o.bidDueDate ?? "",
-      bidDueTime: o.bidDueTime ?? "", estimatedStartDate: o.estimatedStartDate ?? "",
-      source: o.source ?? "", projectType: o.projectType ?? "",
-      scopeSummary: o.scopeSummary ?? "", internalNotes: o.internalNotes ?? "",
-      expectedValue: o.expectedValue != null ? String(o.expectedValue) : "",
-      probability: o.probability != null ? String(o.probability) : "",
-    });
-    setFormOpen(true);
+  const status = get("status");
+  const filters: OpportunityListFilters = {
+    search: get("search") || undefined,
+    // With no explicit status, the server applies the canonical active-work
+    // predicate while still returning an accurate outcome summary.
+    status: status || undefined,
+    responsibleUserId: get("owner") && get("owner") !== "me" ? get("owner") : undefined,
+    my: get("owner") === "me", source: get("source") || undefined,
+    projectType: get("projectType") || undefined,
+    customerId: get("customer") ? Number(get("customer")) : undefined,
+    bidDueFrom: get("bidDueFrom") || undefined, bidDueTo: get("bidDueTo") || undefined,
+    urgency: (get("due") || undefined) as OpportunityListFilters["urgency"],
+    archive: (get("archive", "active")) as OpportunityListFilters["archive"],
+    outcome: get("outcome") || undefined,
+    sortBy: sort, sortDir: direction, page, pageSize: 25,
   };
+  const { data, isLoading, isError } = useOpportunities(filters);
+  const items = data?.items || [];
+  const summary = data?.summary;
+  const hasFilters = ["search", "status", "owner", "customer", "source", "projectType", "bidDueFrom", "bidDueTo", "due", "archive", "outcome"].some(k => params.has(k));
 
-  const submitForm = (confirmRemoveContacts = false) => {
-    if (!form.name.trim() || !form.customerId) {
-      toast({ title: "Name and customer are required", variant: "destructive" });
-      return;
-    }
-    const optional = {
-      responsibleUserId: form.responsibleUserId || null,
-      streetAddress: form.streetAddress || null, address2: form.address2 || null,
-      city: form.city || null, state: form.state || null, zip: form.zip || null,
-      rfpReceivedDate: form.rfpReceivedDate || null, bidDueDate: form.bidDueDate || null,
-      bidDueTime: form.bidDueTime || null, estimatedStartDate: form.estimatedStartDate || null,
-      source: form.source || null, projectType: form.projectType || null,
-      scopeSummary: form.scopeSummary || null, internalNotes: form.internalNotes || null,
-      expectedValue: form.expectedValue ? Number(form.expectedValue) : null,
-      probability: form.probability ? Number(form.probability) : null,
-    };
-    if (editing) {
-      updateOpp.mutate(
-        { id: editing.id, name: form.name.trim(), customerId: Number(form.customerId), ...optional, confirmRemoveContacts },
-        {
-          onSuccess: () => { toast({ title: "Opportunity updated" }); setFormOpen(false); },
-          onError: (err) => {
-            const msg = extractApiError(err, "Please try again.");
-            if (err instanceof Error && err.message.startsWith("409")) {
-              if (window.confirm(msg)) submitForm(true);
-            } else {
-              toast({ title: "Couldn't update opportunity", description: msg, variant: "destructive" });
-            }
-          },
-        },
-      );
-    } else {
-      createOpp.mutate(
-        { name: form.name.trim(), customerId: Number(form.customerId), status: form.status as any, ...optional },
-        {
-          onSuccess: (o) => { toast({ title: `Created ${o.opportunityNumber}` }); setFormOpen(false); setSelectedId(o.id); },
-          onError: (err) => toast({ title: "Couldn't create opportunity", description: extractApiError(err, "Please try again."), variant: "destructive" }),
-        },
-      );
-    }
-  };
-
-  const pending = createOpp.isPending || updateOpp.isPending;
+  const summaryCards = [
+    { label: "Active bids", value: summary?.active || 0, icon: Target, params: { outcome: undefined, archive: "active", status: ACTIVE_STATUS_PARAM } },
+    { label: "Overdue", value: summary?.overdue || 0, icon: AlertCircle, params: { due: "overdue" } },
+    { label: "Due today", value: summary?.dueToday || 0, icon: CalendarClock, params: { due: "today" } },
+    { label: "Unassigned", value: summary?.unassigned || 0, icon: UserRoundX, params: { owner: "unassigned" } },
+    { label: "Outcomes", value: summary?.outcomes || 0, icon: Archive, params: { outcome: OPPORTUNITY_OUTCOME_STATUSES.join(","), archive: "all", due: undefined, status: undefined } },
+  ];
 
   return (
-    <div className="space-y-5 pt-14 md:pt-0">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2" data-testid="text-opportunities-title">
-            <Target className="w-6 h-6 text-primary" />Opportunities
-          </h1>
-          <p className="text-sm text-muted-foreground mt-0.5">Potential jobs being evaluated, bid, or negotiated (RFPs).</p>
-        </div>
-        <Button onClick={openCreate} className="min-h-[44px]" data-testid="button-new-opportunity">
-          <Plus className="w-4 h-4 mr-2" />New Opportunity
-        </Button>
+    <div className="space-y-5 pt-14 md:pt-0 min-w-0">
+      <header className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+        <div><h1 className="text-2xl sm:text-3xl font-bold flex items-center gap-2"><Target className="w-7 h-7 text-primary" />Bidding</h1><p className="text-sm text-muted-foreground mt-1">Track every opportunity from invitation through outcome.</p></div>
+        <Button className="min-h-11 w-full sm:w-auto" onClick={() => setFormOpen(true)}><Plus className="w-4 h-4 mr-2" />New opportunity</Button>
+      </header>
+
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+        {summaryCards.map(card => <button key={card.label} className="text-left min-h-[84px]" onClick={() => updateParams(card.params)} data-testid={`button-bidding-summary-${card.label.toLowerCase().replaceAll(" ", "-")}`}><Card className="h-full hover:border-primary/60"><CardContent className="p-4"><div className="flex justify-between"><p className="text-xs text-muted-foreground">{card.label}</p><card.icon className="w-4 h-4 text-muted-foreground" /></div><p className="text-2xl font-bold mt-1">{card.value}</p></CardContent></Card></button>)}
       </div>
 
-      <div className="flex flex-wrap items-center gap-3">
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-44" data-testid="select-status-filter"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All statuses</SelectItem>
-            {OPPORTUNITY_STATUSES.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
-          </SelectContent>
-        </Select>
-        <Input placeholder="Search name or number…" value={search} onChange={e => setSearch(e.target.value)} className="w-56" data-testid="input-opportunity-search" />
-        <label className="flex items-center gap-2 text-sm cursor-pointer">
-          <Checkbox checked={includeArchived} onCheckedChange={(c) => setIncludeArchived(c === true)} data-testid="checkbox-include-archived" />
-          Show archived
-        </label>
-      </div>
+      <Card>
+        <CardContent className="p-3 md:p-4 space-y-3">
+          <div className="flex flex-col lg:flex-row gap-2">
+            <div className="relative flex-1 min-w-0"><Search className="absolute left-3 top-3.5 w-4 h-4 text-muted-foreground" /><Input className="pl-9 min-h-11" value={get("search")} onChange={e => updateParams({ search: e.target.value })} placeholder="Search bid, number, or customer…" /></div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:flex gap-2">
+              <Select value={status === ALL_STATUS_PARAM ? "all" : status || (get("outcome") ? "all" : ACTIVE_STATUS_PARAM)} onValueChange={v => updateParams({ status: v === "all" ? ALL_STATUS_PARAM : v, outcome: undefined })}><SelectTrigger className="min-h-11 lg:w-40" data-testid="select-bidding-status"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All statuses</SelectItem><SelectItem value={ACTIVE_STATUS_PARAM}>Active pipeline</SelectItem>{OPPORTUNITY_STATUSES.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}</SelectContent></Select>
+              <Select value={get("owner", "all")} onValueChange={v => updateParams({ owner: v === "all" ? undefined : v })}><SelectTrigger className="min-h-11 lg:w-36"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All owners</SelectItem><SelectItem value="me">My bids</SelectItem><SelectItem value="unassigned">Unassigned</SelectItem></SelectContent></Select>
+              <Select value={get("due", "all")} onValueChange={v => updateParams({ due: v === "all" ? undefined : v })}><SelectTrigger className="min-h-11 lg:w-36" data-testid="select-bidding-due"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Any due date</SelectItem><SelectItem value="overdue">Overdue</SelectItem><SelectItem value="today">Due today</SelectItem><SelectItem value="tomorrow">Due tomorrow</SelectItem><SelectItem value="this_week">Due this week</SelectItem><SelectItem value="next_7_days">Due next 7 days</SelectItem><SelectItem value="no_due_date">No due date</SelectItem></SelectContent></Select>
+              <Select value={get("source", "all")} onValueChange={v => updateParams({ source: v === "all" ? undefined : v })}><SelectTrigger className="min-h-11 lg:w-36"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All sources</SelectItem>{OPPORTUNITY_SOURCES.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}</SelectContent></Select>
+              <Select value={get("projectType", "all")} onValueChange={v => updateParams({ projectType: v === "all" ? undefined : v })}><SelectTrigger className="min-h-11 lg:w-36"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All types</SelectItem>{OPPORTUNITY_PROJECT_TYPES.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}</SelectContent></Select>
+              <Select value={get("customer", "all")} onValueChange={v => updateParams({ customer: v === "all" ? undefined : v })}><SelectTrigger className="min-h-11 lg:w-40" data-testid="select-bidding-customer"><SelectValue placeholder="All customers" /></SelectTrigger><SelectContent><SelectItem value="all">All customers</SelectItem>{customers.map(c => <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>)}</SelectContent></Select>
+            </div>
+          </div>
+          <div className="flex flex-wrap justify-between gap-2">
+            <div className="flex flex-wrap gap-2">
+              <Button className="min-h-11" variant={get("outcome") ? "default" : "outline"} onClick={() => updateParams({ outcome: get("outcome") ? undefined : OPPORTUNITY_OUTCOME_STATUSES.join(","), archive: get("outcome") ? "active" : "all", status: undefined })}>Outcomes</Button>
+              <Select value={get("archive", "active")} onValueChange={v => updateParams({ archive: v === "active" ? undefined : v })}><SelectTrigger className="min-h-11 w-36"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="active">Active only</SelectItem><SelectItem value="archived">Archived only</SelectItem><SelectItem value="all">Active + archive</SelectItem></SelectContent></Select>
+              <Button className="min-h-11" variant="outline" onClick={() => setAdvancedOpen(value => !value)} data-testid="button-bidding-advanced-filters">Advanced dates</Button>
+              {hasFilters && <Button className="min-h-11" variant="ghost" onClick={() => navigate(`/bidding?view=${view}`, { replace: true })}><X className="w-4 h-4 mr-1" />Clear filters</Button>}
+            </div>
+            <div className="flex border rounded-md p-1"><Button size="sm" className="min-h-9" variant={view === "pipeline" ? "secondary" : "ghost"} onClick={() => updateParams({ view: "pipeline" }, false)}><Columns3 className="w-4 h-4 mr-1" />Pipeline</Button><Button size="sm" className="min-h-9" variant={view === "list" ? "secondary" : "ghost"} onClick={() => updateParams({ view: "list" }, false)}><List className="w-4 h-4 mr-1" />List</Button></div>
+          </div>
+          {advancedOpen && <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 border-t pt-3"><div><label className="text-sm font-medium">Bid due from</label><Input className="min-h-11 mt-1" type="date" value={get("bidDueFrom")} onChange={e => updateParams({ bidDueFrom: e.target.value })} data-testid="input-bid-due-from" /></div><div><label className="text-sm font-medium">Bid due to</label><Input className="min-h-11 mt-1" type="date" value={get("bidDueTo")} onChange={e => updateParams({ bidDueTo: e.target.value })} data-testid="input-bid-due-to" /></div></div>}
+        </CardContent>
+      </Card>
 
-      {isLoading ? (
-        <div className="py-10 text-center"><Loader2 className="w-6 h-6 animate-spin mx-auto text-muted-foreground" /></div>
-      ) : opportunities.length === 0 ? (
-        <div className="text-center py-14 border border-dashed border-border rounded-lg">
-          <Target className="w-10 h-10 mx-auto text-muted-foreground/40 mb-3" />
-          <p className="text-sm font-medium">No opportunities yet</p>
+      {isLoading ? <div className="py-16 text-center text-muted-foreground">Loading bids…</div> : isError ? <div className="py-16 text-center"><p className="font-medium">Unable to load bidding</p><p className="text-sm text-muted-foreground">Refresh the page to try again.</p></div> : items.length === 0 ? <Card><CardContent className="py-16 text-center"><Target className="w-10 h-10 mx-auto mb-3 text-muted-foreground/40" /><p className="font-medium">{hasFilters ? "No bids match these filters" : "No opportunities yet"}</p><p className="text-sm text-muted-foreground mt-1">{hasFilters ? "Clear filters or broaden your search." : "Create your first opportunity to start the pipeline."}</p>{hasFilters && <Button variant="outline" className="mt-4 min-h-11" onClick={() => navigate(`/bidding?view=${view}`)}>Clear filters</Button>}</CardContent></Card> : view === "pipeline" ? (
+        <div className="hidden md:grid grid-cols-2 xl:grid-cols-4 gap-4 items-start">
+          {(get("outcome") ? OPPORTUNITY_STATUSES.filter(s => get("outcome").split(",").includes(s.value)) : status ? OPPORTUNITY_STATUSES.filter(s => status.split(",").includes(s.value)) : ACTIVE).map(status => {
+            const bids = items.filter(o => o.status === status.value);
+            return <Card key={status.value} className="min-w-0"><CardHeader className="p-3"><CardTitle className="text-sm flex justify-between"><span className="flex items-center gap-2"><span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: status.color }} />{status.label}</span><Badge variant="secondary">{data?.statusCounts?.[status.value] ?? bids.length}</Badge></CardTitle></CardHeader><CardContent className="p-2 pt-0 space-y-2">{bids.length ? bids.map(o => <BidCard key={o.id} opportunity={o} compact canViewValues={data?.canViewValues} backQuery={searchString} />) : <p className="text-xs text-muted-foreground text-center py-6">No bids</p>}</CardContent></Card>;
+          })}
         </div>
       ) : (
-        <div className="space-y-2">
-          {opportunities.map(o => (
-            <Card key={o.id} className={`cursor-pointer hover:border-primary/50 ${o.isArchived ? "opacity-60" : ""}`} onClick={() => setSelectedId(o.id)} data-testid={`card-opportunity-${o.id}`}>
-              <CardContent className="p-4 flex flex-wrap items-center justify-between gap-2">
-                <div className="min-w-0">
-                  <p className="font-semibold text-sm">
-                    <span className="text-muted-foreground font-mono mr-2">{o.opportunityNumber}</span>{o.name}
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    {o.customerName}
-                    {o.responsibleUserName ? ` · ${o.responsibleUserName}` : ""}
-                    {o.bidDueDate ? ` · Bid due ${o.bidDueDate}${o.bidDueTime ? ` ${o.bidDueTime}` : ""}` : ""}
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  {o.isArchived && <Badge variant="outline" className="text-[10px]">Archived</Badge>}
-                  <Badge variant="secondary" data-testid={`badge-status-${o.id}`}>{getOpportunityStatusLabel(o.status)}</Badge>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+        <BidList items={items} sort={sort || "bidDueDate"} direction={direction} canViewValues={data?.canViewValues || false} backQuery={searchString} onSort={(key) => updateParams({ sort: key, direction: sort === key && direction === "asc" ? "desc" : "asc" })} />
       )}
+      {view === "pipeline" && <div className="md:hidden space-y-3">{items.map(o => <BidCard key={o.id} opportunity={o} canViewValues={data?.canViewValues} backQuery={searchString} />)}</div>}
 
-      {/* Create / Edit dialog */}
-      <Dialog open={formOpen} onOpenChange={setFormOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>{editing ? `Edit ${editing.opportunityNumber}` : "New Opportunity"}</DialogTitle>
-            <DialogDescription>Only name, customer, and status are required. Everything else can be filled in later.</DialogDescription>
-          </DialogHeader>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div className="sm:col-span-2">
-              <Label>Name *</Label>
-              <Input value={form.name} onChange={e => set("name")(e.target.value)} data-testid="input-opp-name" />
-            </div>
-            <div>
-              <Label>Customer *</Label>
-              <Select value={form.customerId} onValueChange={set("customerId")}>
-                <SelectTrigger data-testid="select-opp-customer"><SelectValue placeholder="Pick a customer" /></SelectTrigger>
-                <SelectContent>{customers.map(c => <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>)}</SelectContent>
-              </Select>
-            </div>
-            {!editing && (
-              <div>
-                <Label>Status</Label>
-                <Select value={form.status} onValueChange={set("status")}>
-                  <SelectTrigger data-testid="select-opp-status"><SelectValue /></SelectTrigger>
-                  <SelectContent>{OPPORTUNITY_STATUSES.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}</SelectContent>
-                </Select>
-              </div>
-            )}
-            <div>
-              <Label>Responsible user</Label>
-              <Select value={form.responsibleUserId || "none"} onValueChange={v => set("responsibleUserId")(v === "none" ? "" : v)}>
-                <SelectTrigger data-testid="select-opp-responsible"><SelectValue placeholder="Unassigned" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Unassigned</SelectItem>
-                  {users.map(u => <SelectItem key={u.id} value={u.id}>{userDisplayName(u)}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label>Source</Label>
-              <Select value={form.source || "none"} onValueChange={v => set("source")(v === "none" ? "" : v)}>
-                <SelectTrigger data-testid="select-opp-source"><SelectValue placeholder="—" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">—</SelectItem>
-                  {OPPORTUNITY_SOURCES.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label>Project type</Label>
-              <Select value={form.projectType || "none"} onValueChange={v => set("projectType")(v === "none" ? "" : v)}>
-                <SelectTrigger data-testid="select-opp-project-type"><SelectValue placeholder="—" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">—</SelectItem>
-                  {OPPORTUNITY_PROJECT_TYPES.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="sm:col-span-2 grid grid-cols-2 sm:grid-cols-4 gap-2">
-              <div className="col-span-2"><Label>Street address</Label><Input value={form.streetAddress} onChange={e => set("streetAddress")(e.target.value)} /></div>
-              <div className="col-span-2"><Label>Address 2</Label><Input value={form.address2} onChange={e => set("address2")(e.target.value)} /></div>
-              <div><Label>City</Label><Input value={form.city} onChange={e => set("city")(e.target.value)} /></div>
-              <div><Label>State</Label><Input value={form.state} onChange={e => set("state")(e.target.value)} /></div>
-              <div><Label>Zip</Label><Input value={form.zip} onChange={e => set("zip")(e.target.value)} /></div>
-            </div>
-            <div><Label>RFP received</Label><Input type="date" value={form.rfpReceivedDate} onChange={e => set("rfpReceivedDate")(e.target.value)} data-testid="input-opp-rfp-received" /></div>
-            <div className="flex gap-2">
-              <div className="flex-1"><Label>Bid due date</Label><Input type="date" value={form.bidDueDate} onChange={e => set("bidDueDate")(e.target.value)} data-testid="input-opp-bid-due" /></div>
-              <div className="w-28"><Label>Time</Label><Input type="time" value={form.bidDueTime} onChange={e => set("bidDueTime")(e.target.value)} /></div>
-            </div>
-            <div><Label>Estimated start</Label><Input type="date" value={form.estimatedStartDate} onChange={e => set("estimatedStartDate")(e.target.value)} /></div>
-            <div className="flex gap-2">
-              <div className="flex-1"><Label>Expected value ($)</Label><Input type="number" min="0" value={form.expectedValue} onChange={e => set("expectedValue")(e.target.value)} data-testid="input-opp-expected-value" /></div>
-              <div className="w-28"><Label>Probability %</Label><Input type="number" min="0" max="100" value={form.probability} onChange={e => set("probability")(e.target.value)} data-testid="input-opp-probability" /></div>
-            </div>
-            <div className="sm:col-span-2"><Label>Scope summary</Label><Textarea rows={2} value={form.scopeSummary} onChange={e => set("scopeSummary")(e.target.value)} /></div>
-            <div className="sm:col-span-2"><Label>Internal notes</Label><Textarea rows={2} value={form.internalNotes} onChange={e => set("internalNotes")(e.target.value)} /></div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setFormOpen(false)}>Cancel</Button>
-            <Button onClick={() => submitForm()} disabled={pending} data-testid="button-opp-save">
-              {pending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-              {editing ? "Save Changes" : "Create"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Detail dialog */}
-      <OpportunityDetail id={selectedId} onClose={() => setSelectedId(undefined)} onEdit={openEdit} />
+      {(data?.pageCount || 1) > 1 && <div className="flex items-center justify-between gap-3"><p className="text-sm text-muted-foreground">Page {data?.page} of {data?.pageCount} · {data?.total} bids</p><div className="flex gap-2"><Button variant="outline" className="min-h-11 min-w-11" disabled={page <= 1} onClick={() => updateParams({ page: String(page - 1) }, false)}><ChevronLeft className="w-4 h-4" /></Button><Button variant="outline" className="min-h-11 min-w-11" disabled={page >= (data?.pageCount || 1)} onClick={() => updateParams({ page: String(page + 1) }, false)}><ChevronRight className="w-4 h-4" /></Button></div></div>}
+      <OpportunityFormDialog open={formOpen} onOpenChange={setFormOpen} onSaved={id => navigate(`/bidding/${id}`)} />
     </div>
   );
 }
 
-function OpportunityDetail({ id, onClose, onEdit }: { id: number | undefined; onClose: () => void; onEdit: (o: OpportunityWithDetails) => void }) {
-  const { toast } = useToast();
-  const { data: opp } = useOpportunity(id);
-  const { data: history = [] } = useOpportunityStatusHistory(id);
-  const { data: oppContacts = [] } = useOpportunityContacts(id);
-  const { data: customerContacts = [] } = useQuery<Contact[]>({
-    queryKey: [`/api/customers/${opp?.customerId}/contacts`],
-    enabled: !!opp,
-  });
-
-  const changeStatus = useChangeOpportunityStatus();
-  const archive = useArchiveOpportunity();
-  const addContact = useAddOpportunityContact(id ?? 0);
-  const updateContact = useUpdateOpportunityContact(id ?? 0);
-  const removeContact = useRemoveOpportunityContact(id ?? 0);
-
-  const [newStatus, setNewStatus] = useState("");
-  const [reason, setReason] = useState("");
-  const [reasonNotes, setReasonNotes] = useState("");
-  const [contactId, setContactId] = useState("");
-  const [contactRole, setContactRole] = useState("");
-  const [contactPrimary, setContactPrimary] = useState(false);
-
-  if (!id) return null;
-
-  const needsLostReason = newStatus === "lost";
-  const needsNoBidReason = newStatus === "no_bid";
-
-  const applyStatus = () => {
-    if (!newStatus || !opp) return;
-    if (needsLostReason && !reason) { toast({ title: "Pick a lost reason", variant: "destructive" }); return; }
-    if (needsNoBidReason && !reason) { toast({ title: "Pick a no-bid reason", variant: "destructive" }); return; }
-    changeStatus.mutate(
-      {
-        id: opp.id, status: newStatus as any,
-        ...(needsLostReason ? { lostReason: reason as any, lostReasonNotes: reasonNotes || undefined } : {}),
-        ...(needsNoBidReason ? { noBidReason: reason as any, noBidReasonNotes: reasonNotes || undefined } : {}),
-      },
-      {
-        onSuccess: () => { toast({ title: "Status updated" }); setNewStatus(""); setReason(""); setReasonNotes(""); },
-        onError: (err) => toast({ title: "Couldn't change status", description: extractApiError(err, "Please try again."), variant: "destructive" }),
-      },
-    );
-  };
-
-  const linkedContactIds = new Set(oppContacts.map(c => c.contactId));
-  const availableContacts = customerContacts.filter(c => c.isActive && !linkedContactIds.has(c.id));
-
-  return (
-    <Dialog open={!!id} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-        {!opp ? (
-          <div className="py-10 text-center"><Loader2 className="w-6 h-6 animate-spin mx-auto" /></div>
-        ) : (
-          <>
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2 flex-wrap" data-testid="text-opp-detail-title">
-                <span className="font-mono text-muted-foreground">{opp.opportunityNumber}</span>{opp.name}
-                <Badge variant="secondary">{getOpportunityStatusLabel(opp.status)}</Badge>
-                {opp.isArchived && <Badge variant="outline">Archived</Badge>}
-              </DialogTitle>
-              <DialogDescription>{opp.customerName}{opp.responsibleUserName ? ` · Responsible: ${opp.responsibleUserName}` : ""}</DialogDescription>
-            </DialogHeader>
-
-            <div className="text-sm space-y-1 text-muted-foreground">
-              {opp.bidDueDate && <p>Bid due: {opp.bidDueDate}{opp.bidDueTime ? ` at ${opp.bidDueTime}` : ""}</p>}
-              {opp.rfpReceivedDate && <p>RFP received: {opp.rfpReceivedDate}</p>}
-              {opp.estimatedStartDate && <p>Estimated start: {opp.estimatedStartDate}</p>}
-              {opp.source && <p>Source: {labelFor(OPPORTUNITY_SOURCES, opp.source)}</p>}
-              {opp.projectType && <p>Type: {labelFor(OPPORTUNITY_PROJECT_TYPES, opp.projectType)}</p>}
-              {opp.expectedValue != null && <p>Expected value: ${opp.expectedValue.toLocaleString()}{opp.probability != null ? ` · ${opp.probability}% probability` : ""}</p>}
-              {opp.scopeSummary && <p>Scope: {opp.scopeSummary}</p>}
-              {opp.internalNotes && <p>Notes: {opp.internalNotes}</p>}
-              {opp.status === "lost" && opp.lostReason && <p className="text-destructive">Lost — {labelFor(OPPORTUNITY_LOST_REASONS, opp.lostReason)}{opp.lostReasonNotes ? `: ${opp.lostReasonNotes}` : ""}</p>}
-              {opp.status === "no_bid" && opp.noBidReason && <p className="text-destructive">No Bid — {labelFor(OPPORTUNITY_NO_BID_REASONS, opp.noBidReason)}{opp.noBidReasonNotes ? `: ${opp.noBidReasonNotes}` : ""}</p>}
-              {opp.status === "awarded" && opp.awardDate && <p className="text-green-600 dark:text-green-400">Awarded on {opp.awardDate}</p>}
-            </div>
-
-            <div className="flex flex-wrap gap-2">
-              <Button variant="outline" size="sm" onClick={() => { onClose(); onEdit(opp); }} data-testid="button-opp-edit">
-                <Pencil className="w-3.5 h-3.5 mr-1.5" />Edit
-              </Button>
-              <Button
-                variant="outline" size="sm"
-                onClick={() => archive.mutate({ id: opp.id, archived: !opp.isArchived }, {
-                  onSuccess: () => toast({ title: opp.isArchived ? "Unarchived" : "Archived" }),
-                  onError: (err) => toast({ title: "Couldn't update", description: extractApiError(err, "Try again."), variant: "destructive" }),
-                })}
-                data-testid="button-opp-archive"
-              >
-                {opp.isArchived ? <><ArchiveRestore className="w-3.5 h-3.5 mr-1.5" />Unarchive</> : <><Archive className="w-3.5 h-3.5 mr-1.5" />Archive</>}
-              </Button>
-            </div>
-
-            {/* Status change */}
-            <Card>
-              <CardHeader className="py-3"><CardTitle className="text-sm">Change Status</CardTitle></CardHeader>
-              <CardContent className="space-y-2 pb-4">
-                <div className="flex flex-wrap gap-2">
-                  <Select value={newStatus} onValueChange={(v) => { setNewStatus(v); setReason(""); }}>
-                    <SelectTrigger className="w-44" data-testid="select-opp-new-status"><SelectValue placeholder="New status…" /></SelectTrigger>
-                    <SelectContent>{OPPORTUNITY_STATUSES.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}</SelectContent>
-                  </Select>
-                  {(needsLostReason || needsNoBidReason) && (
-                    <Select value={reason} onValueChange={setReason}>
-                      <SelectTrigger className="w-48" data-testid="select-opp-reason"><SelectValue placeholder="Reason *" /></SelectTrigger>
-                      <SelectContent>
-                        {(needsLostReason ? OPPORTUNITY_LOST_REASONS : OPPORTUNITY_NO_BID_REASONS).map(r => (
-                          <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  )}
-                  <Button size="sm" onClick={applyStatus} disabled={!newStatus || changeStatus.isPending} data-testid="button-opp-apply-status">
-                    {changeStatus.isPending && <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />}Apply
-                  </Button>
-                </div>
-                {(needsLostReason || needsNoBidReason) && (
-                  <Input placeholder="Optional notes" value={reasonNotes} onChange={e => setReasonNotes(e.target.value)} data-testid="input-opp-reason-notes" />
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Contacts */}
-            <Card>
-              <CardHeader className="py-3"><CardTitle className="text-sm">Contacts</CardTitle></CardHeader>
-              <CardContent className="space-y-3 pb-4">
-                {oppContacts.length === 0 && <p className="text-xs text-muted-foreground">No contacts linked yet.</p>}
-                {oppContacts.map(c => (
-                  <div key={c.id} className="flex items-center justify-between gap-2 text-sm" data-testid={`row-opp-contact-${c.id}`}>
-                    <div className="min-w-0">
-                      <p className="font-medium flex items-center gap-1.5">
-                        {c.isPrimary && <Star className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />}
-                        {c.firstName} {c.lastName ?? ""}
-                        {c.role && <Badge variant="outline" className="text-[10px]">{labelFor(OPPORTUNITY_CONTACT_ROLES, c.role)}</Badge>}
-                      </p>
-                      <p className="text-xs text-muted-foreground">{[c.jobTitle, c.email, c.mobilePhone || c.officePhone].filter(Boolean).join(" · ")}</p>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      {!c.isPrimary && (
-                        <Button variant="ghost" size="sm" className="h-8 text-xs" onClick={() => updateContact.mutate({ id: c.id, isPrimary: true })} data-testid={`button-make-primary-${c.id}`}>
-                          Make primary
-                        </Button>
-                      )}
-                      <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => removeContact.mutate(c.id)} data-testid={`button-remove-contact-${c.id}`}>
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-                <div className="flex flex-wrap items-end gap-2 pt-2 border-t border-border">
-                  <div>
-                    <Label className="text-xs">Add contact</Label>
-                    <Select value={contactId} onValueChange={setContactId}>
-                      <SelectTrigger className="w-44" data-testid="select-add-contact"><SelectValue placeholder="Pick contact…" /></SelectTrigger>
-                      <SelectContent>
-                        {availableContacts.map(c => <SelectItem key={c.id} value={String(c.id)}>{c.firstName} {c.lastName ?? ""}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label className="text-xs">Role</Label>
-                    <Select value={contactRole || "none"} onValueChange={v => setContactRole(v === "none" ? "" : v)}>
-                      <SelectTrigger className="w-40" data-testid="select-add-contact-role"><SelectValue placeholder="—" /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">—</SelectItem>
-                        {OPPORTUNITY_CONTACT_ROLES.map(r => <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <label className="flex items-center gap-1.5 text-xs pb-2.5 cursor-pointer">
-                    <Checkbox checked={contactPrimary} onCheckedChange={c => setContactPrimary(c === true)} />Primary
-                  </label>
-                  <Button
-                    size="sm"
-                    disabled={!contactId || addContact.isPending}
-                    onClick={() => addContact.mutate(
-                      { contactId: Number(contactId), role: contactRole || null, isPrimary: contactPrimary },
-                      {
-                        onSuccess: () => { setContactId(""); setContactRole(""); setContactPrimary(false); },
-                        onError: (err) => toast({ title: "Couldn't add contact", description: extractApiError(err, "Try again."), variant: "destructive" }),
-                      },
-                    )}
-                    data-testid="button-add-contact"
-                  >
-                    Add
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Status history */}
-            <Card>
-              <CardHeader className="py-3"><CardTitle className="text-sm">Status History</CardTitle></CardHeader>
-              <CardContent className="pb-4">
-                {history.length === 0 ? (
-                  <p className="text-xs text-muted-foreground">No status changes yet.</p>
-                ) : (
-                  <ul className="space-y-1.5 text-xs">
-                    {history.map(h => (
-                      <li key={h.id} data-testid={`row-status-history-${h.id}`}>
-                        <span className="font-medium">
-                          {h.previousStatus ? `${getOpportunityStatusLabel(h.previousStatus)} → ` : ""}{getOpportunityStatusLabel(h.newStatus)}
-                        </span>
-                        <span className="text-muted-foreground"> — {h.changedByName || "System"}, {h.changedAt ? new Date(h.changedAt).toLocaleString() : ""}</span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </CardContent>
-            </Card>
-          </>
-        )}
-      </DialogContent>
-    </Dialog>
-  );
+function BidList({ items, sort, direction, canViewValues, backQuery, onSort }: { items: OpportunityWithDetails[]; sort: string; direction: string; canViewValues: boolean; backQuery: string; onSort: (key: string) => void }) {
+  const [statusOpportunity, setStatusOpportunity] = useState<OpportunityWithDetails | null>(null);
+  const SortHead = ({ field, children }: { field: string; children: React.ReactNode }) => <TableHead><button className="flex items-center min-h-11" onClick={() => onSort(field)}>{children}{sort === field && (direction === "asc" ? <ArrowUp className="w-3 h-3 ml-1" /> : <ArrowDown className="w-3 h-3 ml-1" />)}</button></TableHead>;
+  return <><div className="hidden md:block border rounded-lg overflow-hidden"><Table><TableHeader><TableRow><SortHead field="name">Opportunity</SortHead><SortHead field="customer">Customer</SortHead><SortHead field="status">Status</SortHead><SortHead field="bidDueDate">Bid due</SortHead>{canViewValues && <SortHead field="expectedValue">Value</SortHead>}<SortHead field="responsible">Responsible</SortHead><TableHead>Actions</TableHead></TableRow></TableHeader><TableBody>{items.map(o => { const urgency = dueState(o); return <TableRow key={o.id}><TableCell><Link href={`/bidding/${o.id}?from=${encodeURIComponent(backQuery)}`} className="block font-medium">{o.name}<span className="block text-xs text-muted-foreground font-mono">{o.opportunityNumber}</span></Link></TableCell><TableCell>{o.customerName}</TableCell><TableCell><Badge variant="outline" style={{ borderColor: getOpportunityStatusColor(o.status) }}>{getOpportunityStatusLabel(o.status)}</Badge></TableCell><TableCell>{o.bidDueDate || "—"}{urgency && <span className={cn("block text-xs", urgency.className.split(" ")[0])}>{urgency.label}</span>}</TableCell>{canViewValues && <TableCell>{o.expectedValue == null ? "—" : `$${o.expectedValue.toLocaleString()}`}</TableCell>}<TableCell>{o.responsibleUserName || "Unassigned"}</TableCell><TableCell><Button size="sm" variant="outline" className="min-h-11" onClick={() => setStatusOpportunity(o)} data-testid={`button-quick-status-row-${o.id}`}>Change status</Button></TableCell></TableRow>})}</TableBody></Table></div><div className="md:hidden space-y-3">{items.map(o => <BidCard key={o.id} opportunity={o} canViewValues={canViewValues} backQuery={backQuery} />)}</div>{statusOpportunity && <OpportunityStatusDialog open={!!statusOpportunity} onOpenChange={open => !open && setStatusOpportunity(null)} id={statusOpportunity.id} current={statusOpportunity.status} />}</>;
 }

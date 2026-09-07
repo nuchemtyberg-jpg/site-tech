@@ -26,13 +26,24 @@ function makeCookie(sid: string): string {
 
 async function main() {
   const sid = crypto.randomBytes(16).toString("hex");
+  const regularSid = crypto.randomBytes(16).toString("hex");
+  const regularUserId = "__opp-security-user";
   const expiresAtSec = Math.floor(Date.now() / 1000) + 6 * 3600;
   const sess = {
     cookie: { originalMaxAge: 604800000, expires: new Date(Date.now() + 6 * 3600_000).toISOString(), httpOnly: true, path: "/" },
     passport: { user: { claims: { sub: USER_ID, email: "admin@test.com" }, expires_at: expiresAtSec, access_token: "test", refresh_token: "test" } },
   };
   await db.execute(sql`INSERT INTO sessions (sid, sess, expire) VALUES (${sid}, ${JSON.stringify(sess)}::jsonb, NOW() + interval '6 hours')`);
+  await db.execute(sql`INSERT INTO users (id, email, first_name, last_name, role, is_authorized)
+    VALUES (${regularUserId}, ${"__opp-security@test.local"}, 'Opportunity', 'Viewer', 'user', 'approved')
+    ON CONFLICT (id) DO UPDATE SET role = 'user', is_authorized = 'approved'`);
+  const regularSess = {
+    ...sess,
+    passport: { user: { ...sess.passport.user, claims: { sub: regularUserId, email: "__opp-security@test.local" } } },
+  };
+  await db.execute(sql`INSERT INTO sessions (sid, sess, expire) VALUES (${regularSid}, ${JSON.stringify(regularSess)}::jsonb, NOW() + interval '6 hours')`);
   const H = { Cookie: makeCookie(sid), "Content-Type": "application/json" };
+  const HU = { Cookie: makeCookie(regularSid), "Content-Type": "application/json" };
   const j = async (r: Response) => ({ status: r.status, body: await r.json().catch(() => null) });
 
   let custAId: number | null = null;
@@ -57,6 +68,13 @@ async function main() {
 
     console.log("== Creation + number generation ==");
     const create = await j(await fetch(`${BASE}/api/opportunities`, { method: "POST", headers: H, body: JSON.stringify({ name: "__OPP Test Warehouse Bid", customerId: custAId, status: "new" }) }));
+    const terminalCreates = await Promise.all(["lost", "no_bid", "awarded"].map(async status =>
+      j(await fetch(`${BASE}/api/opportunities`, {
+        method: "POST", headers: H,
+        body: JSON.stringify({ name: `__OPP Invalid ${status}`, customerId: custAId, status }),
+      })),
+    ));
+    check("terminal statuses cannot bypass centralized status change on create", terminalCreates.every(r => r.status === 400), terminalCreates);
     oppId = create.body?.id;
     const year = new Date().getFullYear();
     check("create 201 with minimal fields", create.status === 201, create);
@@ -74,7 +92,7 @@ async function main() {
     check("invalid status rejected 400", badStatus.status === 400, badStatus);
 
     console.log("== Edit optional fields later ==");
-    const upd = await j(await fetch(`${BASE}/api/opportunities/${oppId}`, { method: "PUT", headers: H, body: JSON.stringify({ bidDueDate: "2026-09-15", bidDueTime: "14:00", expectedValue: 250000, probability: 60, source: "email_rfp" }) }));
+    const upd = await j(await fetch(`${BASE}/api/opportunities/${oppId}`, { method: "PUT", headers: H, body: JSON.stringify({ bidDueDate: "2026-09-15", bidDueTime: "14:00", expectedValue: 250000, probability: 60, source: "email_rfp", projectType: "commercial" }) }));
     check("update optional fields 200", upd.status === 200 && upd.body?.probability === 60 && upd.body?.bidDueTime === "14:00", upd);
     check("number unchanged after edits", upd.body?.opportunityNumber === create.body?.opportunityNumber);
 
@@ -93,6 +111,51 @@ async function main() {
     check("make second contact primary 200", makePrimary.status === 200 && makePrimary.body?.isPrimary === true, makePrimary);
     const clist = await j(await fetch(`${BASE}/api/opportunities/${oppId}/contacts`, { headers: H }));
     check("exactly one primary after switch", clist.body?.filter((c: any) => c.isPrimary).length === 1, clist.body);
+
+    console.log("== Dashboard query contract ==");
+    const combined = await j(await fetch(`${BASE}/api/opportunities/dashboard?search=Sam%20Signer&status=new&customerId=${custAId}&source=email_rfp&projectType=commercial&bidDueFrom=2026-09-01&bidDueTo=2026-09-30&today=2026-09-15&urgency=due_today&page=1&pageSize=10&sortBy=opportunityNumber&sortDir=asc`, { headers: H }));
+    check("combined search/contact/facet/date/urgency filters compose", combined.status === 200 && combined.body?.total === 1 && combined.body?.items?.[0]?.id === oppId, combined);
+    check("dashboard includes paging, counts, summary and status context", combined.body?.page === 1 && combined.body?.pageSize === 10 && combined.body?.pageCount === 1 && combined.body?.summary?.dueToday === 1 && combined.body?.statusCounts?.new === 1, combined.body);
+    check("dashboard summary includes accurate unassigned count", combined.body?.summary?.unassigned === 1, combined.body?.summary);
+    check("admin sees preliminary and weighted values", combined.body?.canViewValues === true && combined.body?.items?.[0]?.expectedValue === 250000 && combined.body?.summary?.expectedValueTotal === 250000 && combined.body?.summary?.weightedValueTotal === 150000, combined.body?.summary);
+    check("dashboard includes last opportunity activity", !!combined.body?.items?.[0]?.lastActivityAt, combined.body?.items?.[0]);
+    // Terminal outcomes must not leak into the default active work queue, while
+    // explicit outcome/status views and the outcome summary remain available.
+    const regressionAwarded = await j(await fetch(`${BASE}/api/opportunities`, { method: "POST", headers: H, body: JSON.stringify({ name: "__OPP Regression Awarded", customerId: custAId }) }));
+    const regressionSent = await j(await fetch(`${BASE}/api/opportunities`, { method: "POST", headers: H, body: JSON.stringify({ name: "__OPP Regression Sent", customerId: custAId, bidDueDate: "2026-09-14" }) }));
+    const regressionTomorrow = await j(await fetch(`${BASE}/api/opportunities`, { method: "POST", headers: H, body: JSON.stringify({ name: "__OPP Regression Tomorrow", customerId: custAId, bidDueDate: "2026-09-16" }) }));
+    const regressionWeek = await j(await fetch(`${BASE}/api/opportunities`, { method: "POST", headers: H, body: JSON.stringify({ name: "__OPP Regression Week", customerId: custAId, bidDueDate: "2026-09-18" }) }));
+    const regressionAwardedStatus = await j(await fetch(`${BASE}/api/opportunities/${regressionAwarded.body?.id}/status`, { method: "POST", headers: H, body: JSON.stringify({ status: "awarded" }) }));
+    const regressionSentStatus = await j(await fetch(`${BASE}/api/opportunities/${regressionSent.body?.id}/status`, { method: "POST", headers: H, body: JSON.stringify({ status: "proposal_sent" }) }));
+    check("setup dashboard regressions", [regressionAwarded, regressionSent, regressionTomorrow, regressionWeek].every(r => r.status === 201) && regressionAwardedStatus.status === 200 && regressionSentStatus.status === 200);
+    const defaultRegression = await j(await fetch(`${BASE}/api/opportunities/dashboard?search=__OPP%20Regression&today=2026-09-15`, { headers: H }));
+    check("default dashboard excludes unarchived outcomes and reports them", defaultRegression.body?.total === 3 && defaultRegression.body?.summary?.outcomes === 1 && !(defaultRegression.body?.items ?? []).some((o: any) => o.id === regressionAwarded.body?.id), defaultRegression.body);
+    const explicitAwarded = await j(await fetch(`${BASE}/api/opportunities/dashboard?search=__OPP%20Regression&status=awarded&today=2026-09-15`, { headers: H }));
+    check("explicit outcome status remains queryable", explicitAwarded.body?.total === 1 && explicitAwarded.body?.items?.[0]?.id === regressionAwarded.body?.id, explicitAwarded.body);
+    const sentOverdue = await j(await fetch(`${BASE}/api/opportunities/dashboard?search=__OPP%20Regression%20Sent&today=2026-09-15&urgency=overdue`, { headers: H }));
+    check("proposal_sent past due is not deadline-overdue", sentOverdue.body?.total === 0 && sentOverdue.body?.summary?.overdue === 0, sentOverdue.body);
+    const tomorrowUrgency = await j(await fetch(`${BASE}/api/opportunities/dashboard?search=__OPP%20Regression&today=2026-09-15&urgency=tomorrow`, { headers: H }));
+    const weekUrgency = await j(await fetch(`${BASE}/api/opportunities/dashboard?search=__OPP%20Regression&today=2026-09-15&urgency=this_week`, { headers: H }));
+    check("tomorrow and this-week urgency boundaries are distinct", tomorrowUrgency.body?.total === 1 && tomorrowUrgency.body?.items?.[0]?.id === regressionTomorrow.body?.id && weekUrgency.body?.total === 1 && weekUrgency.body?.items?.[0]?.id === regressionWeek.body?.id, [tomorrowUrgency.body, weekUrgency.body]);
+    const overdueBoundary = await j(await fetch(`${BASE}/api/opportunities/dashboard?search=__OPP%20Test%20Warehouse&today=2026-09-16&urgency=overdue`, { headers: H }));
+    check("urgency overdue boundary excludes due-today and includes prior dates", overdueBoundary.body?.total === 1 && overdueBoundary.body?.items?.[0]?.id === oppId, overdueBoundary.body);
+    const page1 = await j(await fetch(`${BASE}/api/opportunities/dashboard?search=__OPP%20Test&archive=all&page=1&pageSize=1&sortBy=opportunityNumber&sortDir=asc`, { headers: H }));
+    const page2 = await j(await fetch(`${BASE}/api/opportunities/dashboard?search=__OPP%20Test&archive=all&page=2&pageSize=1&sortBy=opportunityNumber&sortDir=asc`, { headers: H }));
+    check("stable sorting and pagination return distinct rows with same total", page1.body?.total >= 2 && page2.body?.total === page1.body?.total && page1.body?.items?.[0]?.id !== page2.body?.items?.[0]?.id, [page1.body, page2.body]);
+    const unassignedA = await j(await fetch(`${BASE}/api/opportunities/dashboard?search=__OPP%20Test&responsibleUserId=unassigned`, { headers: H }));
+    const unassignedB = await j(await fetch(`${BASE}/api/opportunities/dashboard?search=__OPP%20Test&unassigned=true`, { headers: H }));
+    check("unassigned sentinel and explicit filter agree", unassignedA.body?.total >= 2 && unassignedB.body?.total === unassignedA.body?.total && unassignedA.body?.summary?.unassigned === unassignedA.body?.total, [unassignedA.body, unassignedB.body]);
+
+    console.log("== Preliminary value authorization ==");
+    const regularDetail = await j(await fetch(`${BASE}/api/opportunities/${oppId}`, { headers: HU }));
+    check("non-admin detail redacts preliminary values", regularDetail.status === 200 && regularDetail.body?.expectedValue === null && regularDetail.body?.probability === null, regularDetail);
+    const regularCustomerList = await j(await fetch(`${BASE}/api/customers/${custAId}/opportunities`, { headers: HU }));
+    const regularCustomerOpp = regularCustomerList.body?.find((o: any) => o.id === oppId);
+    check("non-admin customer opportunity list redacts preliminary values", regularCustomerOpp?.expectedValue === null && regularCustomerOpp?.probability === null, regularCustomerOpp);
+    const forbiddenUpdate = await j(await fetch(`${BASE}/api/opportunities/${oppId}`, { method: "PUT", headers: HU, body: JSON.stringify({ expectedValue: 1 }) }));
+    check("non-admin preliminary value update rejected 403", forbiddenUpdate.status === 403, forbiddenUpdate);
+    const forbiddenCreate = await j(await fetch(`${BASE}/api/opportunities`, { method: "POST", headers: HU, body: JSON.stringify({ name: "__OPP Forbidden Value", customerId: custAId, expectedValue: 1 }) }));
+    check("non-admin preliminary value create rejected 403", forbiddenCreate.status === 403, forbiddenCreate);
 
     console.log("== Workflow rule + status change ==");
     const rule = await j(await fetch(`${BASE}/api/workflow-rules`, { method: "POST", headers: H, body: JSON.stringify({
@@ -201,19 +264,29 @@ async function main() {
       relatedEntityType: "opportunity", relatedEntityId: oppId,
     }) }));
     check("manual todo linked to opportunity, no project", manualTodo.status === 201 && manualTodo.body?.relatedEntityType === "opportunity" && manualTodo.body?.projectId === null, manualTodo);
+    const scopedTodos = await j(await fetch(`${BASE}/api/opportunities/${oppId}/todos`, { headers: H }));
+    check("opportunity-scoped todo retrieval includes generic linked todo", scopedTodos.status === 200 && scopedTodos.body?.some((t: any) => t.id === manualTodo.body?.id), scopedTodos.body);
     const badTodo = await j(await fetch(`${BASE}/api/todos`, { method: "POST", headers: H, body: JSON.stringify({
       title: "__OPP Bad Todo", assignedToUserId: USER_ID, priority: "normal", status: "open",
       relatedEntityType: "opportunity", relatedEntityId: 99999999,
     }) }));
     check("todo with missing opportunity rejected 400", badTodo.status === 400, badTodo);
     if (manualTodo.body?.id) {
-      await fetch(`${BASE}/api/todos/${manualTodo.body.id}`, { method: "DELETE", headers: H });
+      const dueChange = await j(await fetch(`${BASE}/api/todos/${manualTodo.body.id}`, { method: "PUT", headers: H, body: JSON.stringify({ dueDate: "2026-09-20" }) }));
+      const cancelled = await j(await fetch(`${BASE}/api/todos/${manualTodo.body.id}`, { method: "PUT", headers: H, body: JSON.stringify({ status: "cancelled" }) }));
+      const deleted = await fetch(`${BASE}/api/todos/${manualTodo.body.id}`, { method: "DELETE", headers: H });
+      const todoLifecycleActivity = await j(await fetch(`${BASE}/api/opportunities/${oppId}/activity`, { headers: H }));
+      const lifecycle = (todoLifecycleActivity.body ?? []).filter((a: any) => ["todo_due_date_changed", "todo_cancelled", "todo_deleted"].includes(a.action) && a.entityId === manualTodo.body.id);
+      check("opportunity todo lifecycle activity retains opportunity metadata", dueChange.status === 200 && cancelled.status === 200 && deleted.status === 204 && lifecycle.length === 3 && lifecycle.every((a: any) => a.metadata?.opportunityId === oppId), lifecycle);
     }
 
     console.log("== Communications link ==");
-    const comm = await j(await fetch(`${BASE}/api/customers/${custBId}/communications`, { method: "POST", headers: H, body: JSON.stringify({ type: "phone", subject: "__OPP Test call", notes: "Discussed bid", contactDate: new Date().toISOString(), opportunityId: oppId }) }));
+    const comm = await j(await fetch(`${BASE}/api/opportunities/${oppId}/communications`, { method: "POST", headers: H, body: JSON.stringify({ type: "phone", subject: "__OPP Test call", notes: "Discussed bid", contactDate: new Date().toISOString() }) }));
     commId = comm.body?.id;
     check("communication with opportunity link 201", comm.status === 201 && comm.body?.opportunityId === oppId, comm);
+    const scopedComms = await j(await fetch(`${BASE}/api/opportunities/${oppId}/communications`, { headers: H }));
+    const customerComms = await j(await fetch(`${BASE}/api/customers/${custBId}/communications`, { headers: H }));
+    check("communication is retrievable once from opportunity and customer contexts", scopedComms.body?.filter((c: any) => c.id === commId).length === 1 && customerComms.body?.filter((c: any) => c.id === commId).length === 1, [scopedComms.body, customerComms.body]);
     const commWrong = await j(await fetch(`${BASE}/api/customers/${custAId}/communications`, { method: "POST", headers: H, body: JSON.stringify({ type: "phone", subject: "__OPP Bad call", notes: "Wrong customer", contactDate: new Date().toISOString(), opportunityId: oppId }) }));
     check("communication cross-customer opportunity rejected 400", commWrong.status === 400, commWrong);
 
@@ -241,6 +314,8 @@ async function main() {
       if (custAId) await db.execute(sql`DELETE FROM customers WHERE id = ${custAId}`);
       if (custBId) await db.execute(sql`DELETE FROM customers WHERE id = ${custBId}`);
       await db.execute(sql`DELETE FROM sessions WHERE sid = ${sid}`);
+      await db.execute(sql`DELETE FROM sessions WHERE sid = ${regularSid}`);
+      await db.execute(sql`DELETE FROM users WHERE id = ${regularUserId}`);
     } catch (e) {
       console.error("cleanup error:", e);
     }

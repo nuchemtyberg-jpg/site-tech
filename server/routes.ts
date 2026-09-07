@@ -12,7 +12,10 @@ import { sendInviteEmail } from "./services/email";
 import { handleProjectStatusChange } from "./services/workflowEngine";
 import { changeOpportunityStatus, OpportunityStatusError } from "./services/opportunityService";
 import { logActivity, actorFromUser } from "./services/activityLog";
-import { getOpportunityStatusLabel, OPPORTUNITY_STATUS_VALUES, labelFor, OPPORTUNITY_CONTACT_ROLES } from "@shared/opportunityStatus";
+import {
+  getOpportunityStatusLabel, OPPORTUNITY_STATUS_VALUES, OPPORTUNITY_SOURCE_VALUES,
+  OPPORTUNITY_PROJECT_TYPE_VALUES, labelFor, OPPORTUNITY_CONTACT_ROLES,
+} from "@shared/opportunityStatus";
 import { insertWorkflowRuleSchema } from "@shared/schema";
 import { generateUploadSignature, deleteFromCloudinary } from "./services/cloudinary";
 import {
@@ -1031,8 +1034,92 @@ export async function registerRoutes(
   // ============================================================
 
   const opportunityDisplay = (o: { opportunityNumber: string; name: string }) => `${o.opportunityNumber} (${o.name})`;
+  const opportunityForUser = <T extends { expectedValue: number | null; probability: number | null }>(
+    user: { role: string | null },
+    opportunity: T,
+  ): T => user.role === "admin"
+    ? opportunity
+    : { ...opportunity, expectedValue: null, probability: null };
+
+  const csv = (value: unknown) => typeof value === "string"
+    ? value.split(",").map(v => v.trim()).filter(Boolean)
+    : [];
+  const validDateQuery = (value: unknown) =>
+    typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : undefined;
+
+  app.get(api.opportunities.dashboard.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
+    const user = await getCurrentUser(req);
+    if (!user) return res.status(401).json({ message: "User not found" });
+    const q = req.query;
+    const statuses = csv(q.status);
+    const sources = csv(q.source);
+    const projectTypes = csv(q.projectType);
+    const invalidStatus = statuses.find(v => !OPPORTUNITY_STATUS_VALUES.includes(v));
+    const invalidSource = sources.find(v => !OPPORTUNITY_SOURCE_VALUES.includes(v));
+    const invalidProjectType = projectTypes.find(v => !OPPORTUNITY_PROJECT_TYPE_VALUES.includes(v));
+    if (invalidStatus) return res.status(400).json({ message: `Invalid status filter: ${invalidStatus}` });
+    if (invalidSource) return res.status(400).json({ message: `Invalid source filter: ${invalidSource}` });
+    if (invalidProjectType) return res.status(400).json({ message: `Invalid project type filter: ${invalidProjectType}` });
+    const urgency = typeof q.urgency === "string" ? q.urgency : undefined;
+    if (urgency && !["overdue", "today", "due_today", "tomorrow", "due_tomorrow", "this_week", "due_this_week", "next_7_days", "due_next_7_days", "later", "no_due_date"].includes(urgency)) {
+      return res.status(400).json({ message: `Invalid urgency filter: ${urgency}` });
+    }
+    const archive = typeof q.archive === "string" ? q.archive : "active";
+    if (!["active", "archived", "all"].includes(archive)) {
+      return res.status(400).json({ message: `Invalid archive filter: ${archive}` });
+    }
+    const sortBy = typeof q.sortBy === "string" ? q.sortBy : undefined;
+    const validSorts = ["name", "opportunityNumber", "customer", "status", "responsible", "bidDueDate", "expectedValue", "createdAt", "updatedAt", "lastActivity"];
+    if (sortBy && !validSorts.includes(sortBy)) return res.status(400).json({ message: `Invalid sort: ${sortBy}` });
+    const customerId = typeof q.customerId === "string" && q.customerId ? Number(q.customerId) : undefined;
+    if (customerId !== undefined && !Number.isInteger(customerId)) return res.status(400).json({ message: "Invalid customerId" });
+    const page = typeof q.page === "string" ? Number(q.page) : 1;
+    const pageSize = typeof q.pageSize === "string" ? Number(q.pageSize) : 25;
+    if (!Number.isInteger(page) || page < 1 || !Number.isInteger(pageSize) || pageSize < 1 || pageSize > 100) {
+      return res.status(400).json({ message: "page must be >= 1 and pageSize must be between 1 and 100" });
+    }
+    const requestedResponsible = typeof q.responsibleUserId === "string" && q.responsibleUserId
+      ? q.responsibleUserId
+      : undefined;
+    const isMyResponsible = q.my === "true" || q.my === "responsible";
+    const responsibleUserId = isMyResponsible
+      ? user.id
+      : (requestedResponsible === "unassigned" ? undefined : requestedResponsible);
+    const dateField = typeof q.dateField === "string" ? q.dateField : undefined;
+    if (dateField && !["bidDueDate", "rfpReceivedDate", "estimatedStartDate", "createdAt"].includes(dateField)) {
+      return res.status(400).json({ message: `Invalid date field: ${dateField}` });
+    }
+    res.json(await storage.getOpportunityDashboard({
+      search: typeof q.search === "string" && q.search.trim() ? q.search : undefined,
+      statuses,
+      customerId,
+      responsibleUserId,
+      unassigned: !isMyResponsible && (q.unassigned === "true" || requestedResponsible === "unassigned"),
+      createdByUserId: q.my === "created" ? user.id : undefined,
+      source: sources,
+      projectType: projectTypes,
+      bidDueFrom: validDateQuery(q.bidDueFrom),
+      bidDueTo: validDateQuery(q.bidDueTo),
+      dateField: dateField as any,
+      dateFrom: validDateQuery(q.dateFrom),
+      dateTo: validDateQuery(q.dateTo),
+      urgency,
+      outcome: csv(q.outcome),
+      archive: archive as "active" | "archived" | "all",
+      today: validDateQuery(q.today),
+      sortBy: sortBy as any,
+      sortDir: q.sortDir === "asc" ? "asc" : "desc",
+      page,
+      pageSize,
+      // Expected/probability figures are preliminary bidding values. Existing
+      // role convention gives the admin role access to sensitive financials.
+      canViewValues: user.role === "admin",
+    }));
+  });
 
   app.get(api.opportunities.list.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
+    const user = await getCurrentUser(req);
+    if (!user) return res.status(401).json({ message: "User not found" });
     const q = req.query;
     const status = typeof q.status === "string" && q.status ? q.status : undefined;
     if (status && !OPPORTUNITY_STATUS_VALUES.includes(status)) {
@@ -1045,20 +1132,24 @@ export async function registerRoutes(
       includeArchived: q.includeArchived === "true",
       search: typeof q.search === "string" && q.search ? q.search : undefined,
     });
-    res.json(list);
+    res.json(list.map(o => opportunityForUser(user, o)));
   });
 
   app.get(api.opportunities.get.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
+    const user = await getCurrentUser(req);
+    if (!user) return res.status(401).json({ message: "User not found" });
     const opp = await storage.getOpportunityWithDetails(Number(req.params.id));
     if (!opp) return res.status(404).json({ message: "Opportunity not found" });
-    res.json(opp);
+    res.json(opportunityForUser(user, opp));
   });
 
   app.get(api.opportunities.listForCustomer.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
+    const user = await getCurrentUser(req);
+    if (!user) return res.status(401).json({ message: "User not found" });
     const customer = await storage.getCustomer(Number(req.params.customerId));
     if (!customer) return res.status(404).json({ message: "Customer not found" });
     const list = await storage.getOpportunitiesByCustomer(customer.id, req.query.includeArchived === "true");
-    res.json(list);
+    res.json(list.map(o => opportunityForUser(user, o)));
   });
 
   app.post(api.opportunities.create.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
@@ -1066,6 +1157,12 @@ export async function registerRoutes(
       const input = api.opportunities.create.input.parse(req.body);
       const user = await getCurrentUser(req);
       if (!user) return res.status(401).json({ message: "User not found" });
+      if (user.role !== "admin" && ("expectedValue" in input || "probability" in input)) {
+        return res.status(403).json({ message: "Only admins can set preliminary opportunity values" });
+      }
+      if (input.status && input.status !== "new") {
+        return res.status(400).json({ message: "New opportunities must start in New status; use Change Status after creation" });
+      }
 
       const customer = await storage.getCustomer(input.customerId);
       if (!customer) return res.status(400).json({ message: "Customer not found" });
@@ -1077,7 +1174,7 @@ export async function registerRoutes(
         }
       }
 
-      const opportunity = await storage.createOpportunity({ ...input, createdByUserId: user.id });
+      const opportunity = await storage.createOpportunity({ ...input, status: "new", createdByUserId: user.id });
 
       const actor = actorFromUser(user);
       await logActivity({
@@ -1087,7 +1184,7 @@ export async function registerRoutes(
         metadata: { opportunityId: opportunity.id, customerId: customer.id, status: opportunity.status },
       });
 
-      res.status(201).json(opportunity);
+      res.status(201).json(opportunityForUser(user, opportunity));
     } catch (err) {
       if (err instanceof z.ZodError) {
         return res.status(400).json({ message: err.errors[0].message });
@@ -1103,6 +1200,9 @@ export async function registerRoutes(
       if (!existing) return res.status(404).json({ message: "Opportunity not found" });
       const user = await getCurrentUser(req);
       if (!user) return res.status(401).json({ message: "User not found" });
+      if (user.role !== "admin" && ("expectedValue" in input || "probability" in input)) {
+        return res.status(403).json({ message: "Only admins can set preliminary opportunity values" });
+      }
       const actor = actorFromUser(user);
 
       if (input.responsibleUserId !== undefined && input.responsibleUserId !== null) {
@@ -1167,7 +1267,7 @@ export async function registerRoutes(
         });
       }
 
-      res.json(opportunity);
+      res.json(opportunityForUser(user, opportunity));
     } catch (err) {
       if (err instanceof z.ZodError) {
         return res.status(400).json({ message: err.errors[0].message });
@@ -1189,7 +1289,7 @@ export async function registerRoutes(
         actor: actorFromUser(user),
         today: typeof req.query.clientDate === "string" ? req.query.clientDate : undefined,
       });
-      res.json(opportunity);
+      res.json(opportunityForUser(user, opportunity));
     } catch (err) {
       if (err instanceof z.ZodError) {
         return res.status(400).json({ message: err.errors[0].message });
@@ -1209,7 +1309,7 @@ export async function registerRoutes(
       const user = await getCurrentUser(req);
       if (!user) return res.status(401).json({ message: "User not found" });
 
-      if (existing.isArchived === archived) return res.json(existing); // idempotent
+      if (existing.isArchived === archived) return res.json(opportunityForUser(user, existing)); // idempotent
 
       const opportunity = await storage.updateOpportunity(existing.id, { isArchived: archived });
       const actor = actorFromUser(user);
@@ -1220,7 +1320,7 @@ export async function registerRoutes(
         description: `${actor.name} ${archived ? "archived" : "unarchived"} ${opportunityDisplay(opportunity)}.`,
         metadata: { opportunityId: opportunity.id, customerId: opportunity.customerId },
       });
-      res.json(opportunity);
+      res.json(opportunityForUser(user, opportunity));
     } catch (err) {
       if (err instanceof z.ZodError) {
         return res.status(400).json({ message: err.errors[0].message });
@@ -1239,6 +1339,95 @@ export async function registerRoutes(
     const opp = await storage.getOpportunity(Number(req.params.id));
     if (!opp) return res.status(404).json({ message: "Opportunity not found" });
     res.json(await storage.getOpportunityActivity(opp.id));
+  });
+
+  app.get(api.opportunities.todos.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
+    const opp = await storage.getOpportunity(Number(req.params.id));
+    if (!opp) return res.status(404).json({ message: "Opportunity not found" });
+    res.json(await storage.getTodos({
+      opportunityId: opp.id,
+      status: typeof req.query.status === "string" ? req.query.status : "all",
+    }));
+  });
+
+  app.post(api.opportunities.createTodo.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
+    try {
+      const opp = await storage.getOpportunity(Number(req.params.id));
+      if (!opp) return res.status(404).json({ message: "Opportunity not found" });
+      const input = api.opportunities.createTodo.input.parse(req.body);
+      const user = await getCurrentUser(req);
+      if (!user) return res.status(401).json({ message: "User not found" });
+      const assignee = input.assignedToUserId === user.id ? user : await storage.getUser(input.assignedToUserId);
+      if (!assignee || assignee.isAuthorized !== "approved") {
+        return res.status(400).json({ message: "Assignee must be an approved, active user" });
+      }
+      const todo = await storage.createTodo({
+        ...input,
+        description: input.description || null,
+        dueDate: input.dueDate || null,
+        projectId: null,
+        relatedEntityType: "opportunity",
+        relatedEntityId: opp.id,
+        createdByUserId: user.id,
+        source: "manual",
+      });
+      const actor = actorFromUser(user);
+      await logActivity({
+        entityType: "todo", entityId: todo.id, action: "todo_created", actor,
+        description: `${actor.name} created a todo for ${opportunityDisplay(opp)}: ${todo.title}.`,
+        metadata: { customerId: opp.customerId, opportunityId: opp.id },
+      });
+      if (todo.assignedToUserId !== user.id) {
+        await storage.createNotification({
+          userId: todo.assignedToUserId, type: "todo_assigned",
+          title: `You were assigned: ${todo.title}`,
+          message: `${actor.name} assigned you a todo for ${opp.opportunityNumber}${todo.dueDate ? `, due ${todo.dueDate}` : ""}.`,
+          projectId: null, todoId: todo.id, relatedEntityType: "opportunity",
+          relatedEntityId: opp.id, isRead: false,
+        });
+      }
+      res.status(201).json(todo);
+    } catch (err) {
+      if (err instanceof z.ZodError) return res.status(400).json({ message: err.errors[0].message });
+      throw err;
+    }
+  });
+
+  app.get(api.opportunities.communications.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
+    const opp = await storage.getOpportunity(Number(req.params.id));
+    if (!opp) return res.status(404).json({ message: "Opportunity not found" });
+    res.json(await storage.getOpportunityCommunications(opp.id));
+  });
+
+  app.post(api.opportunities.createCommunication.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
+    try {
+      const opp = await storage.getOpportunity(Number(req.params.id));
+      if (!opp) return res.status(404).json({ message: "Opportunity not found" });
+      const input = api.opportunities.createCommunication.input.parse(req.body);
+      if (input.contactId) {
+        const contact = await storage.getContact(input.contactId);
+        if (!contact || contact.customerId !== opp.customerId) {
+          return res.status(400).json({ message: "Contact does not belong to this opportunity's customer" });
+        }
+      }
+      if (input.projectId) {
+        const project = await storage.getProject(input.projectId);
+        if (!project || project.customerId !== opp.customerId) {
+          return res.status(400).json({ message: "Project does not belong to this opportunity's customer" });
+        }
+      }
+      const comm = await storage.createCommunication({ ...input, customerId: opp.customerId, opportunityId: opp.id });
+      const actor = await getActor(req);
+      await logActivity({
+        entityType: "communication", entityId: comm.id, action: "communication_logged",
+        actor, description: `Communication logged for ${opportunityDisplay(opp)}${comm.subject ? `: "${comm.subject}"` : ""}`,
+        metadata: { customerId: opp.customerId, opportunityId: opp.id },
+      });
+      res.status(201).json(comm);
+    } catch (err) {
+      if (err instanceof z.ZodError) return res.status(400).json({ message: err.errors[0].message });
+      throw err;
+    }
   });
 
   // ---------- Opportunity Contacts ----------
@@ -1357,10 +1546,10 @@ export async function registerRoutes(
     user.role === "admin" || user.role === "manager" || todo.createdByUserId === user.id;
   // Project todos are visible to anyone who can view the project (same as the
   // project Todos tab); personal todos only to creator/assignee/managers.
-  const canViewTodo = (user: { id: string; role: string | null }, todo: { assignedToUserId: string; createdByUserId: string | null; projectId: number | null }) =>
+  const canViewTodo = (user: { id: string; role: string | null }, todo: { assignedToUserId: string; createdByUserId: string | null; projectId: number | null; relatedEntityType?: string | null }) =>
     user.role === "admin" || user.role === "manager" ||
     todo.assignedToUserId === user.id || todo.createdByUserId === user.id ||
-    todo.projectId !== null;
+    todo.projectId !== null || todo.relatedEntityType === "opportunity";
 
   app.get(api.todos.list.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
     const user = await getCurrentUser(req);
@@ -1370,13 +1559,14 @@ export async function registerRoutes(
     const q = req.query;
     const requestedAssignee = q.assignedToUserId === "me" ? user.id : (typeof q.assignedToUserId === "string" && q.assignedToUserId ? q.assignedToUserId : undefined);
     const projectId = typeof q.projectId === "string" && q.projectId ? Number(q.projectId) : undefined;
+    const opportunityId = typeof q.opportunityId === "string" && q.opportunityId ? Number(q.opportunityId) : undefined;
 
     // Read scope: regular users may list their own todos, or todos within a
     // project (project data is visible to all approved users, matching every
     // other per-project endpoint). Cross-user and unscoped "all todos"
     // queries require admin/manager.
     let assignedToUserId = requestedAssignee;
-    if (!isPrivileged && projectId === undefined) {
+    if (!isPrivileged && projectId === undefined && opportunityId === undefined) {
       if (requestedAssignee !== undefined && requestedAssignee !== user.id) {
         return res.status(403).json({ message: "You can only view your own todos" });
       }
@@ -1386,6 +1576,7 @@ export async function registerRoutes(
     const filters: import("./storage").TodoFilters = {
       assignedToUserId,
       projectId,
+      opportunityId,
       status: typeof q.status === "string" && q.status ? q.status : undefined,
       priority: typeof q.priority === "string" && q.priority ? q.priority : undefined,
       due: typeof q.due === "string" && q.due ? (q.due as any) : undefined,
@@ -1538,18 +1729,21 @@ export async function registerRoutes(
           projectId: todo.projectId, entityType: "todo", entityId: todo.id,
           action: "todo_completed", actor,
           description: `${actor.name} completed todo: ${todo.title}.`,
+          metadata: todo.relatedEntityType === "opportunity" ? { opportunityId: todo.relatedEntityId } : undefined,
         });
       } else if (input.status === "cancelled" && existing.status !== "cancelled") {
         await logActivity({
           projectId: todo.projectId, entityType: "todo", entityId: todo.id,
           action: "todo_cancelled", actor,
           description: `${actor.name} cancelled todo: ${todo.title}.`,
+          metadata: todo.relatedEntityType === "opportunity" ? { opportunityId: todo.relatedEntityId } : undefined,
         });
       } else if (input.status && input.status !== existing.status) {
         await logActivity({
           projectId: todo.projectId, entityType: "todo", entityId: todo.id,
           action: "todo_status_changed", actor,
           description: `${actor.name} moved todo "${todo.title}" to ${input.status === "in_progress" ? "In Progress" : input.status === "open" ? "Open" : input.status}.`,
+          metadata: todo.relatedEntityType === "opportunity" ? { opportunityId: todo.relatedEntityId } : undefined,
         });
       }
 
@@ -1560,6 +1754,7 @@ export async function registerRoutes(
           projectId: todo.projectId, entityType: "todo", entityId: todo.id,
           action: "todo_reassigned", actor,
           description: `${actor.name} reassigned todo "${todo.title}" to ${newAssigneeName}.`,
+          metadata: todo.relatedEntityType === "opportunity" ? { opportunityId: todo.relatedEntityId } : undefined,
         });
         // Notify the new assignee (never for self-assignment)
         if (input.assignedToUserId !== user.id) {
@@ -1570,8 +1765,8 @@ export async function registerRoutes(
             message: `${actor.name} assigned you a todo${todo.dueDate ? `, due ${todo.dueDate}` : ""}.`,
             projectId: todo.projectId,
             todoId: todo.id,
-            relatedEntityType: todo.projectId ? "project" : null,
-            relatedEntityId: todo.projectId,
+            relatedEntityType: todo.relatedEntityType,
+            relatedEntityId: todo.relatedEntityId,
             isRead: false,
           });
         }
@@ -1584,6 +1779,7 @@ export async function registerRoutes(
           description: input.dueDate
             ? `${actor.name} set the due date of "${todo.title}" to ${input.dueDate}.`
             : `${actor.name} removed the due date from "${todo.title}".`,
+          metadata: todo.relatedEntityType === "opportunity" ? { opportunityId: todo.relatedEntityId } : undefined,
         });
       }
 
@@ -1615,6 +1811,7 @@ export async function registerRoutes(
       projectId: todo.projectId, entityType: "todo", entityId: todo.id,
       action: "todo_completed", actor,
       description: `${actor.name} completed todo: ${todo.title}.`,
+      metadata: todo.relatedEntityType === "opportunity" ? { opportunityId: todo.relatedEntityId } : undefined,
     });
     res.json(todo);
   });
@@ -1641,6 +1838,7 @@ export async function registerRoutes(
       projectId: existing.projectId, entityType: "todo", entityId: existing.id,
       action: "todo_deleted", actor,
       description: `${actor.name} deleted todo: ${existing.title}.`,
+      metadata: existing.relatedEntityType === "opportunity" ? { opportunityId: existing.relatedEntityId } : undefined,
     });
     res.status(204).send();
   });
@@ -1717,7 +1915,10 @@ export async function registerRoutes(
         projectId: todo.projectId, entityType: "todo", entityId: todo.id,
         action: "todo_update_added", actor,
         description: `${actor.name} added an update to "${todo.title}".`,
-        metadata: { todoUpdateId: update.id },
+        metadata: {
+          todoUpdateId: update.id,
+          ...(todo.relatedEntityType === "opportunity" ? { opportunityId: todo.relatedEntityId } : {}),
+        },
       });
 
       // In-app notification for the assignee when someone else adds an update
@@ -1730,8 +1931,8 @@ export async function registerRoutes(
           message: body.length > 140 ? `${body.slice(0, 140)}…` : body,
           projectId: todo.projectId,
           todoId: todo.id,
-          relatedEntityType: todo.projectId ? "project" : null,
-          relatedEntityId: todo.projectId,
+          relatedEntityType: todo.relatedEntityType,
+          relatedEntityId: todo.relatedEntityId,
           isRead: false,
         });
       }

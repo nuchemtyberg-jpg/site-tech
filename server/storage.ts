@@ -9,7 +9,7 @@ import {
   payApplications, payApplicationItems,
   todos, todoUpdates, workflowRules, workflowExecutions, notifications, activityLogs, projectStatusHistory,
   opportunities, opportunityContacts, opportunityStatusHistory,
-  type Opportunity, type InsertOpportunity, type OpportunityWithDetails,
+  type Opportunity, type InsertOpportunity, type OpportunityWithDetails, type OpportunityDashboardResult,
   type OpportunityContact, type InsertOpportunityContact, type OpportunityContactWithDetails,
   type OpportunityStatusHistory, type InsertOpportunityStatusHistory,
   type InsertProject, type InsertTask, type InsertEquipment, type InsertAllocation, type InsertFolder, type InsertFileMetadata, type InsertPhoto,
@@ -36,7 +36,11 @@ import {
   type User, type UpsertUser, type AuthorizedUser
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, asc, and, or, isNull, isNotNull, sql, lt, gt, gte, lte, ne, ilike, inArray, aliasedTable } from "drizzle-orm";
+import { eq, desc, asc, and, or, isNull, isNotNull, sql, lt, gt, gte, lte, ne, ilike, inArray, notInArray, aliasedTable } from "drizzle-orm";
+import {
+  OPPORTUNITY_DEADLINE_ELIGIBLE_STATUSES,
+  OPPORTUNITY_OUTCOME_STATUSES,
+} from "@shared/opportunityStatus";
 
 const PROJECT_EMAIL_DOMAIN = "updates.sitetechnj.com";
 
@@ -182,6 +186,7 @@ export interface IStorage {
 
   // Communications
   getCommunications(customerId: number): Promise<Communication[]>;
+  getOpportunityCommunications(opportunityId: number): Promise<Communication[]>;
   createCommunication(comm: InsertCommunication): Promise<Communication>;
   deleteCommunication(id: number): Promise<void>;
 
@@ -423,6 +428,7 @@ export interface IStorage {
 
   // Opportunities (Phase 4 — RFP/bidding foundation)
   getOpportunities(filters?: OpportunityFilters): Promise<OpportunityWithDetails[]>;
+  getOpportunityDashboard(filters?: OpportunityFilters): Promise<OpportunityDashboardResult>;
   getOpportunity(id: number): Promise<Opportunity | undefined>;
   getOpportunityWithDetails(id: number): Promise<OpportunityWithDetails | undefined>;
   getOpportunitiesByCustomer(customerId: number, includeArchived?: boolean): Promise<OpportunityWithDetails[]>;
@@ -446,8 +452,27 @@ export interface IStorage {
 
 export interface OpportunityFilters {
   status?: string;
+  statuses?: string[];
   customerId?: number;
   responsibleUserId?: string;
+  unassigned?: boolean;
+  createdByUserId?: string;
+  source?: string[];
+  projectType?: string[];
+  bidDueFrom?: string;
+  bidDueTo?: string;
+  dateField?: "bidDueDate" | "rfpReceivedDate" | "estimatedStartDate" | "createdAt";
+  dateFrom?: string;
+  dateTo?: string;
+  urgency?: string;
+  outcome?: string[];
+  archive?: "active" | "archived" | "all";
+  today?: string;
+  sortBy?: "name" | "opportunityNumber" | "customer" | "status" | "responsible" | "bidDueDate" | "expectedValue" | "createdAt" | "updatedAt" | "lastActivity";
+  sortDir?: "asc" | "desc";
+  page?: number;
+  pageSize?: number;
+  canViewValues?: boolean;
   includeArchived?: boolean; // default false — archived records are hidden from default views
   search?: string;
   limit?: number;
@@ -467,6 +492,7 @@ export type CustomerListItem = Customer & {
 export type TodoFilters = {
   assignedToUserId?: string;
   projectId?: number;
+  opportunityId?: number;
   status?: string; // 'active' (open + in_progress), specific status, or 'all'
   priority?: string;
   due?: "overdue" | "today" | "this_week" | "next_7_days" | "no_due_date";
@@ -1128,6 +1154,11 @@ export class DatabaseStorage implements IStorage {
   // Communications (with soft delete)
   async getCommunications(customerId: number): Promise<Communication[]> {
     return await db.select().from(communications).where(and(eq(communications.customerId, customerId), isNull(communications.deletedAt))).orderBy(desc(communications.contactDate));
+  }
+  async getOpportunityCommunications(opportunityId: number): Promise<Communication[]> {
+    return db.select().from(communications)
+      .where(and(eq(communications.opportunityId, opportunityId), isNull(communications.deletedAt)))
+      .orderBy(desc(communications.contactDate), desc(communications.id));
   }
   async createCommunication(insertComm: InsertCommunication): Promise<Communication> {
     const [comm] = await db.insert(communications).values(insertComm).returning();
@@ -2013,6 +2044,12 @@ export class DatabaseStorage implements IStorage {
 
     if (filters.assignedToUserId) conditions.push(eq(todos.assignedToUserId, filters.assignedToUserId));
     if (filters.projectId !== undefined) conditions.push(eq(todos.projectId, filters.projectId));
+    if (filters.opportunityId !== undefined) {
+      conditions.push(and(
+        eq(todos.relatedEntityType, "opportunity"),
+        eq(todos.relatedEntityId, filters.opportunityId),
+      )!);
+    }
     if (filters.priority) conditions.push(eq(todos.priority, filters.priority));
 
     if (filters.status && filters.status !== "all") {
@@ -2440,6 +2477,8 @@ export class DatabaseStorage implements IStorage {
     if (filters.status) conditions.push(eq(opportunities.status, filters.status));
     if (filters.customerId !== undefined) conditions.push(eq(opportunities.customerId, filters.customerId));
     if (filters.responsibleUserId) conditions.push(eq(opportunities.responsibleUserId, filters.responsibleUserId));
+    if (filters.unassigned) conditions.push(isNull(opportunities.responsibleUserId));
+    if (filters.createdByUserId) conditions.push(eq(opportunities.createdByUserId, filters.createdByUserId));
     if (filters.search) {
       const term = `%${filters.search}%`;
       conditions.push(or(ilike(opportunities.name, term), ilike(opportunities.opportunityNumber, term))!);
@@ -2449,6 +2488,218 @@ export class DatabaseStorage implements IStorage {
       .orderBy(desc(opportunities.createdAt))
       .limit(filters.limit ?? 500);
     return rows.map(r => this.mapOpportunityDetails(r));
+  }
+
+  /**
+   * Server-side dashboard query. Every filter is added to the same WHERE clause,
+   * so search/facets/date/ownership remain composable. Pagination always has an
+   * id tie-breaker to prevent rows moving between pages when sort values match.
+   */
+  async getOpportunityDashboard(filters: OpportunityFilters = {}): Promise<OpportunityDashboardResult> {
+    const conditions = [isNull(opportunities.deletedAt)];
+    const archive = filters.archive ?? (filters.includeArchived ? "all" : "active");
+    if (archive === "active") conditions.push(eq(opportunities.isArchived, false));
+    if (archive === "archived") conditions.push(eq(opportunities.isArchived, true));
+    const statuses = filters.statuses?.length ? filters.statuses : (filters.status ? [filters.status] : []);
+    if (statuses.length) conditions.push(inArray(opportunities.status, statuses));
+    if (filters.customerId !== undefined) conditions.push(eq(opportunities.customerId, filters.customerId));
+    if (filters.responsibleUserId) conditions.push(eq(opportunities.responsibleUserId, filters.responsibleUserId));
+    if (filters.source?.length) conditions.push(inArray(opportunities.source, filters.source));
+    if (filters.projectType?.length) conditions.push(inArray(opportunities.projectType, filters.projectType));
+    if (filters.bidDueFrom) conditions.push(gte(opportunities.bidDueDate, filters.bidDueFrom));
+    if (filters.bidDueTo) conditions.push(lte(opportunities.bidDueDate, filters.bidDueTo));
+    const dateColumn = {
+      bidDueDate: opportunities.bidDueDate,
+      rfpReceivedDate: opportunities.rfpReceivedDate,
+      estimatedStartDate: opportunities.estimatedStartDate,
+      createdAt: opportunities.createdAt,
+    }[filters.dateField ?? "bidDueDate"];
+    if (filters.dateFrom) conditions.push(gte(dateColumn as any, filters.dateFrom));
+    if (filters.dateTo) {
+      conditions.push(filters.dateField === "createdAt"
+        ? lte(dateColumn as any, sql`${filters.dateTo}::date + interval '1 day'`)
+        : lte(dateColumn as any, filters.dateTo));
+    }
+    if (filters.outcome?.length) {
+      conditions.push(or(
+        filters.outcome.includes("lost") ? eq(opportunities.status, "lost") : undefined,
+        filters.outcome.includes("no_bid") ? eq(opportunities.status, "no_bid") : undefined,
+        filters.outcome.includes("awarded") ? eq(opportunities.status, "awarded") : undefined,
+        ...filters.outcome.filter(v => !["lost", "no_bid", "awarded"].includes(v)).map(v =>
+          or(eq(opportunities.lostReason, v), eq(opportunities.noBidReason, v))),
+      )!);
+    }
+    // The active dashboard is a work queue. Terminal outcomes are available
+    // through an explicit status/outcome filter, but do not silently inflate it.
+    const hasExplicitOutcomeOrStatus = statuses.length > 0 || Boolean(filters.outcome?.length);
+    const today = filters.today ?? new Date().toISOString().slice(0, 10);
+    const deadlineEligible = inArray(opportunities.status, [...OPPORTUNITY_DEADLINE_ELIGIBLE_STATUSES]);
+    switch (filters.urgency) {
+      case "overdue":
+        conditions.push(and(deadlineEligible, isNotNull(opportunities.bidDueDate), lt(opportunities.bidDueDate, today))!);
+        break;
+      case "due_today":
+      case "today":
+        conditions.push(and(deadlineEligible, eq(opportunities.bidDueDate, today))!);
+        break;
+      case "tomorrow":
+      case "due_tomorrow":
+        conditions.push(and(deadlineEligible, eq(opportunities.bidDueDate, sql`${today}::date + 1`))!);
+        break;
+      case "this_week":
+      case "due_this_week":
+        conditions.push(and(
+          deadlineEligible,
+          gt(opportunities.bidDueDate, sql`${today}::date + 1`),
+          lte(opportunities.bidDueDate, sql`${today}::date + (7 - extract(dow from ${today}::date)::int)`),
+        )!);
+        break;
+      case "next_7_days":
+      case "due_next_7_days":
+        conditions.push(and(deadlineEligible, gt(opportunities.bidDueDate, today), lte(opportunities.bidDueDate, sql`${today}::date + 7`))!);
+        break;
+      case "later":
+        conditions.push(and(deadlineEligible, gt(opportunities.bidDueDate, sql`${today}::date + 7`))!);
+        break;
+      case "no_due_date":
+        conditions.push(and(deadlineEligible, isNull(opportunities.bidDueDate))!);
+        break;
+    }
+    if (filters.search?.trim()) {
+      const term = `%${filters.search.trim()}%`;
+      conditions.push(or(
+        ilike(opportunities.name, term),
+        ilike(opportunities.opportunityNumber, term),
+        ilike(customers.name, term),
+        ilike(opportunities.streetAddress, term),
+        ilike(opportunities.address2, term),
+        ilike(opportunities.city, term),
+        ilike(opportunities.state, term),
+        ilike(opportunities.zip, term),
+        sql`concat_ws(' ', ${opportunities.streetAddress}, ${opportunities.address2}, ${opportunities.city}, ${opportunities.state}, ${opportunities.zip}) ilike ${term}`,
+        sql`exists (
+          select 1 from opportunity_contacts oc
+          join contacts c on c.id = oc.contact_id
+          where oc.opportunity_id = ${opportunities.id}
+          and (concat_ws(' ', c.first_name, c.last_name) ilike ${term}
+            or c.first_name ilike ${term} or c.last_name ilike ${term}
+            or c.email ilike ${term} or c.office_phone ilike ${term} or c.mobile_phone ilike ${term})
+        )`,
+      )!);
+    }
+
+    // Keep the same facets/search for the outcome counter, but omit only the
+    // implicit default-outcome exclusion so the active dashboard can surface it.
+    const outcomeSummaryConditions = [...conditions];
+    if (archive === "active" && !hasExplicitOutcomeOrStatus) {
+      conditions.push(notInArray(opportunities.status, [...OPPORTUNITY_OUTCOME_STATUSES]));
+    }
+    const where = and(...conditions);
+    const lastActivityAt = sql<Date | null>`(
+      select max(al.created_at) from activity_logs al
+      where (al.entity_type = 'opportunity' and al.entity_id = ${opportunities.id})
+         or (al.metadata ->> 'opportunityId')::int = ${opportunities.id}
+    )`;
+    const sortColumns = {
+      name: opportunities.name,
+      opportunityNumber: opportunities.opportunityNumber,
+      customer: customers.name,
+      status: opportunities.status,
+      responsible: users.firstName,
+      bidDueDate: opportunities.bidDueDate,
+      expectedValue: opportunities.expectedValue,
+      createdAt: opportunities.createdAt,
+      updatedAt: opportunities.updatedAt,
+      lastActivity: lastActivityAt,
+    };
+    const sortColumn = sortColumns[filters.sortBy ?? "updatedAt"];
+    const direction = filters.sortDir === "asc" ? asc : desc;
+    const page = Math.max(1, filters.page ?? 1);
+    const pageSize = Math.min(100, Math.max(1, filters.pageSize ?? 25));
+
+    const rows = await db.select({
+      opportunity: opportunities,
+      customerName: customers.name,
+      responsibleUserName: this.userDisplayName(users),
+      primaryContactId: sql<number | null>`(
+        select oc.contact_id from opportunity_contacts oc
+        where oc.opportunity_id = ${opportunities.id} and oc.is_primary = true limit 1
+      )`,
+      primaryContactName: sql<string | null>`(
+        select trim(concat(c.first_name, ' ', coalesce(c.last_name, '')))
+        from opportunity_contacts oc join contacts c on c.id = oc.contact_id
+        where oc.opportunity_id = ${opportunities.id} and oc.is_primary = true limit 1
+      )`,
+      lastActivityAt,
+    }).from(opportunities)
+      .leftJoin(customers, eq(opportunities.customerId, customers.id))
+      .leftJoin(users, eq(opportunities.responsibleUserId, users.id))
+      .where(where)
+      .orderBy(direction(sortColumn), direction(opportunities.id))
+      .limit(pageSize)
+      .offset((page - 1) * pageSize);
+
+    const [totals, statusRows, outcomeTotals] = await Promise.all([
+      db.select({
+        total: sql<number>`count(*)::int`,
+        active: sql<number>`count(*) filter (where ${opportunities.isArchived} = false and ${opportunities.status} not in ('awarded', 'lost', 'no_bid'))::int`,
+        archived: sql<number>`count(*) filter (where ${opportunities.isArchived} = true)::int`,
+        unassigned: sql<number>`count(*) filter (where ${opportunities.responsibleUserId} is null)::int`,
+        overdue: sql<number>`count(*) filter (where ${opportunities.status} in ('new', 'under_review', 'estimating', 'proposal_ready') and ${opportunities.bidDueDate} < ${today})::int`,
+        dueToday: sql<number>`count(*) filter (where ${opportunities.status} in ('new', 'under_review', 'estimating', 'proposal_ready') and ${opportunities.bidDueDate} = ${today})::int`,
+        dueTomorrow: sql<number>`count(*) filter (where ${opportunities.status} in ('new', 'under_review', 'estimating', 'proposal_ready') and ${opportunities.bidDueDate} = ${today}::date + 1)::int`,
+        dueNext7Days: sql<number>`count(*) filter (where ${opportunities.status} in ('new', 'under_review', 'estimating', 'proposal_ready') and ${opportunities.bidDueDate} > ${today} and ${opportunities.bidDueDate} <= ${today}::date + 7)::int`,
+        expectedValueTotal: sql<number>`coalesce(sum(${opportunities.expectedValue}), 0)`,
+        weightedValueTotal: sql<number>`coalesce(sum(${opportunities.expectedValue} * coalesce(${opportunities.probability}, 0) / 100.0), 0)`,
+      }).from(opportunities)
+        .leftJoin(customers, eq(opportunities.customerId, customers.id))
+        .leftJoin(users, eq(opportunities.responsibleUserId, users.id))
+        .where(where),
+      db.select({ status: opportunities.status, count: sql<number>`count(*)::int` })
+        .from(opportunities)
+        .leftJoin(customers, eq(opportunities.customerId, customers.id))
+        .leftJoin(users, eq(opportunities.responsibleUserId, users.id))
+        .where(where)
+        .groupBy(opportunities.status),
+      db.select({
+        outcomes: sql<number>`count(*) filter (where ${opportunities.isArchived} = false and ${opportunities.status} in ('awarded', 'lost', 'no_bid'))::int`,
+      }).from(opportunities)
+        .leftJoin(customers, eq(opportunities.customerId, customers.id))
+        .leftJoin(users, eq(opportunities.responsibleUserId, users.id))
+        .where(and(...outcomeSummaryConditions)),
+    ]);
+    const total = Number(totals[0]?.total ?? 0);
+    const canViewValues = filters.canViewValues === true;
+    const items = rows.map(r => {
+      const item = { ...this.mapOpportunityDetails(r), lastActivityAt: r.lastActivityAt };
+      if (!canViewValues) {
+        item.expectedValue = null;
+        item.probability = null;
+      }
+      return item;
+    });
+    return {
+      items,
+      total,
+      page,
+      pageSize,
+      pageCount: Math.ceil(total / pageSize),
+      statusCounts: Object.fromEntries(statusRows.map(r => [r.status, Number(r.count)])),
+      summary: {
+        total,
+        active: Number(totals[0]?.active ?? 0),
+        outcomes: Number(outcomeTotals[0]?.outcomes ?? 0),
+        archived: Number(totals[0]?.archived ?? 0),
+        unassigned: Number(totals[0]?.unassigned ?? 0),
+        overdue: Number(totals[0]?.overdue ?? 0),
+        dueToday: Number(totals[0]?.dueToday ?? 0),
+        dueTomorrow: Number(totals[0]?.dueTomorrow ?? 0),
+        dueNext7Days: Number(totals[0]?.dueNext7Days ?? 0),
+        expectedValueTotal: canViewValues ? Number(totals[0]?.expectedValueTotal ?? 0) : null,
+        weightedValueTotal: canViewValues ? Number(totals[0]?.weightedValueTotal ?? 0) : null,
+      },
+      canViewValues,
+    };
   }
 
   async getOpportunity(id: number): Promise<Opportunity | undefined> {

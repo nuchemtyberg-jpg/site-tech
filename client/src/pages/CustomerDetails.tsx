@@ -22,12 +22,15 @@ import {
   ArrowLeft, Building2, Mail, Phone, Globe, MapPin, Pencil, Plus, Star,
   Archive, Trash2, AlertTriangle, MessageSquare, FolderOpen, Users, History,
   UserX, UserCheck, FileText,
+  Target,
 } from "lucide-react";
 import { format } from "date-fns";
 import {
   CUSTOMER_TYPES, CUSTOMER_TYPE_LABELS, CUSTOMER_STATUSES, CONTACT_ROLES, CONTACT_ROLE_LABELS,
   type Customer, type Contact, type Project, type Communication, type CustomerType, type ContactRole,
+  type OpportunityWithDetails,
 } from "@shared/schema";
+import { getOpportunityStatusLabel } from "@shared/opportunityStatus";
 
 type ActivityEntry = {
   id: number;
@@ -480,6 +483,11 @@ export default function CustomerDetails() {
     enabled: !isNaN(customerId),
   });
 
+  const { data: opportunities = [] } = useQuery<OpportunityWithDetails[]>({
+    queryKey: [`/api/customers/${customerId}/opportunities`],
+    enabled: !isNaN(customerId),
+  });
+
   const { data: communications = [] } = useQuery<Communication[]>({
     queryKey: [`/api/customers/${customerId}/communications`],
     enabled: !isNaN(customerId),
@@ -664,7 +672,7 @@ export default function CustomerDetails() {
         </CardHeader>
         <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
           {customer.phone && (
-            <a href={`tel:${customer.phone}`} className="flex items-center gap-2 text-foreground hover:text-primary" data-testid="link-customer-phone">
+            <a href={`tel:${customer.phone}`} className="flex min-h-11 items-center gap-2 text-foreground hover:text-primary" data-testid="link-customer-phone">
               <Phone className="w-4 h-4 text-muted-foreground shrink-0" />
               {customer.phone}
             </a>
@@ -715,6 +723,10 @@ export default function CustomerDetails() {
           <TabsTrigger value="projects" data-testid="tab-projects">
             <FolderOpen className="w-4 h-4 mr-1.5" />
             Projects ({projects.length})
+          </TabsTrigger>
+          <TabsTrigger value="opportunities" data-testid="tab-opportunities">
+            <Target className="w-4 h-4 mr-1.5" />
+            Bidding ({opportunities.length})
           </TabsTrigger>
           <TabsTrigger value="communications" data-testid="tab-communications">
             <MessageSquare className="w-4 h-4 mr-1.5" />
@@ -794,14 +806,14 @@ export default function CustomerDetails() {
                         </a>
                       )}
                       {contact.officePhone && (
-                        <a href={`tel:${contact.officePhone}`} className="flex items-center gap-2 hover:text-primary">
+                        <a href={`tel:${contact.officePhone}`} className="flex min-h-11 items-center gap-2 hover:text-primary">
                           <Phone className="w-4 h-4 text-muted-foreground shrink-0" />
                           {contact.officePhone}
                           {contact.extension && <span className="text-muted-foreground">ext. {contact.extension}</span>}
                         </a>
                       )}
                       {contact.mobilePhone && (
-                        <a href={`tel:${contact.mobilePhone}`} className="flex items-center gap-2 hover:text-primary">
+                        <a href={`tel:${contact.mobilePhone}`} className="flex min-h-11 items-center gap-2 hover:text-primary">
                           <Phone className="w-4 h-4 text-muted-foreground shrink-0" />
                           {contact.mobilePhone}
                           <span className="text-xs text-muted-foreground">mobile</span>
@@ -885,6 +897,34 @@ export default function CustomerDetails() {
                       {project.streetAddress && (
                         <p className="text-sm text-muted-foreground mt-1 truncate">{project.streetAddress}</p>
                       )}
+                    </CardContent>
+                  </Card>
+                </Link>
+              ))}
+            </div>
+          )}
+        </TabsContent>
+
+        <TabsContent value="opportunities" className="space-y-4">
+          {opportunities.length === 0 ? (
+            <Card><CardContent className="py-10 text-center text-muted-foreground">No bidding opportunities for this customer yet.</CardContent></Card>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {opportunities.map((opportunity) => (
+                <Link key={opportunity.id} href={`/bidding/${opportunity.id}`}>
+                  <Card className="hover-elevate cursor-pointer h-full" data-testid={`card-opportunity-${opportunity.id}`}>
+                    <CardContent className="pt-4">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <span className="font-medium break-words">{opportunity.name}</span>
+                          <p className="text-xs text-muted-foreground font-mono mt-1">{opportunity.opportunityNumber}</p>
+                        </div>
+                        <Badge variant="secondary" className="shrink-0">{getOpportunityStatusLabel(opportunity.status)}</Badge>
+                      </div>
+                      <p className="text-sm text-muted-foreground mt-2">
+                        {opportunity.bidDueDate ? `Bid due ${opportunity.bidDueDate}` : "No bid due date"}
+                        {isAdmin && opportunity.expectedValue != null ? ` · $${opportunity.expectedValue.toLocaleString()}` : ""}
+                      </p>
                     </CardContent>
                   </Card>
                 </Link>
