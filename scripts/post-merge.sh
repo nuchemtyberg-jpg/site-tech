@@ -3,12 +3,9 @@ set -e
 
 npm install
 
-# drizzle-kit push can prompt interactively when it detects possible renames.
-# Pipe a stream of newlines so it always selects the default (create/keep)
-# choice for each prompt without stalling.
-yes "" | npm run db:push || true
-# Re-run with --force to apply any remaining changes that were skipped due to
-# data-loss warnings, after the rename prompts are already resolved.
+# Keep this non-interactive: post-merge setup runs with stdin closed.
+# data_migrations is declared in shared/schema.ts, so Drizzle will not offer
+# to delete the migration ledger and wait indefinitely for confirmation.
 npm run db:push -- --force
 
 npx tsx scripts/run-data-migrations.ts

@@ -18,6 +18,13 @@ export * from "./models/auth";
 export * from "./projectStatus";
 export * from "./opportunityStatus";
 
+// Tracks one-time data migrations. This table is also declared here so
+// drizzle-kit recognizes it as application-owned and never offers to drop it.
+export const dataMigrations = pgTable("data_migrations", {
+  key: text("key").primaryKey(),
+  appliedAt: timestamp("applied_at").notNull().defaultNow(),
+});
+
 // Customers - a Customer represents a company/organization
 export const CUSTOMER_TYPES = [
   "general_contractor",
