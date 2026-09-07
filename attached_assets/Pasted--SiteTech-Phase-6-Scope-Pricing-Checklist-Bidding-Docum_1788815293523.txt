@@ -1,0 +1,1211 @@
+# SiteTech — Phase 6: Scope & Pricing Checklist + Bidding Document Foundation
+
+We are continuing development of the SiteTech construction management platform.
+
+Existing functionality includes:
+
+- Customers / Companies
+- Multiple Customer Contacts
+- Projects
+- Opportunities / RFPs
+- Bidding / Opportunity Pipeline
+- Opportunity Contacts
+- Todos / My Work
+- Workflow Automation
+- Notifications / Email
+- Communications
+- Activity / Audit History
+- User permissions
+
+The next phase is:
+
+# SCOPE & PRICING CHECKLIST
+
+The purpose of this phase is to define exactly what work SiteTech is being asked to price for each Opportunity.
+
+This information will eventually feed:
+
+Opportunity
+→ Scope
+→ Takeoff
+→ Estimate
+→ Proposal
+
+Do NOT build the full Takeoff or Estimating engine yet.
+
+Also establish the document architecture described below so bidding documents can follow an Opportunity into the eventual Project.
+
+==================================================
+1. CORE CONCEPT
+==================================================
+
+An Opportunity represents a potential job.
+
+The Scope & Pricing Checklist represents the work SiteTech intends to evaluate and potentially price for that Opportunity.
+
+Example:
+
+Opportunity:
+123 Main Street
+
+Scope:
+
+☑ Site Clearing
+☑ Demolition
+☑ Excavation
+☑ Foundation Excavation
+☑ Storm Sewer
+☑ Sanitary Sewer
+☐ Water
+☑ Grading
+☑ SOE
+☐ Paving
+
+The checklist must be more than a simple checkbox.
+
+Each scope item should eventually be capable of connecting to:
+
+- Takeoff
+- Estimate
+- Proposal
+
+Do not implement those future systems yet, but design the database so they can connect cleanly later.
+
+==================================================
+2. SCOPE ITEM DATA MODEL
+==================================================
+
+Create a reusable Scope Item structure.
+
+Conceptually:
+
+SCOPE_ITEMS
+
+- id
+- opportunity_id
+- scope_category_id
+- name
+- description
+- status
+- included
+- notes
+- display_order
+- created_by
+- created_at
+- updated_at
+
+Use SiteTech's existing database naming conventions.
+
+Do not blindly use these exact names if the existing architecture has a better convention.
+
+==================================================
+3. SCOPE CATEGORIES
+==================================================
+
+Create reusable Scope Categories.
+
+Initial categories:
+
+SITEWORK
+
+- Site Clearing
+- Stripping
+- Excavation
+- Export / Trucking
+- Backfill
+- Grading
+- Fine Grading
+
+DEMOLITION
+
+- Building Demolition
+- Concrete Demolition
+- Asphalt Demolition
+- Utility Demolition
+- Other Demolition
+
+FOUNDATION
+
+- Foundation Excavation
+- Footing Excavation
+- Foundation Backfill
+- Stone / Subbase
+
+UTILITIES
+
+- Sanitary Sewer
+- Storm Sewer
+- Water
+- Gas
+- Electric
+- Drainage
+- Drywell
+
+SOE / FOUNDATION SUPPORT
+
+- Soldier Piles
+- Lagging
+- Sheeting
+- Tiebacks
+- Micropiles
+- Secant Piles
+- Jet Grouting
+- Underpinning
+- Other SOE
+
+PAVING
+
+- Asphalt
+- Concrete
+- Curbs
+- Sidewalks
+
+OTHER
+
+- Dewatering
+- Mobilization
+- Temporary Facilities
+- Other
+
+These are initial defaults only.
+
+Administrators should eventually be able to modify the available categories and scope items.
+
+Do not hard-code these permanently into frontend components.
+
+==================================================
+4. SCOPE ITEM STATUS
+==================================================
+
+Each Scope Item should have a status.
+
+Initial statuses:
+
+Not Reviewed
+Included
+Excluded
+Needs Clarification
+
+Do not use only a boolean checkbox.
+
+Example:
+
+Excavation
+Status: Included
+
+Paving
+Status: Excluded
+
+Utilities
+Status: Needs Clarification
+
+This distinction will become important during estimating.
+
+==================================================
+5. INCLUDED / EXCLUDED
+==================================================
+
+The user should be able to clearly identify:
+
+Included Scope
+
+and
+
+Excluded Scope
+
+This will eventually help generate proposal inclusions/exclusions.
+
+Example:
+
+Included:
+Foundation excavation
+
+Excluded:
+Rock excavation
+
+Do not automatically transfer these into the Proposal yet.
+
+Just create the correct underlying data structure.
+
+==================================================
+6. SCOPE ITEM NOTES
+==================================================
+
+Each Scope Item should support notes.
+
+Example:
+
+Excavation
+
+Notes:
+Includes excavation to proposed subgrade. Rock excavation excluded.
+
+These notes are specific to this Opportunity.
+
+Do not modify the master Scope Item description when a user adds Opportunity-specific notes.
+
+==================================================
+7. SCOPE DESCRIPTION
+==================================================
+
+Each Scope Item should support an optional description.
+
+Example:
+
+Storm Sewer
+
+Description:
+Complete storm drainage system shown on civil drawings.
+
+Keep the master scope description separate from Opportunity-specific notes.
+
+==================================================
+8. CUSTOM SCOPE ITEMS
+==================================================
+
+Users should be able to add a custom Scope Item when the predefined list does not apply.
+
+Example:
+
+Scope Category:
+Other
+
+Custom Item:
+Temporary Access Road
+
+Do not force users to select only predefined items.
+
+Clearly identify custom items internally.
+
+==================================================
+9. SCOPE ITEM ORDER
+==================================================
+
+Allow Scope Items to have a display order.
+
+The order should follow the logical construction sequence/category structure.
+
+Example:
+
+Sitework
+Demolition
+Foundation
+Utilities
+SOE
+Paving
+Other
+
+Do not rely on database insertion order.
+
+==================================================
+10. SCOPE CHECKLIST UI
+==================================================
+
+On the Opportunity Detail page add a:
+
+Scope
+
+tab.
+
+The interface should be visually organized by category.
+
+Example:
+
+SITEWORK
+
+☑ Site Clearing
+☑ Excavation
+☐ Export / Trucking
+☑ Backfill
+☐ Grading
+
+UTILITIES
+
+☑ Sanitary
+☑ Storm
+☐ Water
+
+SOE
+
+☑ Soldier Piles
+☑ Lagging
+☑ Tiebacks
+☐ Micropiles
+
+Make the interface fast to use.
+
+A user should be able to review an RFP and establish the pricing scope quickly.
+
+==================================================
+11. SCOPE STATUS SUMMARY
+==================================================
+
+At the top of the Scope page show a summary.
+
+Example:
+
+18 Scope Items
+12 Included
+3 Excluded
+3 Needs Clarification
+
+Do not count items that have not yet been reviewed as Included.
+
+==================================================
+12. SCOPE REVIEW
+==================================================
+
+The user should be able to quickly mark each scope item:
+
+Included
+Excluded
+Needs Clarification
+Not Reviewed
+
+Do not require opening a separate edit page for every item.
+
+Use efficient inline controls where practical.
+
+==================================================
+13. SCOPE NOTES
+==================================================
+
+Allow notes to be entered directly from the checklist.
+
+Example:
+
+Tiebacks
+Included
+
+Notes:
+Price based on 40' average length. Confirm final anchor schedule.
+
+==================================================
+14. SCOPE REVIEW RESPONSIBILITY
+==================================================
+
+Use the existing User system.
+
+Record who created/modified the scope item where the existing audit architecture supports this.
+
+Do not create a separate employee system.
+
+==================================================
+15. SCOPE ACTIVITY
+==================================================
+
+Use the existing Activity system.
+
+Meaningful actions should be recorded, such as:
+
+Scope Item Added
+Scope Item Included
+Scope Item Excluded
+Scope Item Changed
+Scope Item Note Added
+
+Do not generate excessive activity entries for every minor UI interaction.
+
+==================================================
+16. TODO INTEGRATION
+==================================================
+
+Scope clarification should be capable of generating a Todo.
+
+Example:
+
+Scope Item:
+Rock Excavation
+
+Status:
+Needs Clarification
+
+Todo:
+Confirm rock excavation responsibility with GC
+
+Assigned:
+Adam
+
+Due:
+Aug 15
+
+Use the existing universal Todo system.
+
+The Todo must link to the Opportunity and, where possible, the specific Scope Item.
+
+Do not create a separate Scope Todo system.
+
+==================================================
+17. FUTURE TAKEOFF RELATIONSHIP
+==================================================
+
+The architecture must support:
+
+Scope Item
+→ Many Takeoff Items
+
+Example:
+
+Scope:
+Excavation
+
+Future Takeoff:
+
+Foundation excavation
+18,500 CY
+
+Over-excavation
+2,100 CY
+
+Export
+20,600 CY
+
+Do NOT build Takeoff functionality in this phase.
+
+But ensure the Scope Item has a stable ID that future Takeoff records can reference.
+
+==================================================
+18. FUTURE ESTIMATE RELATIONSHIP
+==================================================
+
+The architecture must support:
+
+Scope Item
+→ Takeoff
+→ Estimate
+
+Example:
+
+Scope:
+Excavation
+
+Takeoff:
+18,500 CY
+
+Estimate:
+18,500 CY × $12.50/CY
+
+Do not implement pricing calculations yet.
+
+==================================================
+19. FUTURE PROPOSAL RELATIONSHIP
+==================================================
+
+The architecture must eventually support:
+
+Scope Item
+→ Estimate
+→ Proposal
+
+This will allow the final Proposal to know exactly what was priced.
+
+Do not build Proposal functionality now.
+
+==================================================
+20. SCOPE TEMPLATES
+==================================================
+
+Design the system so administrators can eventually create Scope Templates.
+
+Example Template:
+
+MULTIFAMILY SITEWORK
+
+Includes:
+
+Site Clearing
+Demolition
+Excavation
+Utilities
+Storm
+Sanitary
+Water
+Grading
+Paving
+
+Another template:
+
+SOE / FOUNDATION SUPPORT
+
+Includes:
+
+Soldier Piles
+Lagging
+Tiebacks
+Micropiles
+Underpinning
+
+Do not build a complex template management UI unless it is straightforward.
+
+At minimum, structure the database so templates can be added later without redesigning Scope Items.
+
+==================================================
+21. APPLY SCOPE TEMPLATE
+==================================================
+
+Eventually the user should be able to:
+
+Create Opportunity
+→ Select Scope Template
+→ Automatically populate Scope Items
+→ Modify as needed
+
+If practical, implement a simple initial version of this capability now.
+
+The user must still be able to add/remove items afterward.
+
+==================================================
+22. DOCUMENT MANAGEMENT — IMPORTANT
+==================================================
+
+Every Opportunity needs a Document area.
+
+This is critical to the SiteTech bidding workflow.
+
+A bidding Opportunity may contain:
+
+RFP
+Plans
+Specifications
+Addenda
+Geotechnical Reports
+Civil Drawings
+Architectural Drawings
+Structural Drawings
+Bid Forms
+Proposal Requests
+Vendor Quotes
+Emails / Attachments
+Other Documents
+
+Do NOT create a separate document storage system if SiteTech already has one.
+
+Inspect the existing document/file architecture first.
+
+==================================================
+23. OPPORTUNITY DOCUMENT RELATIONSHIP
+==================================================
+
+Documents must be able to belong to an Opportunity.
+
+Conceptually:
+
+Document
+→ Opportunity
+
+A document may also eventually be related to:
+
+Customer
+Project
+Estimate
+Proposal
+Submittal
+Change Order
+
+Do not duplicate files just because they are used by different parts of the application.
+
+==================================================
+24. DOCUMENT CATEGORIES
+==================================================
+
+Provide useful document categories.
+
+Initial categories:
+
+RFP
+Plans
+Specifications
+Addenda
+Geotechnical
+Civil
+Architectural
+Structural
+Bid Forms
+Vendor Quote
+Correspondence
+Other
+
+These should eventually be configurable.
+
+==================================================
+25. DOCUMENT METADATA
+==================================================
+
+Documents should support metadata such as:
+
+File Name
+Category
+Uploaded By
+Upload Date
+Version
+Description
+Document Status
+
+Use the existing file infrastructure where possible.
+
+Do not create unnecessary duplicate metadata tables.
+
+==================================================
+26. DOCUMENT VERSIONING
+==================================================
+
+The architecture must support multiple versions of the same document.
+
+Example:
+
+Civil Plans
+Rev 0
+Rev 1
+Rev 2
+
+The system should eventually be able to identify the current/latest version.
+
+Do NOT overwrite an existing document file when a revised version is uploaded.
+
+Preserve historical versions.
+
+==================================================
+27. DOCUMENT STATUS
+==================================================
+
+Support a concept such as:
+
+Current
+Superseded
+
+Example:
+
+Civil Plan Rev 2
+Current
+
+Civil Plan Rev 1
+Superseded
+
+Do not delete superseded documents.
+
+==================================================
+28. IMPORTANT: OPPORTUNITY → PROJECT DOCUMENT TRANSFER
+==================================================
+
+When an Opportunity eventually becomes an active Project, its bidding documents must remain available to the Project.
+
+IMPORTANT:
+
+Do NOT physically duplicate files unless the existing storage architecture requires it.
+
+Prefer a relationship/reference architecture.
+
+Example:
+
+Opportunity:
+123 Main Street
+
+Documents:
+Civil Plans Rev 2
+Structural Plans Rev 5
+Geotech Report
+RFP
+
+When Opportunity becomes:
+
+Project:
+123 Main Street
+
+the Project should be able to access the same documents.
+
+The historical relationship to the Opportunity must remain intact.
+
+==================================================
+29. FUTURE DOCUMENT RELATIONSHIP
+==================================================
+
+Design for:
+
+Document
+├── Customer
+├── Opportunity
+├── Project
+├── Estimate
+├── Proposal
+├── Submittal
+└── Change Order
+
+A document may have multiple relevant relationships where appropriate.
+
+Do not blindly duplicate the same physical file.
+
+Use references/relationships.
+
+==================================================
+30. DOCUMENT SECURITY
+==================================================
+
+Documents should respect the same authorization rules as the related Opportunity/Project.
+
+A user who cannot access an Opportunity should not be able to access its documents simply by guessing a file ID or URL.
+
+Enforce authorization server-side.
+
+==================================================
+31. DOCUMENT AUDIT
+==================================================
+
+Use the existing Activity/Audit system for meaningful document actions:
+
+Document Uploaded
+Document Version Added
+Document Categorized
+Document Superseded
+Document Deleted if deletion is permitted
+
+Record:
+
+User
+Date/time
+Related Opportunity
+
+==================================================
+32. DOCUMENT DELETE
+==================================================
+
+Do not immediately hard-delete important bidding documents without considering the existing SiteTech document policy.
+
+If SiteTech already supports soft deletion, use it.
+
+If not, document the recommended approach before implementing destructive deletion.
+
+Historical bid documentation is valuable.
+
+==================================================
+33. SCOPE + DOCUMENT CONNECTION
+==================================================
+
+Scope items should eventually be able to reference relevant documents.
+
+Example:
+
+Scope:
+Tiebacks
+
+Relevant Documents:
+
+Structural Drawing S-301
+Tieback Detail TB-4
+Geotechnical Report
+
+Do NOT build a complex document annotation system now.
+
+But ensure the architecture can support linking a Scope Item to one or more Documents later.
+
+==================================================
+34. RFP DOCUMENT REVIEW
+==================================================
+
+The Opportunity page should make it easy for a user to move between:
+
+Documents
+and
+Scope
+
+The intended workflow is:
+
+Open RFP Documents
+↓
+Review Plans / Specs
+↓
+Review Scope Checklist
+↓
+Mark Included / Excluded / Clarification
+↓
+Create Todos for unanswered questions
+↓
+Proceed to Takeoff
+
+This is the workflow we are building toward.
+
+==================================================
+35. OPPORTUNITY OVERVIEW
+==================================================
+
+The Opportunity page should eventually have tabs:
+
+Overview
+Documents
+Scope
+Contacts
+Todos
+Communications
+Activity
+
+Future:
+
+Takeoff
+Estimate
+Proposal
+
+Do not build the future tabs yet except as placeholders if useful.
+
+==================================================
+36. DASHBOARD SCOPE INDICATOR
+==================================================
+
+On the Bidding dashboard, optionally display a simple indicator showing whether scope review has been started/completed.
+
+Examples:
+
+Scope:
+Not Started
+
+Scope:
+In Progress
+
+Scope:
+Ready for Takeoff
+
+Do not create a separate status system that conflicts with the Opportunity status.
+
+This is a derived/readiness indicator.
+
+==================================================
+37. READY FOR TAKEOFF
+==================================================
+
+Eventually the system should be able to determine whether the Scope Checklist is sufficiently reviewed.
+
+For example:
+
+All Scope Items are:
+
+Included
+Excluded
+or otherwise intentionally resolved
+
+and there are no unresolved:
+
+Needs Clarification
+
+Then:
+
+Scope:
+Ready for Takeoff
+
+Do not automatically change Opportunity status.
+
+This should be an informational readiness state.
+
+==================================================
+38. IMPORTANT — DO NOT CONFUSE SCOPE WITH ESTIMATE
+==================================================
+
+Scope answers:
+
+"What work are we pricing?"
+
+Estimate answers:
+
+"How much will that work cost?"
+
+Takeoff answers:
+
+"How much quantity is involved?"
+
+Proposal answers:
+
+"What are we offering the customer?"
+
+Keep these concepts separate.
+
+==================================================
+39. FUTURE EXAMPLE
+==================================================
+
+The finished workflow should eventually look like:
+
+Opportunity:
+123 Main Street
+
+Scope:
+
+Excavation
+Included
+
+Storm Sewer
+Included
+
+Sanitary Sewer
+Included
+
+Water
+Excluded
+
+Paving
+Excluded
+
+Tiebacks
+Included
+
+↓
+
+Takeoff:
+
+Excavation
+18,500 CY
+
+Storm
+1,250 LF
+
+Sanitary
+800 LF
+
+Tiebacks
+24 EA
+
+↓
+
+Estimate:
+
+Excavation
+$231,250
+
+Storm
+$112,000
+
+Sanitary
+$96,000
+
+Tiebacks
+$180,000
+
+↓
+
+Proposal:
+
+Excavation
+$231,250
+
+Storm
+$112,000
+
+Sanitary
+$96,000
+
+Tiebacks
+$180,000
+
+Total:
+$619,250
+
+This phase only builds the Scope layer and document foundation.
+
+==================================================
+40. PERFORMANCE
+==================================================
+
+Do not load all Opportunities, Documents, and Scope Items into the browser unnecessarily.
+
+Use appropriate server-side queries.
+
+Index:
+
+opportunity_id
+scope_category_id
+display_order
+document opportunity relationship
+document category
+
+Follow existing SiteTech performance patterns.
+
+==================================================
+41. MOBILE
+==================================================
+
+The Scope Checklist must work well on mobile.
+
+Do not use a giant desktop-only spreadsheet.
+
+Use:
+
+Category sections
+Compact scope rows
+Touch-friendly status controls
+Expandable notes
+
+No uncontrolled horizontal scrolling.
+
+The Documents section must also be mobile-friendly.
+
+==================================================
+42. TESTING
+==================================================
+
+Test:
+
+Create Opportunity.
+
+Add Scope Template.
+
+Confirm Scope Items populate.
+
+Mark items:
+
+Included
+Excluded
+Needs Clarification
+
+Add notes.
+
+Add custom Scope Item.
+
+Reorder Scope Items.
+
+Confirm Activity records meaningful changes.
+
+Create Todo from Scope clarification.
+
+Confirm Todo appears in My Work.
+
+==================================================
+43. DOCUMENT TESTING
+==================================================
+
+Upload:
+
+RFP.pdf
+Civil Plans.pdf
+Geotech.pdf
+
+Assign appropriate categories.
+
+Confirm documents appear under Opportunity.
+
+Upload revised Civil Plans.
+
+Confirm:
+
+Rev 1 remains available
+Rev 2 becomes Current
+Rev 1 becomes Superseded
+
+Confirm audit history.
+
+==================================================
+44. PROJECT TRANSFER TESTING
+==================================================
+
+Because Project conversion will be implemented later, create the architecture/test pathway now.
+
+When an Opportunity is converted to a Project in the future:
+
+The Project must be able to access the Opportunity's documents.
+
+The documents must NOT be duplicated unnecessarily.
+
+Historical Opportunity relationships must remain intact.
+
+Do not implement automatic Project conversion unless already part of this phase.
+
+==================================================
+45. REGRESSION TESTING
+==================================================
+
+Verify:
+
+Customers
+Contacts
+Projects
+Opportunities
+Todos
+My Work
+Communications
+Activity
+Workflow
+Notifications
+
+continue working correctly.
+
+Do not break existing Project document functionality.
+
+==================================================
+46. DO NOT BUILD YET
+==================================================
+
+Do NOT build:
+
+Takeoff
+Quantity calculations
+Digital drawing takeoff
+Estimating
+Cost database
+Labor pricing
+Equipment pricing
+Markup calculations
+Proposal generation
+Proposal PDF
+Proposal emailing
+Electronic signature
+Contract conversion
+T&M
+Change Orders
+Submittals
+
+Those are future phases.
+
+==================================================
+47. COMPLETION CRITERIA
+==================================================
+
+Phase 6 is complete when:
+
+- Opportunity has a functional Scope Checklist.
+- Scope Items are organized by category.
+- Users can mark Included / Excluded / Needs Clarification / Not Reviewed.
+- Scope-specific notes work.
+- Custom Scope Items work.
+- Scope Templates are supported or architected cleanly.
+- Scope Items have stable IDs for future Takeoff relationships.
+- Scope-related Todos use the existing Todo system.
+- Scope Activity uses the existing Activity system.
+- Opportunities have a functional document area.
+- Documents have useful categories.
+- Document versions are preserved.
+- Superseded documents remain accessible.
+- Documents can eventually follow an Opportunity into a Project without unnecessary physical duplication.
+- Existing Customer/Project/Opportunity document architecture is preserved.
+- Mobile experience is clean.
+- Existing SiteTech functionality remains intact.
+
+==================================================
+FINAL ARCHITECTURAL PRINCIPLE
+==================================================
+
+Build this as a connected construction workflow, not isolated features.
+
+The long-term chain is:
+
+CUSTOMER
+↓
+OPPORTUNITY
+↓
+DOCUMENTS + SCOPE
+↓
+TAKEOFF
+↓
+ESTIMATE
+↓
+PROPOSAL
+↓
+AWARDED
+↓
+PROJECT
+↓
+FIELD / PROJECT MANAGEMENT
+
+The information entered during bidding should follow the job into the Project.
+
+Avoid duplicate data entry wherever possible.
+
+Avoid duplicate physical files wherever possible.
+
+Maintain a clear source of truth for Customers, Contacts, Documents, Scope, Todos, Communications and Activity.
+
+Before making database changes, inspect the existing SiteTech document/file architecture and reuse it rather than creating a second document management system.
