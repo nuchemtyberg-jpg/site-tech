@@ -2035,7 +2035,11 @@ export class DatabaseStorage implements IStorage {
   }
 
   private userDisplayName(u: typeof users) {
-    return sql<string | null>`trim(concat(coalesce(${u.firstName}, ''), ' ', coalesce(${u.lastName}, '')))`;
+    return sql<string | null>`coalesce(
+      nullif(trim(concat(coalesce(${u.firstName}, ''), ' ', coalesce(${u.lastName}, ''))), ''),
+      ${u.email},
+      ${u.id}
+    )`;
   }
 
   async getTodos(filters: TodoFilters): Promise<TodoWithDetails[]> {

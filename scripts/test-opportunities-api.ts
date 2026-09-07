@@ -28,6 +28,7 @@ async function main() {
   const sid = crypto.randomBytes(16).toString("hex");
   const regularSid = crypto.randomBytes(16).toString("hex");
   const regularUserId = "__opp-security-user";
+  const namelessUserId = "__opp-nameless-assignee";
   const expiresAtSec = Math.floor(Date.now() / 1000) + 6 * 3600;
   const sess = {
     cookie: { originalMaxAge: 604800000, expires: new Date(Date.now() + 6 * 3600_000).toISOString(), httpOnly: true, path: "/" },
@@ -37,6 +38,9 @@ async function main() {
   await db.execute(sql`INSERT INTO users (id, email, first_name, last_name, role, is_authorized)
     VALUES (${regularUserId}, ${"__opp-security@test.local"}, 'Opportunity', 'Viewer', 'user', 'approved')
     ON CONFLICT (id) DO UPDATE SET role = 'user', is_authorized = 'approved'`);
+  await db.execute(sql`INSERT INTO users (id, email, first_name, last_name, role, is_authorized)
+    VALUES (${namelessUserId}, ${"nameless-assignee@opp.local"}, NULL, NULL, 'user', 'approved')
+    ON CONFLICT (id) DO UPDATE SET email = EXCLUDED.email, first_name = NULL, last_name = NULL, is_authorized = 'approved'`);
   const regularSess = {
     ...sess,
     passport: { user: { ...sess.passport.user, claims: { sub: regularUserId, email: "__opp-security@test.local" } } },
@@ -266,6 +270,18 @@ async function main() {
     check("manual todo linked to opportunity, no project", manualTodo.status === 201 && manualTodo.body?.relatedEntityType === "opportunity" && manualTodo.body?.projectId === null, manualTodo);
     const scopedTodos = await j(await fetch(`${BASE}/api/opportunities/${oppId}/todos`, { headers: H }));
     check("opportunity-scoped todo retrieval includes generic linked todo", scopedTodos.status === 200 && scopedTodos.body?.some((t: any) => t.id === manualTodo.body?.id), scopedTodos.body);
+    const biddingTodo = await j(await fetch(`${BASE}/api/opportunities/${oppId}/todos`, { method: "POST", headers: H, body: JSON.stringify({
+      title: "__OPP Nameless Assignee Todo", assignedToUserId: namelessUserId, priority: "normal",
+    }) }));
+    const biddingTodos = await j(await fetch(`${BASE}/api/opportunities/${oppId}/todos`, { headers: H }));
+    const listedBiddingTodo = biddingTodos.body?.find((t: any) => t.id === biddingTodo.body?.id);
+    check(
+      "Bidding todo keeps assignment visible when user profile has no name",
+      biddingTodo.status === 201
+        && listedBiddingTodo?.assignedToUserId === namelessUserId
+        && listedBiddingTodo?.assignedToName === "nameless-assignee@opp.local",
+      listedBiddingTodo,
+    );
     const badTodo = await j(await fetch(`${BASE}/api/todos`, { method: "POST", headers: H, body: JSON.stringify({
       title: "__OPP Bad Todo", assignedToUserId: USER_ID, priority: "normal", status: "open",
       relatedEntityType: "opportunity", relatedEntityId: 99999999,
@@ -315,6 +331,7 @@ async function main() {
       if (custBId) await db.execute(sql`DELETE FROM customers WHERE id = ${custBId}`);
       await db.execute(sql`DELETE FROM sessions WHERE sid = ${sid}`);
       await db.execute(sql`DELETE FROM sessions WHERE sid = ${regularSid}`);
+      await db.execute(sql`DELETE FROM users WHERE id = ${namelessUserId}`);
       await db.execute(sql`DELETE FROM users WHERE id = ${regularUserId}`);
     } catch (e) {
       console.error("cleanup error:", e);
