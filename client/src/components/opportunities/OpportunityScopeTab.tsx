@@ -1,0 +1,350 @@
+import { useState } from "react";
+import { ChevronDown, ChevronRight, CircleDot, Loader2, ListChecks, Plus, Sparkles, Trash2, X, ArrowUp, ArrowDown } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  useAddScopeItem, useApplyScopeTemplate, useCreateScopeClarificationTodo,
+  useDeleteScopeItem, useOpportunityScope, useReorderScopeItems, useUpdateScopeItem,
+} from "@/hooks/use-opportunity-scope";
+import { useAppUsers, userDisplayName } from "@/hooks/use-todos";
+import { useToast } from "@/hooks/use-toast";
+import { extractApiError } from "@/hooks/use-todos";
+import {
+  SCOPE_ITEM_STATUS_LABELS, SCOPE_ITEM_STATUS_VALUES, SCOPE_READINESS_LABELS,
+  summarizeScopeItems, type ScopeItemStatus, type ScopeReadiness,
+} from "@shared/scopeChecklist";
+import type { OpportunityScopeItemWithDetails } from "@shared/schema";
+
+const STATUS_BADGE_CLASS: Record<ScopeItemStatus, string> = {
+  not_reviewed: "bg-muted text-muted-foreground",
+  included: "bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300",
+  excluded: "bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300",
+  needs_clarification: "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300",
+};
+
+export const READINESS_BADGE_CLASS: Record<ScopeReadiness, string> = {
+  not_started: "bg-muted text-muted-foreground",
+  in_progress: "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300",
+  ready_for_takeoff: "bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300",
+};
+
+export function ReadinessBadge({ readiness }: { readiness: ScopeReadiness }) {
+  return <Badge variant="outline" className={`${READINESS_BADGE_CLASS[readiness]} border-0`}>{SCOPE_READINESS_LABELS[readiness]}</Badge>;
+}
+
+export default function OpportunityScopeTab({ opportunityId }: { opportunityId: number }) {
+  const { data, isLoading } = useOpportunityScope(opportunityId);
+  const applyTemplate = useApplyScopeTemplate(opportunityId);
+  const reorder = useReorderScopeItems(opportunityId);
+  const { toast } = useToast();
+  const [addingCategory, setAddingCategory] = useState<string | null>(null);
+
+  if (isLoading) return <div className="py-12 text-center"><Loader2 className="w-6 h-6 animate-spin mx-auto" /></div>;
+  const items = data?.items || [];
+  const categories = data?.categories || [];
+  const readiness = data?.readiness || "not_started";
+  const summary = summarizeScopeItems(items);
+
+  // Group by every known category (not just categories that currently have
+  // items) so custom items can be added to an untouched category and the
+  // section doesn't disappear when its last item is removed.
+  const itemsByCategory = new Map<string, OpportunityScopeItemWithDetails[]>();
+  for (const item of items) {
+    if (!itemsByCategory.has(item.categoryKey)) itemsByCategory.set(item.categoryKey, []);
+    itemsByCategory.get(item.categoryKey)!.push(item);
+  }
+
+  const moveItem = (categoryKey: string, itemId: number, direction: -1 | 1) => {
+    const catItems = itemsByCategory.get(categoryKey) || [];
+    const idx = catItems.findIndex(i => i.id === itemId);
+    const swapWith = idx + direction;
+    if (idx < 0 || swapWith < 0 || swapWith >= catItems.length) return;
+    const reordered = [...catItems];
+    [reordered[idx], reordered[swapWith]] = [reordered[swapWith], reordered[idx]];
+    reorder.mutate(reordered.map(i => i.id));
+  };
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardContent className="p-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-wrap items-center gap-2 text-sm">
+            <ListChecks className="w-4 h-4 text-muted-foreground shrink-0" />
+            <span className="font-semibold">{summary.total} Scope Item{summary.total === 1 ? "" : "s"}</span>
+            {summary.total > 0 && <>
+              <span className="text-muted-foreground">·</span>
+              <span>{summary.included} Included</span>
+              <span className="text-muted-foreground">·</span>
+              <span>{summary.excluded} Excluded</span>
+              <span className="text-muted-foreground">·</span>
+              <span>{summary.needsClarification} Needs Clarification</span>
+            </>}
+            <ReadinessBadge readiness={readiness} />
+          </div>
+          <Button
+            className="min-h-11"
+            variant="outline"
+            disabled={applyTemplate.isPending}
+            onClick={() => applyTemplate.mutate(undefined, {
+              onSuccess: (res) => toast({ title: res.addedCount > 0 ? `Added ${res.addedCount} scope item${res.addedCount === 1 ? "" : "s"}` : "Scope template already applied" }),
+              onError: e => toast({ title: "Couldn't apply template", description: extractApiError(e, "Try again."), variant: "destructive" }),
+            })}
+            data-testid="button-apply-scope-template"
+          >
+            {applyTemplate.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Sparkles className="w-4 h-4 mr-2" />}
+            Apply starter template
+          </Button>
+        </CardContent>
+      </Card>
+
+      <div className="space-y-4">
+        {categories.map(category => {
+          const catItems = itemsByCategory.get(category.key) || [];
+          return (
+            <div key={category.key} className="space-y-2">
+              <h3 className="text-sm font-semibold text-muted-foreground">{category.name}{catItems.length > 0 ? ` (${catItems.length})` : ""}</h3>
+              <div className="space-y-2">
+                {catItems.map((item, idx) => (
+                  <ScopeItemRow
+                    key={item.id}
+                    item={item}
+                    opportunityId={opportunityId}
+                    canMoveUp={idx > 0}
+                    canMoveDown={idx < catItems.length - 1}
+                    onMove={dir => moveItem(category.key, item.id, dir)}
+                  />
+                ))}
+              </div>
+              {addingCategory === category.key ? (
+                <AddCustomItemForm categoryKey={category.key} opportunityId={opportunityId} onDone={() => setAddingCategory(null)} />
+              ) : (
+                <Button className="min-h-11" variant="ghost" size="sm" onClick={() => setAddingCategory(category.key)} data-testid={`button-add-scope-item-${category.key}`}>
+                  <Plus className="w-4 h-4 mr-1" />Add custom item
+                </Button>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function AddCustomItemForm({ categoryKey, opportunityId, onDone }: { categoryKey: string; opportunityId: number; onDone: () => void }) {
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+  const add = useAddScopeItem(opportunityId);
+  const { toast } = useToast();
+  const submit = () => {
+    if (!name.trim()) return;
+    add.mutate({ categoryKey, name: name.trim(), description: description.trim() || null }, {
+      onSuccess: () => { setName(""); setDescription(""); onDone(); },
+      onError: e => toast({ title: "Couldn't add item", description: extractApiError(e, "Try again."), variant: "destructive" }),
+    });
+  };
+  return (
+    <div className="flex flex-col gap-2 border rounded-md p-3">
+      <div>
+        <Label className="text-xs">Item name *</Label>
+        <Input
+          className="min-h-11"
+          placeholder="e.g. Retaining wall drainage"
+          value={name}
+          onChange={e => setName(e.target.value)}
+          autoFocus
+          data-testid={`input-custom-scope-item-name-${categoryKey}`}
+        />
+      </div>
+      <div>
+        <Label className="text-xs">Master description (optional)</Label>
+        <Textarea
+          className="text-sm"
+          placeholder="Additional detail describing exactly what this item covers"
+          value={description}
+          onChange={e => setDescription(e.target.value)}
+          data-testid={`textarea-custom-scope-item-description-${categoryKey}`}
+        />
+      </div>
+      <div className="flex gap-2 shrink-0">
+        <Button className="min-h-11" disabled={!name.trim() || add.isPending} onClick={submit}>{add.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}Add</Button>
+        <Button className="min-h-11" variant="ghost" onClick={onDone}><X className="w-4 h-4" /></Button>
+      </div>
+    </div>
+  );
+}
+
+function ScopeItemRow({ item, opportunityId, canMoveUp, canMoveDown, onMove }: {
+  item: OpportunityScopeItemWithDetails; opportunityId: number;
+  canMoveUp: boolean; canMoveDown: boolean; onMove: (dir: -1 | 1) => void;
+}) {
+  const update = useUpdateScopeItem(opportunityId);
+  const remove = useDeleteScopeItem(opportunityId);
+  const { toast } = useToast();
+  const [notesOpen, setNotesOpen] = useState(Boolean(item.notes));
+  const [notes, setNotes] = useState(item.notes || "");
+  const [descOpen, setDescOpen] = useState(false);
+  const [description, setDescription] = useState(item.description || "");
+  const [todoOpen, setTodoOpen] = useState(false);
+
+  const status = item.status as ScopeItemStatus;
+
+  const setStatus = (next: string) => {
+    update.mutate({ itemId: item.id, status: next }, {
+      onSuccess: () => { if (next === "needs_clarification") setTodoOpen(true); },
+      onError: e => toast({ title: "Couldn't update status", description: extractApiError(e, "Try again."), variant: "destructive" }),
+    });
+  };
+
+  const saveNotes = () => {
+    if ((notes || "") === (item.notes || "")) return;
+    update.mutate({ itemId: item.id, notes: notes || null }, {
+      onError: e => toast({ title: "Couldn't save notes", description: extractApiError(e, "Try again."), variant: "destructive" }),
+    });
+  };
+
+  const saveDescription = () => {
+    if ((description || "") === (item.description || "")) return;
+    update.mutate({ itemId: item.id, description: description || null }, {
+      onError: e => toast({ title: "Couldn't save description", description: extractApiError(e, "Try again."), variant: "destructive" }),
+    });
+  };
+
+  return (
+    <Card>
+      <CardContent className="p-3 space-y-2">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0 flex-1 flex items-start gap-1">
+            <div className="flex flex-col -my-1 shrink-0">
+              <button
+                className="min-h-9 min-w-9 flex items-center justify-center disabled:opacity-30 text-muted-foreground hover:text-foreground"
+                disabled={!canMoveUp}
+                onClick={() => onMove(-1)}
+                aria-label="Move up"
+                data-testid={`button-move-up-${item.id}`}
+              ><ArrowUp className="w-3.5 h-3.5" /></button>
+              <button
+                className="min-h-9 min-w-9 flex items-center justify-center disabled:opacity-30 text-muted-foreground hover:text-foreground"
+                disabled={!canMoveDown}
+                onClick={() => onMove(1)}
+                aria-label="Move down"
+                data-testid={`button-move-down-${item.id}`}
+              ><ArrowDown className="w-3.5 h-3.5" /></button>
+            </div>
+            <div className="pt-1.5 min-w-0">
+              <p className="font-medium break-words flex items-center gap-2 flex-wrap">
+                {item.name}
+                {item.isCustom && <Badge variant="outline" className="text-xs">Custom</Badge>}
+              </p>
+              {item.description && !descOpen && (
+                <p className="text-xs text-muted-foreground break-words mt-0.5">{item.description}</p>
+              )}
+            </div>
+          </div>
+          <div className="shrink-0">
+            <Select value={status} onValueChange={setStatus}>
+              <SelectTrigger className={`min-h-11 w-full sm:w-52 ${STATUS_BADGE_CLASS[status]} border-0`} data-testid={`select-scope-status-${item.id}`}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {SCOPE_ITEM_STATUS_VALUES.map(s => <SelectItem key={s} value={s}>{SCOPE_ITEM_STATUS_LABELS[s]}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+          <button className="min-h-11 inline-flex items-center hover:text-foreground" onClick={() => setDescOpen(v => !v)} data-testid={`button-toggle-description-${item.id}`}>
+            {descOpen ? <ChevronDown className="w-3.5 h-3.5 mr-1" /> : <ChevronRight className="w-3.5 h-3.5 mr-1" />}
+            {item.description ? "Edit description" : "Add master description"}
+          </button>
+          <button className="min-h-11 inline-flex items-center hover:text-foreground" onClick={() => setNotesOpen(v => !v)} data-testid={`button-toggle-notes-${item.id}`}>
+            {notesOpen ? <ChevronDown className="w-3.5 h-3.5 mr-1" /> : <ChevronRight className="w-3.5 h-3.5 mr-1" />}
+            {item.notes ? "Notes" : "Add notes"}
+          </button>
+          {status === "needs_clarification" && !item.linkedTodoId && (
+            <button className="min-h-11 inline-flex items-center text-amber-700 hover:underline" onClick={() => setTodoOpen(true)} data-testid={`button-create-clarification-todo-${item.id}`}>
+              <CircleDot className="w-3.5 h-3.5 mr-1" />Create Todo
+            </button>
+          )}
+          {status === "needs_clarification" && item.linkedTodoId && (
+            <span className="inline-flex items-center text-muted-foreground"><CircleDot className="w-3.5 h-3.5 mr-1" />Todo created</span>
+          )}
+          <button className="min-h-11 inline-flex items-center hover:text-destructive ml-auto" onClick={() => remove.mutate(item.id)} data-testid={`button-remove-scope-item-${item.id}`}>
+            <Trash2 className="w-3.5 h-3.5 mr-1" />Remove
+          </button>
+        </div>
+
+        {descOpen && (
+          <Textarea
+            className="text-sm"
+            placeholder="Master description — additional detail about exactly what this item covers (separate from Opportunity-specific notes)"
+            value={description}
+            onChange={e => setDescription(e.target.value)}
+            onBlur={saveDescription}
+            data-testid={`textarea-scope-description-${item.id}`}
+          />
+        )}
+
+        {notesOpen && (
+          <Textarea
+            className="text-sm"
+            placeholder="Opportunity-specific notes (separate from the item name/description)"
+            value={notes}
+            onChange={e => setNotes(e.target.value)}
+            onBlur={saveNotes}
+            data-testid={`textarea-scope-notes-${item.id}`}
+          />
+        )}
+
+        {todoOpen && <CreateClarificationTodo item={item} opportunityId={opportunityId} onDone={() => setTodoOpen(false)} />}
+      </CardContent>
+    </Card>
+  );
+}
+
+function CreateClarificationTodo({ item, opportunityId, onDone }: { item: OpportunityScopeItemWithDetails; opportunityId: number; onDone: () => void }) {
+  const { data: users = [] } = useAppUsers();
+  const create = useCreateScopeClarificationTodo(opportunityId);
+  const { toast } = useToast();
+  const [assignee, setAssignee] = useState("");
+  const [dueDate, setDueDate] = useState("");
+
+  if (item.linkedTodoId) return null;
+
+  return (
+    <div className="border rounded-md p-3 space-y-2 bg-muted/30">
+      <p className="text-xs font-medium">Create a Todo for this clarification</p>
+      <div className="grid sm:grid-cols-[1fr_auto_auto] gap-2">
+        <div>
+          <Label className="text-xs">Assign to *</Label>
+          <Select value={assignee} onValueChange={setAssignee}>
+            <SelectTrigger className="min-h-11"><SelectValue placeholder="Choose user" /></SelectTrigger>
+            <SelectContent>{users.map(u => <SelectItem key={u.id} value={u.id}>{userDisplayName(u)}</SelectItem>)}</SelectContent>
+          </Select>
+        </div>
+        <div>
+          <Label className="text-xs">Due date</Label>
+          <Input className="min-h-11" type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} />
+        </div>
+        <div className="flex items-end gap-2">
+          <Button
+            className="min-h-11"
+            disabled={!assignee || create.isPending}
+            onClick={() => create.mutate({ itemId: item.id, assignedToUserId: assignee, dueDate: dueDate || null }, {
+              onSuccess: () => { toast({ title: "Todo created" }); onDone(); },
+              onError: e => toast({ title: "Couldn't create todo", description: extractApiError(e, "Try again."), variant: "destructive" }),
+            })}
+          >
+            {create.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}Create
+          </Button>
+          <Button className="min-h-11" variant="ghost" onClick={onDone}><X className="w-4 h-4" /></Button>
+        </div>
+      </div>
+    </div>
+  );
+}

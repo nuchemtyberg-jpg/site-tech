@@ -13,6 +13,7 @@ import {
   OPPORTUNITY_NO_BID_REASON_VALUES,
   WORKFLOW_TRIGGER_TYPE_VALUES,
 } from "./opportunityStatus";
+import { SCOPE_ITEM_STATUS_VALUES } from "./scopeChecklist";
 
 export * from "./models/auth";
 export * from "./projectStatus";
@@ -1437,3 +1438,92 @@ export const opportunityStatusChangeSchema = z.object({
   awardDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
 });
 export type OpportunityStatusChangeInput = z.infer<typeof opportunityStatusChangeSchema>;
+
+// ============================================================
+// Opportunity Scope Checklist (Phase 4b — first link in the future
+// Scope -> Takeoff -> Estimate -> Proposal chain). Category and item
+// "template" tables hold the reusable/master catalog (seeded from
+// shared/scopeChecklist.ts via a tracked data migration); the schema stays
+// template-ready for a future admin builder without one existing yet.
+// Per-Opportunity instances carry status/notes and may be custom
+// (templateId null) instead of drawn from the catalog.
+// ============================================================
+
+export const scopeCategories = pgTable("scope_categories", {
+  id: serial("id").primaryKey(),
+  key: text("key").notNull(), // stable seed key, e.g. 'sitework'
+  name: text("name").notNull(),
+  displayOrder: integer("display_order").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  uniqueIndex("uq_scope_categories_key").on(table.key),
+]);
+export type ScopeCategory = typeof scopeCategories.$inferSelect;
+
+export const scopeItemTemplates = pgTable("scope_item_templates", {
+  id: serial("id").primaryKey(),
+  categoryId: integer("category_id").notNull(),
+  key: text("key").notNull(), // stable seed key, e.g. 'clearing_grubbing'
+  name: text("name").notNull(), // short checklist label, e.g. "Clearing & grubbing"
+  description: text("description"), // optional longer master description/detail, distinct from name and from any Opportunity's notes
+  displayOrder: integer("display_order").notNull().default(0),
+  isActive: boolean("is_active").notNull().default(true), // inactive templates stop pre-populating new opportunities but stay for existing references
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  uniqueIndex("uq_scope_item_templates_key").on(table.key),
+  index("idx_scope_item_templates_category").on(table.categoryId),
+]);
+export type ScopeItemTemplate = typeof scopeItemTemplates.$inferSelect;
+
+// Per-Opportunity scope item instance. `id` is the stable reference future
+// Takeoff work can link against (per Task spec). `templateId` is null for
+// custom items added directly on an Opportunity. `name` is the short
+// checklist label; `description` is an optional longer master description;
+// `notes` is Opportunity-specific and always kept separate from both.
+export const opportunityScopeItems = pgTable("opportunity_scope_items", {
+  id: serial("id").primaryKey(),
+  opportunityId: integer("opportunity_id").notNull(),
+  categoryId: integer("category_id").notNull(),
+  templateId: integer("template_id"), // null => custom item
+  name: text("name").notNull(), // short checklist label: copied from the template, or authored for a custom item
+  description: text("description"), // optional longer master description, copied from the template's or authored for a custom item — distinct from opportunity-specific notes
+  notes: text("notes"), // Opportunity-specific notes, always distinct from name/description
+  status: text("status").notNull().default("not_reviewed"), // see SCOPE_ITEM_STATUS_VALUES
+  isCustom: boolean("is_custom").notNull().default(false),
+  displayOrder: integer("display_order").notNull().default(0),
+  linkedTodoId: integer("linked_todo_id"), // set when a "Needs Clarification" Todo is created from this item
+  createdByUserId: varchar("created_by_user_id"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+  // Soft-delete: removing an item (custom or predefined) must be permanent —
+  // re-applying the starter template must never resurrect a predefined item
+  // the user intentionally removed. Kept (not hard-deleted) so the unique
+  // (opportunityId, templateId) constraint below also blocks resurrection.
+  deletedAt: timestamp("deleted_at"),
+}, (table) => [
+  index("idx_opportunity_scope_items_opportunity").on(table.opportunityId),
+  index("idx_opportunity_scope_items_opportunity_category").on(table.opportunityId, table.categoryId),
+  index("idx_opportunity_scope_items_opportunity_order").on(table.opportunityId, table.displayOrder),
+  // Postgres treats each NULL as distinct, so this only constrains
+  // template-based rows (custom items, templateId null, are unaffected) —
+  // and makes "apply starter template" atomic/conflict-safe under concurrent
+  // requests via onConflictDoNothing, while also blocking a soft-deleted
+  // template row from ever being re-inserted.
+  uniqueIndex("uq_opportunity_scope_items_opp_template").on(table.opportunityId, table.templateId),
+]);
+
+export const insertOpportunityScopeItemSchema = createInsertSchema(opportunityScopeItems).omit({
+  id: true, createdAt: true, updatedAt: true, linkedTodoId: true,
+}).extend({
+  name: z.string().trim().min(1, "Name is required"),
+  description: z.string().trim().nullable().optional(),
+  notes: z.string().nullable().optional(),
+  status: z.enum(SCOPE_ITEM_STATUS_VALUES).optional(),
+});
+export type OpportunityScopeItem = typeof opportunityScopeItems.$inferSelect;
+export type InsertOpportunityScopeItem = z.infer<typeof insertOpportunityScopeItemSchema>;
+
+export type OpportunityScopeItemWithDetails = OpportunityScopeItem & {
+  categoryKey: string;
+  categoryName: string;
+};

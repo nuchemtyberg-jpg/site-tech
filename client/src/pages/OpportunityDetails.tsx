@@ -22,6 +22,8 @@ import {
   useOpportunityStatusHistory, useOpportunityTodos, useRemoveOpportunityContact, useUpdateOpportunityContact,
 } from "@/hooks/use-opportunities";
 import { extractApiError, useAppUsers, useCompleteTodo, userDisplayName } from "@/hooks/use-todos";
+import { useOpportunityScope } from "@/hooks/use-opportunity-scope";
+import OpportunityScopeTab, { ReadinessBadge } from "@/components/opportunities/OpportunityScopeTab";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { getProxyUrlWithFilename } from "@/lib/utils";
@@ -47,6 +49,7 @@ export default function OpportunityDetails() {
   const { data: activity = [] } = useOpportunityActivity(opportunityId);
   const { data: history = [] } = useOpportunityStatusHistory(opportunityId);
   const { data: documents = [] } = useOpportunityDocuments(opportunityId);
+  const { data: scope } = useOpportunityScope(opportunityId);
   const archive = useArchiveOpportunity();
   const [editOpen, setEditOpen] = useState(false);
   const [statusOpen, setStatusOpen] = useState(false);
@@ -63,7 +66,7 @@ export default function OpportunityDetails() {
     <div className="space-y-5 pt-14 md:pt-0 min-w-0">
       <Link href={backHref} className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground min-h-11" data-testid="link-back-to-bidding"><ArrowLeft className="w-4 h-4 mr-1" />Back to Bidding</Link>
       <header className="flex flex-col lg:flex-row justify-between gap-4">
-        <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><Target className="w-6 h-6 text-primary" /><span className="text-sm font-mono text-muted-foreground">{opportunity.opportunityNumber}</span><Badge>{getOpportunityStatusLabel(opportunity.status)}</Badge>{opportunity.isArchived && <Badge variant="outline">Archived</Badge>}</div><h1 className="text-2xl sm:text-3xl font-bold mt-2 break-words">{opportunity.name}</h1><Link href={`/customers/${opportunity.customerId}`} className="text-sm text-primary hover:underline">{opportunity.customerName}</Link></div>
+        <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><Target className="w-6 h-6 text-primary" /><span className="text-sm font-mono text-muted-foreground">{opportunity.opportunityNumber}</span><Badge>{getOpportunityStatusLabel(opportunity.status)}</Badge>{opportunity.isArchived && <Badge variant="outline">Archived</Badge>}{scope && <ReadinessBadge readiness={scope.readiness} />}</div><h1 className="text-2xl sm:text-3xl font-bold mt-2 break-words">{opportunity.name}</h1><Link href={`/customers/${opportunity.customerId}`} className="text-sm text-primary hover:underline">{opportunity.customerName}</Link></div>
         <div className="flex flex-wrap gap-2"><Button className="min-h-11" variant="outline" onClick={() => setEditOpen(true)}><Pencil className="w-4 h-4 mr-2" />Edit</Button><Button className="min-h-11" variant="outline" onClick={() => setStatusOpen(true)}>Change status</Button><Button className="min-h-11" variant="outline" disabled={archive.isPending} onClick={() => archive.mutate({ id: opportunity.id, archived: !opportunity.isArchived }, { onSuccess: () => toast({ title: opportunity.isArchived ? "Opportunity restored" : "Opportunity archived" }) })}>{opportunity.isArchived ? <ArchiveRestore className="w-4 h-4 mr-2" /> : <Archive className="w-4 h-4 mr-2" />}{opportunity.isArchived ? "Restore" : "Archive"}</Button></div>
       </header>
 
@@ -76,8 +79,9 @@ export default function OpportunityDetails() {
 
       <Tabs defaultValue="overview" className="min-w-0">
         <TabsList className="w-full justify-start h-auto min-h-11 overflow-x-auto">
-          {["overview", "documents", "contacts", "todos", "communications", "activity"].map(tab => <TabsTrigger key={tab} value={tab} className="min-h-10 capitalize shrink-0">{tab}{tab === "documents" ? ` (${documents.length})` : tab === "contacts" ? ` (${contacts.length})` : tab === "todos" ? ` (${todos.length})` : tab === "communications" ? ` (${communications.length})` : ""}</TabsTrigger>)}
+          {["overview", "scope", "documents", "contacts", "todos", "communications", "activity"].map(tab => <TabsTrigger key={tab} value={tab} className="min-h-10 capitalize shrink-0">{tab}{tab === "scope" && scope ? ` (${scope.items.length})` : tab === "documents" ? ` (${documents.length})` : tab === "contacts" ? ` (${contacts.length})` : tab === "todos" ? ` (${todos.length})` : tab === "communications" ? ` (${communications.length})` : ""}</TabsTrigger>)}
         </TabsList>
+        <TabsContent value="scope"><OpportunityScopeTab opportunityId={opportunity.id} /></TabsContent>
         <TabsContent value="overview" className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <Card><CardHeader><CardTitle className="text-base">Bid details</CardTitle></CardHeader><CardContent className="text-sm space-y-3"><Detail label="RFP received" value={opportunity.rfpReceivedDate} /><Detail label="Estimated start" value={opportunity.estimatedStartDate} /><Detail label="Source" value={labelFor(OPPORTUNITY_SOURCES, opportunity.source)} /><Detail label="Project type" value={labelFor(OPPORTUNITY_PROJECT_TYPES, opportunity.projectType)} />{address && <p className="flex gap-2"><MapPin className="w-4 h-4 shrink-0 text-muted-foreground" />{address}</p>}</CardContent></Card>
           <Card><CardHeader><CardTitle className="text-base">Scope & notes</CardTitle></CardHeader><CardContent className="space-y-4 text-sm"><section><p className="text-xs text-muted-foreground mb-1">Scope summary</p><p className="whitespace-pre-wrap">{opportunity.scopeSummary || "No scope summary yet."}</p></section><section><p className="text-xs text-muted-foreground mb-1">Internal notes</p><p className="whitespace-pre-wrap">{opportunity.internalNotes || "No internal notes yet."}</p></section></CardContent></Card>

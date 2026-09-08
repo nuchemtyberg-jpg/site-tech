@@ -2,3 +2,4 @@
 - [drizzle-kit push prompts](drizzle-push-rename-prompt.md) — db:push can stall on create-vs-rename prompts and apply nothing; verify the table exists after pushing.
 - [Authenticated HTTP testing](authenticated-http-testing.md) — forge a signed `connect.sid` + PG session row to e2e-test protected APIs behind Replit Auth; dev DB is live, always clean up.
 - [Dashboard facet summaries](dashboard-facet-summaries.md) — compute clickable facet totals without applying that facet's implicit default filter, or valid options disappear as zero.
+- [Derived status from checklist items](derived-checklist-readiness.md) — compute a workflow-stage indicator from item statuses instead of storing it, to avoid a second source of truth that can drift.

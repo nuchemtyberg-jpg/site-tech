@@ -8,6 +8,7 @@ import { registerObjectStorageRoutes, ObjectStorageService } from "./replit_inte
 import type { User, FileMetadata } from "@shared/schema";
 import { insertAuthorizedUserSchema, insertRfiSchema, insertTaskTitleSchema } from "@shared/schema";
 import { getDocumentCategoryLabel } from "@shared/documentCategory";
+import { computeScopeReadiness, getScopeItemStatusLabel } from "@shared/scopeChecklist";
 import { isAdmin, isAuthorizedUser } from "./middleware/auth";
 import { sendInviteEmail } from "./services/email";
 import { handleProjectStatusChange } from "./services/workflowEngine";
@@ -1502,6 +1503,194 @@ export async function registerRoutes(
       metadata: { customerId: opp.customerId, opportunityId: opp.id, category: doc.category },
     });
     res.status(204).send();
+  });
+
+  // ---------- Opportunity Scope Checklist ----------
+
+  app.get(api.opportunityScope.list.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
+    const opp = await storage.getOpportunity(Number(req.params.id));
+    if (!opp) return res.status(404).json({ message: "Opportunity not found" });
+    const [items, categories] = await Promise.all([
+      storage.getOpportunityScopeItems(opp.id),
+      storage.getScopeCategories(),
+    ]);
+    res.json({ items, categories, readiness: computeScopeReadiness(items) });
+  });
+
+  app.post(api.opportunityScope.createItem.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
+    try {
+      const opp = await storage.getOpportunity(Number(req.params.id));
+      if (!opp) return res.status(404).json({ message: "Opportunity not found" });
+      const input = api.opportunityScope.createItem.input.parse(req.body);
+      const categories = await storage.getScopeCategories();
+      const category = categories.find(c => c.key === input.categoryKey);
+      if (!category) return res.status(400).json({ message: "Unknown scope category" });
+      const existing = await storage.getOpportunityScopeItems(opp.id);
+      const maxOrder = existing.filter(i => i.categoryId === category.id).reduce((max, i) => Math.max(max, i.displayOrder), 0);
+      const user = await getCurrentUser(req);
+      const item = await storage.createOpportunityScopeItem({
+        opportunityId: opp.id,
+        categoryId: category.id,
+        templateId: null,
+        name: input.name,
+        description: input.description ?? null,
+        notes: null,
+        status: "not_reviewed",
+        isCustom: true,
+        displayOrder: maxOrder + 10,
+        createdByUserId: user?.id ?? null,
+      });
+      const actor = actorFromUser(user);
+      await logActivity({
+        entityType: "opportunity_scope_item", entityId: item.id, actor, action: "scope_item_added",
+        description: `${actor.name} added a custom scope item to ${opportunityDisplay(opp)}: "${item.name}" (${category.name}).`,
+        metadata: { customerId: opp.customerId, opportunityId: opp.id },
+      });
+      res.status(201).json({ ...item, categoryKey: category.key, categoryName: category.name });
+    } catch (err) {
+      if (err instanceof z.ZodError) return res.status(400).json({ message: err.errors[0].message });
+      throw err;
+    }
+  });
+
+  app.put(api.opportunityScope.updateItem.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
+    try {
+      const opp = await storage.getOpportunity(Number(req.params.id));
+      if (!opp) return res.status(404).json({ message: "Opportunity not found" });
+      const existing = await storage.getOpportunityScopeItem(Number(req.params.itemId));
+      if (!existing || existing.opportunityId !== opp.id) return res.status(404).json({ message: "Scope item not found" });
+      const input = api.opportunityScope.updateItem.input.parse(req.body);
+      const updated = await storage.updateOpportunityScopeItem(existing.id, input);
+      const user = await getCurrentUser(req);
+      const actor = actorFromUser(user);
+      // Meaningful-change logging only: skip when nothing actually changed
+      // (avoids noise from re-saving an unmodified item).
+      if (input.status !== undefined && input.status !== existing.status) {
+        await logActivity({
+          entityType: "opportunity_scope_item", entityId: updated.id, actor, action: "scope_item_status_changed",
+          description: `${actor.name} marked "${updated.name}" as ${getScopeItemStatusLabel(updated.status)} on ${opportunityDisplay(opp)}.`,
+          metadata: { customerId: opp.customerId, opportunityId: opp.id },
+        });
+      }
+      if (input.notes !== undefined && (input.notes || "") !== (existing.notes || "")) {
+        await logActivity({
+          entityType: "opportunity_scope_item", entityId: updated.id, actor, action: "scope_item_note_added",
+          description: `${actor.name} updated notes on "${updated.name}" for ${opportunityDisplay(opp)}.`,
+          metadata: { customerId: opp.customerId, opportunityId: opp.id },
+        });
+      }
+      if ((input.name !== undefined && input.name !== existing.name) || (input.description !== undefined && (input.description || "") !== (existing.description || ""))) {
+        await logActivity({
+          entityType: "opportunity_scope_item", entityId: updated.id, actor, action: "scope_item_changed",
+          description: `${actor.name} changed a scope item's description on ${opportunityDisplay(opp)}: "${updated.name}".`,
+          metadata: { customerId: opp.customerId, opportunityId: opp.id },
+        });
+      }
+      const categories = await storage.getScopeCategories();
+      const category = categories.find(c => c.id === updated.categoryId);
+      res.json({ ...updated, categoryKey: category?.key || "other", categoryName: category?.name || "Other" });
+    } catch (err) {
+      if (err instanceof z.ZodError) return res.status(400).json({ message: err.errors[0].message });
+      throw err;
+    }
+  });
+
+  app.delete(api.opportunityScope.deleteItem.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
+    const opp = await storage.getOpportunity(Number(req.params.id));
+    if (!opp) return res.status(404).json({ message: "Opportunity not found" });
+    const existing = await storage.getOpportunityScopeItem(Number(req.params.itemId));
+    if (!existing || existing.opportunityId !== opp.id) return res.status(404).json({ message: "Scope item not found" });
+    await storage.deleteOpportunityScopeItem(existing.id);
+    const user = await getCurrentUser(req);
+    const actor = actorFromUser(user);
+    await logActivity({
+      entityType: "opportunity_scope_item", entityId: existing.id, actor, action: "scope_item_removed",
+      description: `${actor.name} removed scope item "${existing.name}" from ${opportunityDisplay(opp)}.`,
+      metadata: { customerId: opp.customerId, opportunityId: opp.id },
+    });
+    res.status(204).send();
+  });
+
+  app.post(api.opportunityScope.reorder.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
+    try {
+      const opp = await storage.getOpportunity(Number(req.params.id));
+      if (!opp) return res.status(404).json({ message: "Opportunity not found" });
+      const input = api.opportunityScope.reorder.input.parse(req.body);
+      await storage.reorderOpportunityScopeItems(opp.id, input.orderedIds);
+      const items = await storage.getOpportunityScopeItems(opp.id);
+      res.json({ items });
+    } catch (err) {
+      if (err instanceof z.ZodError) return res.status(400).json({ message: err.errors[0].message });
+      throw err;
+    }
+  });
+
+  app.post(api.opportunityScope.applyTemplate.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
+    const opp = await storage.getOpportunity(Number(req.params.id));
+    if (!opp) return res.status(404).json({ message: "Opportunity not found" });
+    const user = await getCurrentUser(req);
+    const added = await storage.applyScopeTemplate(opp.id, user?.id ?? null);
+    if (added.length > 0) {
+      const actor = actorFromUser(user);
+      await logActivity({
+        entityType: "opportunity_scope_item", entityId: opp.id, actor, action: "scope_template_applied",
+        description: `${actor.name} applied the starter Scope Template to ${opportunityDisplay(opp)} (${added.length} item${added.length === 1 ? "" : "s"}).`,
+        metadata: { customerId: opp.customerId, opportunityId: opp.id },
+      });
+    }
+    const [items, categories] = await Promise.all([
+      storage.getOpportunityScopeItems(opp.id),
+      storage.getScopeCategories(),
+    ]);
+    res.json({ items, categories, readiness: computeScopeReadiness(items), addedCount: added.length });
+  });
+
+  app.post(api.opportunityScope.createClarificationTodo.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
+    try {
+      const opp = await storage.getOpportunity(Number(req.params.id));
+      if (!opp) return res.status(404).json({ message: "Opportunity not found" });
+      const item = await storage.getOpportunityScopeItem(Number(req.params.itemId));
+      if (!item || item.opportunityId !== opp.id) return res.status(404).json({ message: "Scope item not found" });
+      const input = api.opportunityScope.createClarificationTodo.input.parse(req.body);
+      const user = await getCurrentUser(req);
+      if (!user) return res.status(401).json({ message: "User not found" });
+      const assignee = input.assignedToUserId === user.id ? user : await storage.getUser(input.assignedToUserId);
+      if (!assignee || assignee.isAuthorized !== "approved") {
+        return res.status(400).json({ message: "Assignee must be an approved, active user" });
+      }
+      const todo = await storage.createTodo({
+        title: `Clarify scope: ${item.name}`,
+        description: `Needs clarification for ${opportunityDisplay(opp)}.`,
+        assignedToUserId: input.assignedToUserId,
+        dueDate: input.dueDate || null,
+        priority: "normal",
+        projectId: null,
+        relatedEntityType: "opportunity",
+        relatedEntityId: opp.id,
+        createdByUserId: user.id,
+        source: "manual",
+      });
+      await storage.updateOpportunityScopeItem(item.id, { linkedTodoId: todo.id });
+      const actor = actorFromUser(user);
+      await logActivity({
+        entityType: "todo", entityId: todo.id, action: "todo_created", actor,
+        description: `${actor.name} created a clarification todo for "${item.name}" on ${opportunityDisplay(opp)}.`,
+        metadata: { customerId: opp.customerId, opportunityId: opp.id },
+      });
+      if (todo.assignedToUserId !== user.id) {
+        await storage.createNotification({
+          userId: todo.assignedToUserId, type: "todo_assigned",
+          title: `You were assigned: ${todo.title}`,
+          message: `${actor.name} assigned you a scope clarification todo for ${opp.opportunityNumber}${todo.dueDate ? `, due ${todo.dueDate}` : ""}.`,
+          projectId: null, todoId: todo.id, relatedEntityType: "opportunity",
+          relatedEntityId: opp.id, isRead: false,
+        });
+      }
+      res.status(201).json(todo);
+    } catch (err) {
+      if (err instanceof z.ZodError) return res.status(400).json({ message: err.errors[0].message });
+      throw err;
+    }
   });
 
   // ---------- Opportunity Contacts ----------

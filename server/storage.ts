@@ -9,9 +9,11 @@ import {
   payApplications, payApplicationItems,
   todos, todoUpdates, workflowRules, workflowExecutions, notifications, activityLogs, projectStatusHistory,
   opportunities, opportunityContacts, opportunityStatusHistory,
+  scopeCategories, scopeItemTemplates, opportunityScopeItems,
   type Opportunity, type InsertOpportunity, type OpportunityWithDetails, type OpportunityDashboardResult,
   type OpportunityContact, type InsertOpportunityContact, type OpportunityContactWithDetails,
   type OpportunityStatusHistory, type InsertOpportunityStatusHistory,
+  type ScopeCategory, type ScopeItemTemplate, type OpportunityScopeItem, type InsertOpportunityScopeItem, type OpportunityScopeItemWithDetails,
   type InsertProject, type InsertTask, type InsertEquipment, type InsertAllocation, type InsertFolder, type InsertFileMetadata, type InsertPhoto,
   type InsertCustomer, type Contact, type InsertContact, type ProjectContact, type InsertProjectContact, type InsertDailyReport, type InsertMaintenanceLog, type InsertCommunication, type InsertTaskStatusHistory, type InsertPhotoAlbum,
   type InsertReportTask, type InsertLaborEntry, type InsertEquipmentEntry, type InsertReportTaskPhoto, type InsertDelivery, type InsertDeliveryPhoto,
@@ -453,6 +455,17 @@ export interface IStorage {
   // Opportunity Status History
   createOpportunityStatusHistory(history: InsertOpportunityStatusHistory): Promise<OpportunityStatusHistory>;
   getOpportunityStatusHistory(opportunityId: number): Promise<OpportunityStatusHistory[]>;
+
+  // Opportunity Scope Checklist
+  getScopeCategories(): Promise<ScopeCategory[]>;
+  getScopeItemTemplates(): Promise<ScopeItemTemplate[]>;
+  getOpportunityScopeItems(opportunityId: number): Promise<OpportunityScopeItemWithDetails[]>;
+  getOpportunityScopeItem(id: number): Promise<OpportunityScopeItem | undefined>;
+  createOpportunityScopeItem(item: InsertOpportunityScopeItem): Promise<OpportunityScopeItem>;
+  updateOpportunityScopeItem(id: number, updates: Partial<Pick<OpportunityScopeItem, "status" | "notes" | "description" | "linkedTodoId">>): Promise<OpportunityScopeItem>;
+  deleteOpportunityScopeItem(id: number): Promise<void>;
+  reorderOpportunityScopeItems(opportunityId: number, orderedIds: number[]): Promise<void>;
+  applyScopeTemplate(opportunityId: number, createdByUserId: string | null): Promise<OpportunityScopeItemWithDetails[]>;
 }
 
 export interface OpportunityFilters {
@@ -2962,6 +2975,107 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(opportunityStatusHistory)
       .where(eq(opportunityStatusHistory.opportunityId, opportunityId))
       .orderBy(desc(opportunityStatusHistory.changedAt), desc(opportunityStatusHistory.id));
+  }
+
+  // ============================================================
+  // Opportunity Scope Checklist
+  // ============================================================
+
+  async getScopeCategories(): Promise<ScopeCategory[]> {
+    return db.select().from(scopeCategories).orderBy(asc(scopeCategories.displayOrder), asc(scopeCategories.id));
+  }
+
+  async getScopeItemTemplates(): Promise<ScopeItemTemplate[]> {
+    return db.select().from(scopeItemTemplates)
+      .where(eq(scopeItemTemplates.isActive, true))
+      .orderBy(asc(scopeItemTemplates.displayOrder), asc(scopeItemTemplates.id));
+  }
+
+  async getOpportunityScopeItems(opportunityId: number): Promise<OpportunityScopeItemWithDetails[]> {
+    const rows = await db.select({
+      item: opportunityScopeItems,
+      categoryKey: scopeCategories.key,
+      categoryName: scopeCategories.name,
+    })
+      .from(opportunityScopeItems)
+      .leftJoin(scopeCategories, eq(opportunityScopeItems.categoryId, scopeCategories.id))
+      .where(and(eq(opportunityScopeItems.opportunityId, opportunityId), isNull(opportunityScopeItems.deletedAt)))
+      .orderBy(asc(scopeCategories.displayOrder), asc(opportunityScopeItems.displayOrder), asc(opportunityScopeItems.id));
+    return rows.map(r => ({ ...r.item, categoryKey: r.categoryKey || "other", categoryName: r.categoryName || "Other" }));
+  }
+
+  async getOpportunityScopeItem(id: number): Promise<OpportunityScopeItem | undefined> {
+    const [row] = await db.select().from(opportunityScopeItems)
+      .where(and(eq(opportunityScopeItems.id, id), isNull(opportunityScopeItems.deletedAt)));
+    return row;
+  }
+
+  async createOpportunityScopeItem(item: InsertOpportunityScopeItem): Promise<OpportunityScopeItem> {
+    const [result] = await db.insert(opportunityScopeItems).values(item).returning();
+    return result;
+  }
+
+  async updateOpportunityScopeItem(id: number, updates: Partial<Pick<OpportunityScopeItem, "status" | "notes" | "name" | "description" | "linkedTodoId">>): Promise<OpportunityScopeItem> {
+    const [result] = await db.update(opportunityScopeItems)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(opportunityScopeItems.id, id))
+      .returning();
+    return result;
+  }
+
+  // Soft delete: keeps the row (with its templateId) so applyScopeTemplate
+  // never resurrects an item the user intentionally removed.
+  async deleteOpportunityScopeItem(id: number): Promise<void> {
+    await db.update(opportunityScopeItems)
+      .set({ deletedAt: new Date(), updatedAt: new Date() })
+      .where(eq(opportunityScopeItems.id, id));
+  }
+
+  async reorderOpportunityScopeItems(opportunityId: number, orderedIds: number[]): Promise<void> {
+    await db.transaction(async (tx) => {
+      for (let i = 0; i < orderedIds.length; i++) {
+        await tx.update(opportunityScopeItems)
+          .set({ displayOrder: (i + 1) * 10, updatedAt: new Date() })
+          .where(and(eq(opportunityScopeItems.id, orderedIds[i]), eq(opportunityScopeItems.opportunityId, opportunityId)));
+      }
+    });
+  }
+
+  /**
+   * Instantiates every active catalog template not already applied to this
+   * Opportunity. Conflict-safe and atomic: the unique (opportunityId,
+   * templateId) index means concurrent "apply template" requests, or a
+   * re-apply after a predefined item was intentionally removed (soft-deleted
+   * rows keep occupying their slot), can never create a duplicate — the
+   * insert simply skips rows that already exist, and RETURNING tells us
+   * exactly which templates were newly added.
+   */
+  async applyScopeTemplate(opportunityId: number, createdByUserId: string | null): Promise<OpportunityScopeItemWithDetails[]> {
+    const templates = await db.select({ template: scopeItemTemplates, categoryKey: scopeCategories.key, categoryName: scopeCategories.name })
+      .from(scopeItemTemplates)
+      .leftJoin(scopeCategories, eq(scopeItemTemplates.categoryId, scopeCategories.id))
+      .where(eq(scopeItemTemplates.isActive, true))
+      .orderBy(asc(scopeCategories.displayOrder), asc(scopeItemTemplates.displayOrder), asc(scopeItemTemplates.id));
+    if (templates.length === 0) return [];
+    const inserted = await db.insert(opportunityScopeItems).values(templates.map(t => ({
+      opportunityId,
+      categoryId: t.template.categoryId,
+      templateId: t.template.id,
+      name: t.template.name,
+      description: t.template.description,
+      notes: null,
+      status: "not_reviewed",
+      isCustom: false,
+      displayOrder: t.template.displayOrder,
+      createdByUserId,
+    })))
+      .onConflictDoNothing({ target: [opportunityScopeItems.opportunityId, opportunityScopeItems.templateId] })
+      .returning();
+    const categoryById = new Map(templates.map(t => [t.template.id, t]));
+    return inserted.map(row => {
+      const match = row.templateId ? categoryById.get(row.templateId) : undefined;
+      return { ...row, categoryKey: match?.categoryKey || "other", categoryName: match?.categoryName || "Other" };
+    });
   }
 }
 

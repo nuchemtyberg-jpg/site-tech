@@ -12,9 +12,10 @@ import {
   type TodoWithDetails, type MyWorkSummary, type WorkflowRuleWithDetails,
   type TodoUpdate, type TodoUpdateWithAuthor, type TodoUpdatesPage,
   type OpportunityWithDetails, type OpportunityContactWithDetails, type OpportunityDashboardResult,
-  type FileWithUploader,
+  type FileWithUploader, type OpportunityScopeItemWithDetails, type ScopeCategory,
 } from './schema';
 import { DOCUMENT_CATEGORY_VALUES } from './documentCategory';
+import { SCOPE_ITEM_STATUS_VALUES } from './scopeChecklist';
 
 export const insertOpportunityDocumentSchema = insertFileSchema.omit({
   projectId: true, folderId: true, albumId: true, takenAt: true, tags: true, starred: true,
@@ -1054,6 +1055,86 @@ export const api = {
       path: '/api/opportunity-contacts/:id',
       responses: {
         204: z.void(),
+        404: errorSchemas.notFound,
+      },
+    },
+  },
+
+  // Opportunity Scope Checklist
+  opportunityScope: {
+    list: {
+      method: 'GET' as const,
+      path: '/api/opportunities/:id/scope',
+      responses: {
+        200: z.custom<{ items: OpportunityScopeItemWithDetails[]; categories: ScopeCategory[]; readiness: string }>(),
+        404: errorSchemas.notFound,
+      },
+    },
+    createItem: {
+      method: 'POST' as const,
+      path: '/api/opportunities/:id/scope',
+      input: z.object({
+        categoryKey: z.string().min(1),
+        name: z.string().trim().min(1, "Name is required"),
+        description: z.string().trim().min(1).nullable().optional(),
+      }),
+      responses: {
+        201: z.custom<OpportunityScopeItemWithDetails>(),
+        400: errorSchemas.validation,
+        404: errorSchemas.notFound,
+      },
+    },
+    updateItem: {
+      method: 'PUT' as const,
+      path: '/api/opportunities/:id/scope/:itemId',
+      input: z.object({
+        status: z.enum(SCOPE_ITEM_STATUS_VALUES).optional(),
+        notes: z.string().nullable().optional(),
+        name: z.string().trim().min(1).optional(),
+        description: z.string().trim().min(1).nullable().optional(),
+      }),
+      responses: {
+        200: z.custom<OpportunityScopeItemWithDetails>(),
+        400: errorSchemas.validation,
+        404: errorSchemas.notFound,
+      },
+    },
+    deleteItem: {
+      method: 'DELETE' as const,
+      path: '/api/opportunities/:id/scope/:itemId',
+      responses: {
+        204: z.void(),
+        404: errorSchemas.notFound,
+      },
+    },
+    reorder: {
+      method: 'POST' as const,
+      path: '/api/opportunities/:id/scope/reorder',
+      input: z.object({ orderedIds: z.array(z.number().int()).min(1) }),
+      responses: {
+        200: z.custom<{ items: OpportunityScopeItemWithDetails[] }>(),
+        400: errorSchemas.validation,
+        404: errorSchemas.notFound,
+      },
+    },
+    applyTemplate: {
+      method: 'POST' as const,
+      path: '/api/opportunities/:id/scope/apply-template',
+      responses: {
+        200: z.custom<{ items: OpportunityScopeItemWithDetails[]; categories: ScopeCategory[]; readiness: string; addedCount: number }>(),
+        404: errorSchemas.notFound,
+      },
+    },
+    createClarificationTodo: {
+      method: 'POST' as const,
+      path: '/api/opportunities/:id/scope/:itemId/todo',
+      input: z.object({
+        assignedToUserId: z.string().min(1, "Assignee is required"),
+        dueDate: z.string().nullable().optional(),
+      }),
+      responses: {
+        201: z.custom<typeof todos.$inferSelect>(),
+        400: errorSchemas.validation,
         404: errorSchemas.notFound,
       },
     },

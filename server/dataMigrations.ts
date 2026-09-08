@@ -1,5 +1,6 @@
 import { db } from "./db";
 import { sql } from "drizzle-orm";
+import { SCOPE_CATEGORY_SEEDS } from "../shared/scopeChecklist";
 
 /**
  * Tracked, one-time data migrations. Runs at server startup (all environments)
@@ -29,6 +30,18 @@ const MIGRATIONS: DataMigration[] = [
   {
     key: "2026-08-10-create-contacts-for-no-company-customers",
     run: (tx) => createContactsForNoCompanyCustomers(tx),
+  },
+  {
+    key: "2026-09-08-seed-scope-checklist-catalog",
+    run: (tx) => seedScopeChecklistCatalog(tx),
+  },
+  {
+    key: "2026-09-08-seed-scope-checklist-catalog-v2",
+    run: (tx) => seedScopeChecklistCatalog(tx),
+  },
+  {
+    key: "2026-09-08-seed-scope-checklist-catalog-v3",
+    run: (tx) => seedScopeChecklistCatalog(tx),
   },
 ];
 
@@ -164,6 +177,30 @@ export async function createContactsForNoCompanyCustomers(
       AND btrim(coalesce(c.name, '')) <> ''
       AND NOT EXISTS (SELECT 1 FROM contacts x WHERE x.customer_id = c.id)${scope}
   `);
+}
+
+/**
+ * Seeds the Scope Checklist category/template catalog from the maintainable
+ * source in shared/scopeChecklist.ts. Uses ON CONFLICT on the stable `key`
+ * columns so it is safe to re-run after the seed list gains new items later
+ * (existing rows are left untouched; only missing keys are inserted).
+ */
+export async function seedScopeChecklistCatalog(tx: MigrationExecutor): Promise<void> {
+  for (const category of SCOPE_CATEGORY_SEEDS) {
+    await tx.execute(sql`
+      INSERT INTO scope_categories (key, name, display_order)
+      VALUES (${category.key}, ${category.name}, ${category.displayOrder})
+      ON CONFLICT (key) DO NOTHING
+    `);
+    for (const item of category.items) {
+      await tx.execute(sql`
+        INSERT INTO scope_item_templates (category_id, key, name, description, display_order, is_active)
+        SELECT sc.id, ${item.key}, ${item.name}, ${item.description ?? null}, ${item.displayOrder}, true
+        FROM scope_categories sc WHERE sc.key = ${category.key}
+        ON CONFLICT (key) DO NOTHING
+      `);
+    }
+  }
 }
 
 /**
