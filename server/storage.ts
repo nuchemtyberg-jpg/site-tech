@@ -24,7 +24,7 @@ import {
   type InsertTodo, type InsertTodoUpdate, type InsertWorkflowRule, type InsertWorkflowExecution, type InsertNotification, type InsertActivityLog, type InsertProjectStatusHistory,
   type Todo, type TodoWithDetails, type TodoUpdate, type TodoUpdateWithAuthor, type MyWorkSummary, type WorkflowRule, type WorkflowRuleWithDetails, type WorkflowExecution,
   type Notification, type ActivityLog, type ProjectStatusHistory,
-  type Project, type Task, type Equipment, type Allocation, type Folder, type FileMetadata, type Photo,
+  type Project, type Task, type Equipment, type Allocation, type Folder, type FileMetadata, type FileWithUploader, type Photo,
   type Customer, type DailyReport, type MaintenanceLog, type Communication, type TaskStatusHistory, type PhotoAlbum,
   type ReportTask, type LaborEntry, type EquipmentEntry, type ReportTaskPhoto, type Delivery, type DeliveryPhoto,
   type DailyReportTaskEntry, type DailyReportLaborLine, type DailyReportEquipmentLine, type DailyReportDeliveryEntry, type DailyReportInspectionEntry, type DailyReportPhoto,
@@ -220,6 +220,11 @@ export interface IStorage {
   deleteFile(id: number): Promise<void>;
   batchDeleteFiles(ids: number[]): Promise<void>;
   batchMoveFiles(ids: number[], folderId: number | null): Promise<void>;
+
+  // Related-entity documents (e.g. Opportunity bidding documents) with versioning
+  getDocumentsForEntity(relatedEntityType: string, relatedEntityId: number): Promise<FileWithUploader[]>;
+  createDocumentVersion(input: InsertFileMetadata & { supersedesId?: number | null }): Promise<FileMetadata>;
+  deleteDocumentVersion(id: number): Promise<void>;
 
   // Photo Albums
   getPhotoAlbums(projectId: number): Promise<PhotoAlbum[]>;
@@ -1349,6 +1354,99 @@ export class DatabaseStorage implements IStorage {
   }
   async deleteFile(id: number): Promise<void> {
     await db.update(files).set({ deletedAt: new Date() }).where(eq(files.id, id));
+  }
+
+  // Related-entity documents (e.g. Opportunity bidding documents) with versioning
+  async getDocumentsForEntity(relatedEntityType: string, relatedEntityId: number): Promise<FileWithUploader[]> {
+    const rows = await db.select({
+      id: files.id, projectId: files.projectId, folderId: files.folderId, albumId: files.albumId,
+      name: files.name, objectPath: files.objectPath, contentType: files.contentType, size: files.size,
+      takenAt: files.takenAt, tags: files.tags, starred: files.starred,
+      relatedEntityType: files.relatedEntityType, relatedEntityId: files.relatedEntityId,
+      category: files.category, description: files.description, uploadedByUserId: files.uploadedByUserId,
+      documentGroupId: files.documentGroupId, documentVersion: files.documentVersion, documentStatus: files.documentStatus,
+      createdAt: files.createdAt, deletedAt: files.deletedAt,
+      uploaderName: sql<string | null>`trim(concat(${users.firstName}, ' ', ${users.lastName}))`,
+    })
+      .from(files)
+      .leftJoin(users, eq(files.uploadedByUserId, users.id))
+      .where(and(
+        eq(files.relatedEntityType, relatedEntityType),
+        eq(files.relatedEntityId, relatedEntityId),
+        isNull(files.deletedAt),
+      ))
+      .orderBy(desc(files.documentGroupId), desc(files.documentVersion));
+    return rows.map(r => ({ ...r, uploaderName: r.uploaderName || null }));
+  }
+
+  async createDocumentVersion(input: InsertFileMetadata & { supersedesId?: number | null }): Promise<FileMetadata> {
+    const { supersedesId, ...fileInput } = input;
+    return await db.transaction(async (tx) => {
+      if (supersedesId) {
+        // Lock the target row for the duration of the transaction so a
+        // concurrent/stale "new version" request against the same document
+        // can't race past this check and create two "current" versions.
+        const [target] = await tx.select().from(files).where(and(eq(files.id, supersedesId), isNull(files.deletedAt))).for("update");
+        if (!target) {
+          throw new Error("Document being superseded was not found");
+        }
+        if (target.relatedEntityType !== fileInput.relatedEntityType || target.relatedEntityId !== fileInput.relatedEntityId) {
+          throw new Error("New version must belong to the same document");
+        }
+        const groupId = target.documentGroupId ?? target.id;
+        // Also lock the whole version group (including deleted rows, so
+        // version numbers stay monotonic even after a delete) so version
+        // numbering and the "exactly one current version" invariant hold
+        // even if the request targets a version that is no longer current
+        // (stale supersedesId).
+        const groupRows = await tx.select().from(files).where(eq(files.documentGroupId, groupId)).for("update");
+        const current = groupRows.find(r => r.documentStatus === "current" && !r.deletedAt);
+        if (!current || current.id !== target.id) {
+          throw new Error("This is not the current version of the document; refresh and try again");
+        }
+        const maxVersion = groupRows.reduce((max, r) => Math.max(max, r.documentVersion), 0);
+        // Category is inherited from the document being versioned, not taken
+        // from client input, so a version upload can never silently move a
+        // document into a different category than the rest of its history.
+        const [newVersion] = await tx.insert(files).values({
+          ...fileInput,
+          category: current.category,
+          documentGroupId: groupId,
+          documentVersion: maxVersion + 1,
+          documentStatus: "current",
+        }).returning();
+        await tx.update(files).set({ documentStatus: "superseded" }).where(eq(files.id, current.id));
+        return newVersion;
+      }
+      const [created] = await tx.insert(files).values({
+        ...fileInput,
+        documentVersion: 1,
+        documentStatus: "current",
+      }).returning();
+      const [withGroup] = await tx.update(files).set({ documentGroupId: created.id }).where(eq(files.id, created.id)).returning();
+      return withGroup;
+    });
+  }
+
+  async deleteDocumentVersion(id: number): Promise<void> {
+    await db.transaction(async (tx) => {
+      const [target] = await tx.select().from(files).where(and(eq(files.id, id), isNull(files.deletedAt))).for("update");
+      if (!target) return;
+      await tx.update(files).set({ deletedAt: new Date() }).where(eq(files.id, id));
+      // Deleting the current version of a versioned document must not leave
+      // the group with zero (or a stale superseded) "current" row: promote
+      // the newest remaining, non-deleted version so the group stays usable
+      // for "new version" uploads and always has exactly one current row.
+      if (target.documentStatus === "current" && target.documentGroupId) {
+        const remaining = await tx.select().from(files)
+          .where(and(eq(files.documentGroupId, target.documentGroupId), isNull(files.deletedAt), ne(files.id, id)))
+          .orderBy(desc(files.documentVersion))
+          .for("update");
+        if (remaining.length > 0) {
+          await tx.update(files).set({ documentStatus: "current" }).where(eq(files.id, remaining[0].id));
+        }
+      }
+    });
   }
 
   // Photo Albums (with soft delete)

@@ -5,6 +5,7 @@ import type {
   Opportunity, OpportunityWithDetails, OpportunityContactWithDetails,
   InsertOpportunity, InsertOpportunityContact, OpportunityStatusChangeInput,
   OpportunityStatusHistory, ActivityLog, TodoWithDetails, Communication,
+  FileWithUploader, FileMetadata,
 } from "@shared/schema";
 import { localToday } from "@/hooks/use-todos";
 
@@ -258,5 +259,47 @@ export function useRemoveOpportunityContact(opportunityId: number) {
       await apiRequest("DELETE", buildUrl(api.opportunityContacts.delete.path, { id }));
     },
     onSuccess: () => invalidate(opportunityId),
+  });
+}
+
+export function useOpportunityDocuments(id: number | undefined) {
+  return useQuery<FileWithUploader[]>({
+    queryKey: [api.opportunityDocuments.list.path, id],
+    queryFn: async () => {
+      const res = await fetch(buildUrl(api.opportunityDocuments.list.path, { id: id! }), { credentials: "include" });
+      if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
+      return res.json();
+    },
+    enabled: id !== undefined,
+  });
+}
+
+export function useCreateOpportunityDocument(opportunityId: number) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: {
+      name: string; objectPath: string; contentType?: string; size?: number;
+      category: string; description?: string | null; supersedesId?: number | null;
+    }) => {
+      const res = await apiRequest("POST", buildUrl(api.opportunityDocuments.create.path, { id: opportunityId }), input);
+      return (await res.json()) as FileMetadata;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [api.opportunityDocuments.list.path, opportunityId] });
+      queryClient.invalidateQueries({ queryKey: [api.opportunities.activity.path, opportunityId] });
+    },
+  });
+}
+
+export function useDeleteOpportunityDocument(opportunityId: number) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (fileId: number) => {
+      await apiRequest("DELETE", buildUrl(api.opportunityDocuments.delete.path, { id: opportunityId, fileId }));
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [api.opportunityDocuments.list.path, opportunityId] });
+      queryClient.invalidateQueries({ queryKey: [api.opportunities.activity.path, opportunityId] });
+    },
   });
 }

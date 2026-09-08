@@ -5,13 +5,27 @@ import {
   insertPhotoAlbumSchema, insertReportTaskSchema, insertLaborEntrySchema, insertEquipmentEntrySchema, insertDeliverySchema,
   insertScheduleEntrySchema, insertTodoSchema, insertTodoUpdateSchema, insertWorkflowRuleSchema,
   insertOpportunitySchema, insertOpportunityContactSchema, opportunityStatusChangeSchema,
+  insertFileSchema,
   projects, tasks, equipment, allocations, customers, dailyReports, maintenanceLogs, communications, photoAlbums,
   reportTasks, laborEntries, equipmentEntries, deliveries, scheduleEntries, todos, workflowRules, notifications, activityLogs, projectStatusHistory,
-  opportunities, opportunityStatusHistory,
+  opportunities, opportunityStatusHistory, files,
   type TodoWithDetails, type MyWorkSummary, type WorkflowRuleWithDetails,
   type TodoUpdate, type TodoUpdateWithAuthor, type TodoUpdatesPage,
-  type OpportunityWithDetails, type OpportunityContactWithDetails, type OpportunityDashboardResult
+  type OpportunityWithDetails, type OpportunityContactWithDetails, type OpportunityDashboardResult,
+  type FileWithUploader,
 } from './schema';
+import { DOCUMENT_CATEGORY_VALUES } from './documentCategory';
+
+export const insertOpportunityDocumentSchema = insertFileSchema.omit({
+  projectId: true, folderId: true, albumId: true, takenAt: true, tags: true, starred: true,
+  relatedEntityType: true, relatedEntityId: true, uploadedByUserId: true,
+}).extend({
+  name: z.string().trim().min(1, "File name is required"),
+  objectPath: z.string().trim().min(1, "objectPath is required"),
+  category: z.enum(DOCUMENT_CATEGORY_VALUES),
+  description: z.string().trim().nullable().optional(),
+  supersedesId: z.number().int().positive().nullable().optional(),
+});
 
 export const errorSchemas = {
   validation: z.object({
@@ -970,6 +984,36 @@ export const api = {
       path: '/api/customers/:customerId/opportunities',
       responses: {
         200: z.array(z.custom<OpportunityWithDetails>()),
+        404: errorSchemas.notFound,
+      },
+    },
+  },
+
+  // Opportunity Documents (categorized, versioned bidding documents)
+  opportunityDocuments: {
+    list: {
+      method: 'GET' as const,
+      path: '/api/opportunities/:id/documents',
+      responses: {
+        200: z.array(z.custom<FileWithUploader>()),
+        404: errorSchemas.notFound,
+      },
+    },
+    create: {
+      method: 'POST' as const,
+      path: '/api/opportunities/:id/documents',
+      input: insertOpportunityDocumentSchema,
+      responses: {
+        201: z.custom<typeof files.$inferSelect>(),
+        400: errorSchemas.validation,
+        404: errorSchemas.notFound,
+      },
+    },
+    delete: {
+      method: 'DELETE' as const,
+      path: '/api/opportunities/:id/documents/:fileId',
+      responses: {
+        204: z.void(),
         404: errorSchemas.notFound,
       },
     },

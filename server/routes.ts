@@ -5,8 +5,9 @@ import { api } from "@shared/routes";
 import { z } from "zod";
 import { setupAuth, registerAuthRoutes, isAuthenticated } from "./replit_integrations/auth";
 import { registerObjectStorageRoutes, ObjectStorageService } from "./replit_integrations/object_storage";
-import type { User } from "@shared/schema";
+import type { User, FileMetadata } from "@shared/schema";
 import { insertAuthorizedUserSchema, insertRfiSchema, insertTaskTitleSchema } from "@shared/schema";
+import { getDocumentCategoryLabel } from "@shared/documentCategory";
 import { isAdmin, isAuthorizedUser } from "./middleware/auth";
 import { sendInviteEmail } from "./services/email";
 import { handleProjectStatusChange } from "./services/workflowEngine";
@@ -1428,6 +1429,79 @@ export async function registerRoutes(
       if (err instanceof z.ZodError) return res.status(400).json({ message: err.errors[0].message });
       throw err;
     }
+  });
+
+  // ---------- Opportunity Documents ----------
+
+  app.get(api.opportunityDocuments.list.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
+    const opp = await storage.getOpportunity(Number(req.params.id));
+    if (!opp) return res.status(404).json({ message: "Opportunity not found" });
+    res.json(await storage.getDocumentsForEntity("opportunity", opp.id));
+  });
+
+  app.post(api.opportunityDocuments.create.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
+    try {
+      const opp = await storage.getOpportunity(Number(req.params.id));
+      if (!opp) return res.status(404).json({ message: "Opportunity not found" });
+      const input = api.opportunityDocuments.create.input.parse(req.body);
+      const user = await getCurrentUser(req);
+      if (!user) return res.status(401).json({ message: "User not found" });
+      const actor = actorFromUser(user);
+
+      let previous: FileMetadata | undefined;
+      if (input.supersedesId) {
+        previous = await storage.getFile(input.supersedesId);
+        if (!previous || previous.relatedEntityType !== "opportunity" || previous.relatedEntityId !== opp.id) {
+          return res.status(400).json({ message: "Document being superseded does not belong to this opportunity" });
+        }
+      }
+
+      const { supersedesId, ...rest } = input;
+      const doc = await storage.createDocumentVersion({
+        ...rest,
+        description: input.description || null,
+        contentType: input.contentType || null,
+        size: input.size ?? null,
+        projectId: null,
+        relatedEntityType: "opportunity",
+        relatedEntityId: opp.id,
+        uploadedByUserId: user.id,
+        supersedesId: supersedesId ?? null,
+      });
+
+      await logActivity({
+        entityType: "opportunity_document", entityId: doc.id, actor,
+        action: previous ? "document_version_added" : "document_uploaded",
+        description: previous
+          ? `${actor.name} uploaded a new version (v${doc.documentVersion}) of "${doc.name}" for ${opportunityDisplay(opp)}, superseding the previous version.`
+          : `${actor.name} uploaded "${doc.name}" (${getDocumentCategoryLabel(doc.category)}) for ${opportunityDisplay(opp)}.`,
+        metadata: { customerId: opp.customerId, opportunityId: opp.id, category: doc.category, documentGroupId: doc.documentGroupId },
+      });
+
+      res.status(201).json(doc);
+    } catch (err) {
+      if (err instanceof z.ZodError) return res.status(400).json({ message: err.errors[0].message });
+      if (err instanceof Error) return res.status(400).json({ message: err.message });
+      throw err;
+    }
+  });
+
+  app.delete(api.opportunityDocuments.delete.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
+    const opp = await storage.getOpportunity(Number(req.params.id));
+    if (!opp) return res.status(404).json({ message: "Opportunity not found" });
+    const doc = await storage.getFile(Number(req.params.fileId));
+    if (!doc || doc.relatedEntityType !== "opportunity" || doc.relatedEntityId !== opp.id) {
+      return res.status(404).json({ message: "Document not found" });
+    }
+    const user = await getCurrentUser(req);
+    const actor = actorFromUser(user);
+    await storage.deleteDocumentVersion(doc.id);
+    await logActivity({
+      entityType: "opportunity_document", entityId: doc.id, actor, action: "document_deleted",
+      description: `${actor.name} deleted "${doc.name}" (${getDocumentCategoryLabel(doc.category)}) from ${opportunityDisplay(opp)}.`,
+      metadata: { customerId: opp.customerId, opportunityId: opp.id, category: doc.category },
+    });
+    res.status(204).send();
   });
 
   // ---------- Opportunity Contacts ----------

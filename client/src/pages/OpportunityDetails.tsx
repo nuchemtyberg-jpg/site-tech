@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link, useParams, useSearch } from "wouter";
 import { format } from "date-fns";
-import { Archive, ArchiveRestore, ArrowLeft, Calendar, CheckCircle2, Clock, Loader2, Mail, MapPin, MessageSquare, Pencil, Phone, Plus, Star, Target, Trash2, User } from "lucide-react";
+import { Archive, ArchiveRestore, ArrowLeft, Calendar, CheckCircle2, ChevronDown, ChevronRight, Clock, Download, FileText, Loader2, Mail, MapPin, MessageSquare, Pencil, Phone, Plus, Star, Target, Trash2, Upload, User } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -14,20 +14,23 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { OpportunityFormDialog } from "@/components/OpportunityFormDialog";
+import { NativeFileUploader } from "@/components/NativeFileUploader";
 import {
   useAddOpportunityContact, useArchiveOpportunity, useChangeOpportunityStatus, useCreateOpportunityCommunication,
-  useCreateOpportunityTodo, useOpportunity, useOpportunityActivity, useOpportunityCommunications,
-  useOpportunityContacts, useOpportunityStatusHistory, useOpportunityTodos, useRemoveOpportunityContact,
-  useUpdateOpportunityContact,
+  useCreateOpportunityDocument, useCreateOpportunityTodo, useDeleteOpportunityDocument, useOpportunity,
+  useOpportunityActivity, useOpportunityCommunications, useOpportunityContacts, useOpportunityDocuments,
+  useOpportunityStatusHistory, useOpportunityTodos, useRemoveOpportunityContact, useUpdateOpportunityContact,
 } from "@/hooks/use-opportunities";
 import { extractApiError, useAppUsers, useCompleteTodo, userDisplayName } from "@/hooks/use-todos";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
+import { getProxyUrlWithFilename } from "@/lib/utils";
 import {
   getOpportunityStatusLabel, labelFor, OPPORTUNITY_CONTACT_ROLES, OPPORTUNITY_LOST_REASONS,
   OPPORTUNITY_NO_BID_REASONS, OPPORTUNITY_PROJECT_TYPES, OPPORTUNITY_SOURCES, OPPORTUNITY_STATUSES,
 } from "@shared/opportunityStatus";
-import type { Contact, OpportunityContactWithDetails } from "@shared/schema";
+import { DOCUMENT_CATEGORY_LABELS, DOCUMENT_CATEGORY_VALUES, getDocumentCategoryLabel } from "@shared/documentCategory";
+import type { Contact, FileWithUploader, OpportunityContactWithDetails } from "@shared/schema";
 
 export default function OpportunityDetails() {
   const { id } = useParams<{ id: string }>();
@@ -43,11 +46,14 @@ export default function OpportunityDetails() {
   const { data: communications = [] } = useOpportunityCommunications(opportunityId);
   const { data: activity = [] } = useOpportunityActivity(opportunityId);
   const { data: history = [] } = useOpportunityStatusHistory(opportunityId);
+  const { data: documents = [] } = useOpportunityDocuments(opportunityId);
   const archive = useArchiveOpportunity();
   const [editOpen, setEditOpen] = useState(false);
   const [statusOpen, setStatusOpen] = useState(false);
   const [todoOpen, setTodoOpen] = useState(false);
   const [communicationOpen, setCommunicationOpen] = useState(false);
+  const [documentUploadOpen, setDocumentUploadOpen] = useState(false);
+  const [versionTarget, setVersionTarget] = useState<FileWithUploader | null>(null);
 
   if (isLoading) return <div className="py-20 text-center"><Loader2 className="w-7 h-7 animate-spin mx-auto" /></div>;
   if (!opportunity) return <div className="py-20 text-center"><p className="font-semibold">Opportunity not found</p><Link href={backHref}><Button className="mt-4" variant="outline">Back to Bidding</Button></Link></div>;
@@ -70,13 +76,14 @@ export default function OpportunityDetails() {
 
       <Tabs defaultValue="overview" className="min-w-0">
         <TabsList className="w-full justify-start h-auto min-h-11 overflow-x-auto">
-          {["overview", "contacts", "todos", "communications", "activity"].map(tab => <TabsTrigger key={tab} value={tab} className="min-h-10 capitalize shrink-0">{tab}{tab === "contacts" ? ` (${contacts.length})` : tab === "todos" ? ` (${todos.length})` : tab === "communications" ? ` (${communications.length})` : ""}</TabsTrigger>)}
+          {["overview", "documents", "contacts", "todos", "communications", "activity"].map(tab => <TabsTrigger key={tab} value={tab} className="min-h-10 capitalize shrink-0">{tab}{tab === "documents" ? ` (${documents.length})` : tab === "contacts" ? ` (${contacts.length})` : tab === "todos" ? ` (${todos.length})` : tab === "communications" ? ` (${communications.length})` : ""}</TabsTrigger>)}
         </TabsList>
         <TabsContent value="overview" className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <Card><CardHeader><CardTitle className="text-base">Bid details</CardTitle></CardHeader><CardContent className="text-sm space-y-3"><Detail label="RFP received" value={opportunity.rfpReceivedDate} /><Detail label="Estimated start" value={opportunity.estimatedStartDate} /><Detail label="Source" value={labelFor(OPPORTUNITY_SOURCES, opportunity.source)} /><Detail label="Project type" value={labelFor(OPPORTUNITY_PROJECT_TYPES, opportunity.projectType)} />{address && <p className="flex gap-2"><MapPin className="w-4 h-4 shrink-0 text-muted-foreground" />{address}</p>}</CardContent></Card>
           <Card><CardHeader><CardTitle className="text-base">Scope & notes</CardTitle></CardHeader><CardContent className="space-y-4 text-sm"><section><p className="text-xs text-muted-foreground mb-1">Scope summary</p><p className="whitespace-pre-wrap">{opportunity.scopeSummary || "No scope summary yet."}</p></section><section><p className="text-xs text-muted-foreground mb-1">Internal notes</p><p className="whitespace-pre-wrap">{opportunity.internalNotes || "No internal notes yet."}</p></section></CardContent></Card>
           {["lost", "no_bid", "awarded"].includes(opportunity.status) && <Card className="lg:col-span-2"><CardHeader><CardTitle className="text-base">Outcome</CardTitle></CardHeader><CardContent className="text-sm">{opportunity.status === "lost" && <p>Lost reason: {labelFor(OPPORTUNITY_LOST_REASONS, opportunity.lostReason)}{opportunity.lostReasonNotes && ` — ${opportunity.lostReasonNotes}`}</p>}{opportunity.status === "no_bid" && <p>No Bid reason: {labelFor(OPPORTUNITY_NO_BID_REASONS, opportunity.noBidReason)}{opportunity.noBidReasonNotes && ` — ${opportunity.noBidReasonNotes}`}</p>}{opportunity.status === "awarded" && <p>Awarded {opportunity.awardDate || ""}</p>}</CardContent></Card>}
         </TabsContent>
+        <TabsContent value="documents"><DocumentsTab documents={documents} onUpload={() => { setVersionTarget(null); setDocumentUploadOpen(true); }} onNewVersion={doc => { setVersionTarget(doc); setDocumentUploadOpen(true); }} opportunityId={opportunity.id} /></TabsContent>
         <TabsContent value="contacts"><ContactsTab opportunityId={opportunity.id} customerId={opportunity.customerId} contacts={contacts} /></TabsContent>
         <TabsContent value="todos"><TodosTab opportunityId={opportunity.id} todos={todos} onAdd={() => setTodoOpen(true)} /></TabsContent>
         <TabsContent value="communications"><CommunicationsTab communications={communications} onAdd={() => setCommunicationOpen(true)} /></TabsContent>
@@ -86,6 +93,7 @@ export default function OpportunityDetails() {
       <OpportunityStatusDialog open={statusOpen} onOpenChange={setStatusOpen} id={opportunity.id} current={opportunity.status} />
       <TodoDialog open={todoOpen} onOpenChange={setTodoOpen} opportunityId={opportunity.id} />
       <CommunicationDialog open={communicationOpen} onOpenChange={setCommunicationOpen} opportunityId={opportunity.id} contacts={contacts} />
+      <DocumentUploadDialog key={versionTarget?.id ?? "new"} open={documentUploadOpen} onOpenChange={setDocumentUploadOpen} opportunityId={opportunity.id} versionTarget={versionTarget} />
     </div>
   );
 }
@@ -131,4 +139,202 @@ function CommunicationsTab({ communications, onAdd }: { communications: any[]; o
 function CommunicationDialog({ open, onOpenChange, opportunityId, contacts }: { open: boolean; onOpenChange: (v: boolean) => void; opportunityId: number; contacts: any[] }) {
   const create = useCreateOpportunityCommunication(opportunityId); const [type, setType] = useState("phone"); const [subject, setSubject] = useState(""); const [notes, setNotes] = useState(""); const [contactId, setContactId] = useState("none"); const [followUpDate, setFollowUpDate] = useState("");
   return <Dialog open={open} onOpenChange={onOpenChange}><DialogContent><DialogHeader><DialogTitle>Log Communication</DialogTitle></DialogHeader><div className="space-y-3"><div><Label>Type</Label><Select value={type} onValueChange={setType}><SelectTrigger className="min-h-11"><SelectValue /></SelectTrigger><SelectContent>{["phone", "email", "meeting", "site_visit", "other"].map(v => <SelectItem key={v} value={v}>{v.replace("_", " ")}</SelectItem>)}</SelectContent></Select></div><div><Label>Contact</Label><Select value={contactId} onValueChange={setContactId}><SelectTrigger className="min-h-11"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="none">No contact</SelectItem>{contacts.map(c => <SelectItem key={c.contactId} value={String(c.contactId)}>{c.firstName} {c.lastName}</SelectItem>)}</SelectContent></Select></div><div><Label>Subject</Label><Input className="min-h-11" value={subject} onChange={e => setSubject(e.target.value)} /></div><div><Label>Notes *</Label><Textarea value={notes} onChange={e => setNotes(e.target.value)} /></div><div><Label>Follow-up date</Label><Input className="min-h-11" type="date" value={followUpDate} onChange={e => setFollowUpDate(e.target.value)} /></div></div><DialogFooter><Button className="min-h-11" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button><Button className="min-h-11" disabled={!notes.trim() || create.isPending} onClick={() => create.mutate({ type, subject: subject || null, notes: notes.trim(), contactId: contactId === "none" ? null : Number(contactId), contactDate: new Date().toISOString(), followUpDate: followUpDate || null }, { onSuccess: () => { onOpenChange(false); setNotes(""); setSubject(""); } })}>Log communication</Button></DialogFooter></DialogContent></Dialog>;
+}
+
+// ---------- Documents ----------
+
+type DocumentGroup = { groupId: number; current: FileWithUploader; history: FileWithUploader[] };
+
+function groupDocuments(documents: FileWithUploader[]): DocumentGroup[] {
+  const byGroup = new Map<number, FileWithUploader[]>();
+  for (const doc of documents) {
+    const key = doc.documentGroupId ?? doc.id;
+    if (!byGroup.has(key)) byGroup.set(key, []);
+    byGroup.get(key)!.push(doc);
+  }
+  const groups: DocumentGroup[] = [];
+  for (const [groupId, versions] of Array.from(byGroup.entries())) {
+    versions.sort((a, b) => b.documentVersion - a.documentVersion);
+    const current = versions.find(v => v.documentStatus === "current") || versions[0];
+    groups.push({ groupId, current, history: versions.filter(v => v.id !== current.id) });
+  }
+  return groups;
+}
+
+function DocumentsTab({ documents, onUpload, onNewVersion, opportunityId }: { documents: FileWithUploader[]; onUpload: () => void; onNewVersion: (doc: FileWithUploader) => void; opportunityId: number }) {
+  const remove = useDeleteOpportunityDocument(opportunityId);
+  const { toast } = useToast();
+  const [categoryFilter, setCategoryFilter] = useState("all");
+
+  const groups = groupDocuments(documents);
+  const filtered = categoryFilter === "all" ? groups : groups.filter(g => (g.current.category || "other") === categoryFilter);
+
+  const byCategory = new Map<string, DocumentGroup[]>();
+  for (const g of filtered) {
+    const cat = g.current.category || "other";
+    if (!byCategory.has(cat)) byCategory.set(cat, []);
+    byCategory.get(cat)!.push(g);
+  }
+  const categoriesPresent = DOCUMENT_CATEGORY_VALUES.filter(c => byCategory.has(c));
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-col sm:flex-row gap-2 sm:items-center sm:justify-between">
+        <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+          <SelectTrigger className="min-h-11 w-full sm:w-56"><SelectValue placeholder="Filter by category" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All categories</SelectItem>
+            {DOCUMENT_CATEGORY_VALUES.map(c => <SelectItem key={c} value={c}>{DOCUMENT_CATEGORY_LABELS[c]}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <Button className="min-h-11" onClick={onUpload}><Upload className="w-4 h-4 mr-2" />Upload document</Button>
+      </div>
+      {groups.length === 0 ? (
+        <Card><Empty text="No documents uploaded for this opportunity yet." /></Card>
+      ) : categoriesPresent.length === 0 ? (
+        <Card><Empty text="No documents in this category." /></Card>
+      ) : (
+        <div className="space-y-5">
+          {categoriesPresent.map(cat => (
+            <div key={cat} className="space-y-2">
+              <h3 className="text-sm font-semibold text-muted-foreground">{DOCUMENT_CATEGORY_LABELS[cat]} ({byCategory.get(cat)!.length})</h3>
+              <div className="space-y-2">
+                {byCategory.get(cat)!.map(group => (
+                  <DocumentGroupCard
+                    key={group.groupId}
+                    group={group}
+                    onNewVersion={() => onNewVersion(group.current)}
+                    onDelete={fileId => remove.mutate(fileId, { onError: e => toast({ title: "Couldn't delete document", description: extractApiError(e, "Try again."), variant: "destructive" }) })}
+                  />
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DocumentGroupCard({ group, onNewVersion, onDelete }: { group: DocumentGroup; onNewVersion: () => void; onDelete: (fileId: number) => void }) {
+  const [expanded, setExpanded] = useState(false);
+  const { current, history } = group;
+  return (
+    <Card>
+      <CardContent className="p-4 space-y-2">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:justify-between">
+          <div className="min-w-0 flex items-start gap-2">
+            <FileText className="w-4 h-4 shrink-0 text-muted-foreground mt-0.5" />
+            <div className="min-w-0">
+              <p className="font-medium break-words">{current.name}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                v{current.documentVersion} · {current.uploaderName || "Unknown"} · {current.createdAt ? format(new Date(current.createdAt), "MMM d, yyyy") : ""}
+              </p>
+              {current.description && <p className="text-sm text-muted-foreground mt-1 whitespace-pre-wrap">{current.description}</p>}
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2 shrink-0">
+            <a className="inline-flex" href={getProxyUrlWithFilename(current.objectPath, current.name, true)} target="_blank" rel="noreferrer"><Button className="min-h-11" variant="outline" size="sm"><Download className="w-4 h-4 mr-1" />Download</Button></a>
+            <Button className="min-h-11" variant="outline" size="sm" onClick={onNewVersion}><Upload className="w-4 h-4 mr-1" />New version</Button>
+            <Button className="min-h-11 min-w-11" variant="ghost" size="icon" onClick={() => onDelete(current.id)}><Trash2 className="w-4 h-4 text-destructive" /></Button>
+          </div>
+        </div>
+        {history.length > 0 && (
+          <div>
+            <button className="min-h-11 inline-flex items-center text-xs text-muted-foreground hover:text-foreground" onClick={() => setExpanded(v => !v)} data-testid={`button-toggle-history-${current.id}`}>
+              {expanded ? <ChevronDown className="w-3.5 h-3.5 mr-1" /> : <ChevronRight className="w-3.5 h-3.5 mr-1" />}
+              {history.length} earlier version{history.length > 1 ? "s" : ""}
+            </button>
+            {expanded && (
+              <div className="mt-2 space-y-2 border-l pl-3">
+                {history.map(v => (
+                  <div key={v.id} className="flex flex-col sm:flex-row sm:items-center gap-2 sm:justify-between text-sm">
+                    <div className="min-w-0">
+                      <p className="break-words">{v.name} <Badge variant="outline" className="ml-1">v{v.documentVersion}</Badge> <Badge variant="secondary" className="ml-1">Superseded</Badge></p>
+                      <p className="text-xs text-muted-foreground">{v.uploaderName || "Unknown"} · {v.createdAt ? format(new Date(v.createdAt), "MMM d, yyyy") : ""}</p>
+                    </div>
+                    <a href={getProxyUrlWithFilename(v.objectPath, v.name, true)} target="_blank" rel="noreferrer"><Button className="min-h-11" variant="ghost" size="sm"><Download className="w-4 h-4 mr-1" />Download</Button></a>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function DocumentUploadDialog({ open, onOpenChange, opportunityId, versionTarget }: { open: boolean; onOpenChange: (v: boolean) => void; opportunityId: number; versionTarget: FileWithUploader | null }) {
+  const create = useCreateOpportunityDocument(opportunityId);
+  const { toast } = useToast();
+  const [category, setCategory] = useState(versionTarget?.category || "other");
+  const [description, setDescription] = useState("");
+  const [uploaded, setUploaded] = useState<{ name: string; objectPath: string; size: number; type: string } | null>(null);
+
+  const reset = () => { setDescription(""); setUploaded(null); setCategory(versionTarget?.category || "other"); };
+
+  const submit = () => {
+    if (!uploaded) return;
+    create.mutate({
+      name: uploaded.name, objectPath: uploaded.objectPath, contentType: uploaded.type, size: uploaded.size,
+      category, description: description.trim() || null, supersedesId: versionTarget?.id ?? null,
+    }, {
+      onSuccess: () => { toast({ title: versionTarget ? "New version uploaded" : "Document uploaded" }); reset(); onOpenChange(false); },
+      onError: e => toast({ title: "Couldn't upload document", description: extractApiError(e, "Try again."), variant: "destructive" }),
+    });
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={v => { if (!v) reset(); onOpenChange(v); }}>
+      <DialogContent>
+        <DialogHeader><DialogTitle>{versionTarget ? `New version of "${versionTarget.name}"` : "Upload Document"}</DialogTitle></DialogHeader>
+        <div className="space-y-3">
+          <div>
+            <Label>File *</Label>
+            {uploaded ? (
+              <div className="flex items-center gap-2 mt-1 p-2 rounded bg-muted/50 text-sm">
+                <FileText className="w-4 h-4 shrink-0 text-muted-foreground" />
+                <span className="truncate flex-1">{uploaded.name}</span>
+                <Button variant="ghost" size="sm" className="min-h-11" onClick={() => setUploaded(null)}>Remove</Button>
+              </div>
+            ) : (
+              <NativeFileUploader
+                maxNumberOfFiles={1}
+                uploadTarget="object-storage"
+                buttonVariant="outline"
+                buttonClassName="min-h-11 mt-1 w-full"
+                onUploadComplete={files => {
+                  const f = files[0];
+                  if (f?.objectPath) setUploaded({ name: f.name, objectPath: f.objectPath, size: f.size, type: f.type });
+                }}
+              >
+                Choose file
+              </NativeFileUploader>
+            )}
+          </div>
+          {!versionTarget && (
+            <div>
+              <Label>Category *</Label>
+              <Select value={category} onValueChange={setCategory}>
+                <SelectTrigger className="min-h-11"><SelectValue /></SelectTrigger>
+                <SelectContent>{DOCUMENT_CATEGORY_VALUES.map(c => <SelectItem key={c} value={c}>{DOCUMENT_CATEGORY_LABELS[c]}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+          )}
+          <div>
+            <Label>Description</Label>
+            <Textarea value={description} onChange={e => setDescription(e.target.value)} placeholder="Optional notes about this document" />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button className="min-h-11" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+          <Button className="min-h-11" disabled={!uploaded || create.isPending} onClick={submit}>
+            {create.isPending && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
+            {versionTarget ? "Upload new version" : "Upload"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
 }

@@ -17,6 +17,7 @@ import {
 export * from "./models/auth";
 export * from "./projectStatus";
 export * from "./opportunityStatus";
+export * from "./documentCategory";
 
 // Tracks one-time data migrations. This table is also declared here so
 // drizzle-kit recognizes it as application-owned and never offers to drop it.
@@ -820,7 +821,11 @@ export type PaginatedPhotosResponse = {
 // Note: albumId and takenAt are deprecated - photos now stored in photos table
 export const files = pgTable("files", {
   id: serial("id").primaryKey(),
-  projectId: integer("project_id").notNull(),
+  // Nullable so a file can instead (or additionally, in the future) hang off
+  // a non-Project entity via relatedEntityType/relatedEntityId below (e.g. an
+  // Opportunity's bidding documents). Existing rows are backfilled with their
+  // project so nothing regresses.
+  projectId: integer("project_id"),
   folderId: integer("folder_id"),
   albumId: integer("album_id"), // DEPRECATED - kept for migration
   name: text("name").notNull(),
@@ -830,13 +835,40 @@ export const files = pgTable("files", {
   takenAt: timestamp("taken_at"), // DEPRECATED - kept for migration
   tags: text("tags").array(), // Document tags for categorization
   starred: boolean("starred").default(false), // Starred/favorite files
+  // Polymorphic link mirroring the `todos` pattern, e.g. ('opportunity', 12).
+  // Lets a document be associated with an entity other than (or in addition
+  // to) a Project, and lets a future "convert to Project" flow add a Project
+  // link without severing the historical Opportunity link.
+  relatedEntityType: text("related_entity_type"),
+  relatedEntityId: integer("related_entity_id"),
+  // Document categorization + version history (used by Opportunity documents
+  // today; open to other modules later). Category list is fixed for now —
+  // see DOCUMENT_CATEGORY_VALUES for where admin configuration would plug in.
+  category: text("category"),
+  description: text("description"),
+  uploadedByUserId: varchar("uploaded_by_user_id"),
+  // All versions of the same logical document share a documentGroupId (the id
+  // of the first-uploaded version). documentVersion increments per upload;
+  // documentStatus flips the prior version to 'superseded' without deleting it.
+  documentGroupId: integer("document_group_id"),
+  documentVersion: integer("document_version").notNull().default(1),
+  documentStatus: text("document_status").notNull().default("current"), // current, superseded
   createdAt: timestamp("created_at").defaultNow(),
   deletedAt: timestamp("deleted_at"), // Soft delete support
-});
+}, (table) => [
+  index("idx_files_related_entity").on(table.relatedEntityType, table.relatedEntityId),
+  index("idx_files_document_group").on(table.documentGroupId),
+]);
 
-export const insertFileSchema = createInsertSchema(files).omit({ id: true, createdAt: true, deletedAt: true });
+export const insertFileSchema = createInsertSchema(files).omit({
+  id: true, createdAt: true, deletedAt: true,
+  documentGroupId: true, documentVersion: true, documentStatus: true,
+});
 export type FileMetadata = typeof files.$inferSelect;
 export type InsertFileMetadata = z.infer<typeof insertFileSchema>;
+
+// File enriched with uploader display name for document lists.
+export type FileWithUploader = FileMetadata & { uploaderName: string | null };
 
 export const userOutlookConnections = pgTable("user_outlook_connections", {
   id: serial("id").primaryKey(),

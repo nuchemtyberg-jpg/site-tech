@@ -46,3 +46,4 @@ echo "Test server is up."
 TEST_BASE_URL="$BASE" npx tsx scripts/test-http-api.ts
 TEST_BASE_URL="$BASE" npx tsx scripts/test-project-contacts-api.ts
 TEST_BASE_URL="$BASE" npx tsx scripts/test-opportunities-api.ts
+TEST_BASE_URL="$BASE" npx tsx scripts/test-opportunity-documents-api.ts
