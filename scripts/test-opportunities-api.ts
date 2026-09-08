@@ -9,7 +9,7 @@ import { sql } from "drizzle-orm";
 import { storage } from "../server/storage";
 import { handleOpportunityStatusChange } from "../server/services/workflowEngine";
 
-const BASE = "http://localhost:5000";
+const BASE = process.env.TEST_BASE_URL ?? "http://localhost:5000";
 const USER_ID = "mobile-user-001"; // admin, approved
 
 let failures = 0;

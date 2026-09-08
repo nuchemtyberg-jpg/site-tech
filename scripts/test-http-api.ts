@@ -7,7 +7,7 @@ import crypto from "node:crypto";
 import { db } from "../server/db";
 import { sql } from "drizzle-orm";
 
-const BASE = "http://localhost:5000";
+const BASE = process.env.TEST_BASE_URL ?? "http://localhost:5000";
 const USER_ID = "mobile-user-001"; // admin, approved
 const OTHER_USER_ID = "616245";    // another approved admin (gets assignment notifications)
 const REGULAR_ID = "__http_regular__"; // temp approved user with role 'user' (non-manager)

@@ -7,7 +7,7 @@ import crypto from "node:crypto";
 import { db } from "../server/db";
 import { sql } from "drizzle-orm";
 
-const BASE = "http://localhost:5000";
+const BASE = process.env.TEST_BASE_URL ?? "http://localhost:5000";
 const USER_ID = "mobile-user-001"; // admin, approved
 
 let failures = 0;
