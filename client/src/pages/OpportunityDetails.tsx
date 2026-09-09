@@ -165,7 +165,7 @@ function groupDocuments(documents: FileWithUploader[]): DocumentGroup[] {
   return groups;
 }
 
-function DocumentsTab({ documents, onUpload, onNewVersion, opportunityId }: { documents: FileWithUploader[]; onUpload: () => void; onNewVersion: (doc: FileWithUploader) => void; opportunityId: number }) {
+export function DocumentsTab({ documents, onUpload, onNewVersion, opportunityId }: { documents: FileWithUploader[]; onUpload: () => void; onNewVersion: (doc: FileWithUploader) => void; opportunityId: number }) {
   const { data: configuredCategories = [] } = useDocumentCategories();
   const remove = useDeleteOpportunityDocument(opportunityId);
   const { toast } = useToast();
@@ -275,7 +275,7 @@ function DocumentGroupCard({ group, onNewVersion, onDelete }: { group: DocumentG
   );
 }
 
-function DocumentUploadDialog({ open, onOpenChange, opportunityId, versionTarget }: { open: boolean; onOpenChange: (v: boolean) => void; opportunityId: number; versionTarget: FileWithUploader | null }) {
+export function DocumentUploadDialog({ open, onOpenChange, opportunityId, versionTarget }: { open: boolean; onOpenChange: (v: boolean) => void; opportunityId: number; versionTarget: FileWithUploader | null }) {
   const { data: categories = [] } = useDocumentCategories();
   const create = useCreateOpportunityDocument(opportunityId);
   const { toast } = useToast();
