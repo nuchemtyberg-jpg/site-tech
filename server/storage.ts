@@ -9,7 +9,7 @@ import {
   payApplications, payApplicationItems,
   todos, todoUpdates, workflowRules, workflowExecutions, notifications, activityLogs, projectStatusHistory,
   opportunities, opportunityContacts, opportunityStatusHistory,
-  scopeCategories, scopeItemTemplates, opportunityScopeItems,
+  scopeCategories, scopeItemTemplates, opportunityScopeItems, documentCategories,
   type Opportunity, type InsertOpportunity, type OpportunityWithDetails, type OpportunityDashboardResult,
   type OpportunityContact, type InsertOpportunityContact, type OpportunityContactWithDetails,
   type OpportunityStatusHistory, type InsertOpportunityStatusHistory,
@@ -35,8 +35,10 @@ import {
   type Rfi, type RfiResponse, type UserOutlookConnection, type ProjectDailyReportRecipient, type CompanyFolder, type CompanyFile,
   type PayApplication, type PayApplicationItem, type TaskTitle,
   type ScheduleEntry,
-  type User, type UpsertUser, type AuthorizedUser
+  type User, type UpsertUser, type AuthorizedUser,
+  type DocumentCategoryRecord, type InsertDocumentCategory
 } from "@shared/schema";
+import { DEFAULT_DOCUMENT_CATEGORIES } from "@shared/documentCategory";
 import { db } from "./db";
 import { eq, desc, asc, and, or, isNull, isNotNull, sql, lt, gt, gte, lte, ne, ilike, inArray, notInArray, aliasedTable } from "drizzle-orm";
 import {
@@ -56,6 +58,11 @@ function generateProjectEmailSlug(name: string, id: number): string {
 }
 
 export interface IStorage {
+  getDocumentCategories(): Promise<DocumentCategoryRecord[]>;
+  getDocumentCategoryByKey(key: string): Promise<DocumentCategoryRecord | undefined>;
+  createDocumentCategory(category: InsertDocumentCategory): Promise<DocumentCategoryRecord>;
+  updateDocumentCategory(id: number, updates: Partial<Pick<DocumentCategoryRecord, "name" | "isActive">>): Promise<DocumentCategoryRecord | undefined>;
+  reorderDocumentCategories(orderedIds: number[]): Promise<void>;
   // Auth
   getUser(id: string): Promise<User | undefined>;
   upsertUser(user: UpsertUser): Promise<User>;
@@ -519,6 +526,58 @@ export type TodoFilters = {
 };
 
 export class DatabaseStorage implements IStorage {
+  private documentCategoriesSeeded = false;
+
+  private async ensureDocumentCategories(): Promise<void> {
+    if (this.documentCategoriesSeeded) return;
+    await db.transaction(async (tx) => {
+      for (let i = 0; i < DEFAULT_DOCUMENT_CATEGORIES.length; i++) {
+        const category = DEFAULT_DOCUMENT_CATEGORIES[i];
+        await tx.insert(documentCategories).values({
+          key: category.key,
+          name: category.name,
+          displayOrder: (i + 1) * 10,
+          isActive: true,
+        }).onConflictDoNothing({ target: documentCategories.key });
+      }
+    });
+    this.documentCategoriesSeeded = true;
+  }
+
+  async getDocumentCategories(): Promise<DocumentCategoryRecord[]> {
+    await this.ensureDocumentCategories();
+    return db.select().from(documentCategories).orderBy(asc(documentCategories.displayOrder), asc(documentCategories.id));
+  }
+
+  async getDocumentCategoryByKey(key: string): Promise<DocumentCategoryRecord | undefined> {
+    await this.ensureDocumentCategories();
+    const [category] = await db.select().from(documentCategories).where(eq(documentCategories.key, key));
+    return category;
+  }
+
+  async createDocumentCategory(category: InsertDocumentCategory): Promise<DocumentCategoryRecord> {
+    await this.ensureDocumentCategories();
+    const [result] = await db.insert(documentCategories).values(category).returning();
+    return result;
+  }
+
+  async updateDocumentCategory(id: number, updates: Partial<Pick<DocumentCategoryRecord, "name" | "isActive">>): Promise<DocumentCategoryRecord | undefined> {
+    const [result] = await db.update(documentCategories)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(documentCategories.id, id))
+      .returning();
+    return result;
+  }
+
+  async reorderDocumentCategories(orderedIds: number[]): Promise<void> {
+    await db.transaction(async (tx) => {
+      for (let i = 0; i < orderedIds.length; i++) {
+        await tx.update(documentCategories)
+          .set({ displayOrder: (i + 1) * 10, updatedAt: new Date() })
+          .where(eq(documentCategories.id, orderedIds[i]));
+      }
+    });
+  }
   // Auth
   async getUser(id: string): Promise<User | undefined> {
     const [user] = await db.select().from(users).where(eq(users.id, id));

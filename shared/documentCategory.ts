@@ -1,39 +1,28 @@
-// Fixed initial category list for Opportunity (and future) documents.
-// Admin-managed/configurable categories are out of scope for now — if that
-// lands later, this is the single place to swap a static list for a DB-backed
-// one without touching callers (they all import DOCUMENT_CATEGORY_VALUES /
-// DOCUMENT_CATEGORY_LABELS from here).
-export const DOCUMENT_CATEGORY_VALUES = [
-  "rfp",
-  "plans",
-  "specifications",
-  "addenda",
-  "geotechnical",
-  "civil",
-  "architectural",
-  "structural",
-  "bid_forms",
-  "vendor_quote",
-  "correspondence",
-  "other",
+export const DEFAULT_DOCUMENT_CATEGORIES = [
+  { key: "rfp", name: "RFP" },
+  { key: "plans", name: "Plans" },
+  { key: "specifications", name: "Specifications" },
+  { key: "addenda", name: "Addenda" },
+  { key: "geotechnical", name: "Geotechnical" },
+  { key: "civil", name: "Civil" },
+  { key: "architectural", name: "Architectural" },
+  { key: "structural", name: "Structural" },
+  { key: "bid_forms", name: "Bid Forms" },
+  { key: "vendor_quote", name: "Vendor Quote" },
+  { key: "correspondence", name: "Correspondence" },
+  { key: "other", name: "Other" },
 ] as const;
+
+export const DOCUMENT_CATEGORY_VALUES = DEFAULT_DOCUMENT_CATEGORIES.map(category => category.key) as [
+  (typeof DEFAULT_DOCUMENT_CATEGORIES)[number]["key"],
+  ...(typeof DEFAULT_DOCUMENT_CATEGORIES)[number]["key"][],
+];
 
 export type DocumentCategory = (typeof DOCUMENT_CATEGORY_VALUES)[number];
 
-export const DOCUMENT_CATEGORY_LABELS: Record<DocumentCategory, string> = {
-  rfp: "RFP",
-  plans: "Plans",
-  specifications: "Specifications",
-  addenda: "Addenda",
-  geotechnical: "Geotechnical",
-  civil: "Civil",
-  architectural: "Architectural",
-  structural: "Structural",
-  bid_forms: "Bid Forms",
-  vendor_quote: "Vendor Quote",
-  correspondence: "Correspondence",
-  other: "Other",
-};
+export const DOCUMENT_CATEGORY_LABELS = Object.fromEntries(
+  DEFAULT_DOCUMENT_CATEGORIES.map(category => [category.key, category.name]),
+) as Record<DocumentCategory, string>;
 
 export function getDocumentCategoryLabel(category: string | null | undefined): string {
   if (!category) return "Uncategorized";

@@ -27,6 +27,29 @@ export const dataMigrations = pgTable("data_migrations", {
   appliedAt: timestamp("applied_at").notNull().defaultNow(),
 });
 
+export const documentCategories = pgTable("document_categories", {
+  id: serial("id").primaryKey(),
+  key: text("key").notNull(),
+  name: text("name").notNull(),
+  displayOrder: integer("display_order").notNull(),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => [
+  uniqueIndex("document_categories_key_unique").on(table.key),
+  index("document_categories_order_idx").on(table.displayOrder),
+]);
+
+export const insertDocumentCategorySchema = createInsertSchema(documentCategories)
+  .omit({ id: true, createdAt: true, updatedAt: true })
+  .extend({
+    key: z.string().trim().min(1).max(80).regex(/^[a-z0-9_]+$/, "Key must use lowercase letters, numbers, and underscores"),
+    name: z.string().trim().min(1, "Category name is required").max(100),
+    displayOrder: z.number().int().positive(),
+  });
+export type DocumentCategoryRecord = typeof documentCategories.$inferSelect;
+export type InsertDocumentCategory = z.infer<typeof insertDocumentCategorySchema>;
+
 // Customers - a Customer represents a company/organization
 export const CUSTOMER_TYPES = [
   "general_contractor",
@@ -843,8 +866,9 @@ export const files = pgTable("files", {
   relatedEntityType: text("related_entity_type"),
   relatedEntityId: integer("related_entity_id"),
   // Document categorization + version history (used by Opportunity documents
-  // today; open to other modules later). Category list is fixed for now —
-  // see DOCUMENT_CATEGORY_VALUES for where admin configuration would plug in.
+  // today; open to other modules later). The stable category key references
+  // document_categories without a foreign key so retired historical values
+  // remain displayable even if configuration changes.
   category: text("category"),
   description: text("description"),
   uploadedByUserId: varchar("uploaded_by_user_id"),

@@ -5,16 +5,16 @@ import {
   insertPhotoAlbumSchema, insertReportTaskSchema, insertLaborEntrySchema, insertEquipmentEntrySchema, insertDeliverySchema,
   insertScheduleEntrySchema, insertTodoSchema, insertTodoUpdateSchema, insertWorkflowRuleSchema,
   insertOpportunitySchema, insertOpportunityContactSchema, opportunityStatusChangeSchema,
-  insertFileSchema,
+  insertFileSchema, insertDocumentCategorySchema,
   projects, tasks, equipment, allocations, customers, dailyReports, maintenanceLogs, communications, photoAlbums,
   reportTasks, laborEntries, equipmentEntries, deliveries, scheduleEntries, todos, workflowRules, notifications, activityLogs, projectStatusHistory,
-  opportunities, opportunityStatusHistory, files,
+  opportunities, opportunityStatusHistory, files, documentCategories,
   type TodoWithDetails, type MyWorkSummary, type WorkflowRuleWithDetails,
   type TodoUpdate, type TodoUpdateWithAuthor, type TodoUpdatesPage,
   type OpportunityWithDetails, type OpportunityContactWithDetails, type OpportunityDashboardResult,
   type FileWithUploader, type OpportunityScopeItemWithDetails, type ScopeCategory,
+  type DocumentCategoryRecord,
 } from './schema';
-import { DOCUMENT_CATEGORY_VALUES } from './documentCategory';
 import { SCOPE_ITEM_STATUS_VALUES } from './scopeChecklist';
 
 export const insertOpportunityDocumentSchema = insertFileSchema.omit({
@@ -23,7 +23,7 @@ export const insertOpportunityDocumentSchema = insertFileSchema.omit({
 }).extend({
   name: z.string().trim().min(1, "File name is required"),
   objectPath: z.string().trim().min(1, "objectPath is required"),
-  category: z.enum(DOCUMENT_CATEGORY_VALUES),
+  category: z.string().trim().min(1, "Category is required").max(80),
   description: z.string().trim().nullable().optional(),
   supersedesId: z.number().int().positive().nullable().optional(),
 });
@@ -42,6 +42,34 @@ export const errorSchemas = {
 };
 
 export const api = {
+  documentCategories: {
+    list: {
+      method: 'GET' as const,
+      path: '/api/document-categories',
+      responses: { 200: z.array(z.custom<DocumentCategoryRecord>()) },
+    },
+    create: {
+      method: 'POST' as const,
+      path: '/api/document-categories',
+      input: insertDocumentCategorySchema.pick({ name: true }),
+      responses: { 201: z.custom<typeof documentCategories.$inferSelect>(), 400: errorSchemas.validation },
+    },
+    update: {
+      method: 'PATCH' as const,
+      path: '/api/document-categories/:id',
+      input: z.object({
+        name: z.string().trim().min(1).max(100).optional(),
+        isActive: z.boolean().optional(),
+      }).refine(input => input.name !== undefined || input.isActive !== undefined, "Provide a name or active status"),
+      responses: { 200: z.custom<typeof documentCategories.$inferSelect>(), 404: errorSchemas.notFound },
+    },
+    reorder: {
+      method: 'PUT' as const,
+      path: '/api/document-categories/reorder',
+      input: z.object({ orderedIds: z.array(z.number().int().positive()).min(1) }),
+      responses: { 204: z.void() },
+    },
+  },
   // Customers
   customers: {
     list: {

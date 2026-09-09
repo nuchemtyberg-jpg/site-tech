@@ -49,6 +49,7 @@ async function main() {
   let oppId: number | null = null;
   let opp2Id: number | null = null;
   let projectId: number | null = null;
+  let rfpCategory: { id: number; name: string; isActive: boolean } | null = null;
 
   try {
     console.log("== Setup ==");
@@ -89,6 +90,23 @@ async function main() {
     check("v1 tracks uploader", v1.body?.uploadedByUserId === USER_ID, v1.body);
     const docId1 = v1.body?.id;
 
+    console.log("== Category configuration preserves existing documents ==");
+    const categoryList = await j(await fetch(`${BASE}/api/document-categories`, { headers: H }));
+    rfpCategory = categoryList.body?.find((category: any) => category.key === "rfp") ?? null;
+    check("RFP category is configured", categoryList.status === 200 && !!rfpCategory, categoryList);
+    const renamedInactive = await j(await fetch(`${BASE}/api/document-categories/${rfpCategory?.id}`, {
+      method: "PATCH", headers: H,
+      body: JSON.stringify({ name: "__Renamed RFP", isActive: false }),
+    }));
+    check("category can be renamed and deactivated", renamedInactive.status === 200 && renamedInactive.body?.name === "__Renamed RFP" && renamedInactive.body?.isActive === false, renamedInactive);
+    const existingAfterCategoryChange = await j(await fetch(`${BASE}/api/opportunities/${oppId}/documents`, { headers: H }));
+    check("existing document keeps its stable category key", existingAfterCategoryChange.body?.[0]?.category === "rfp", existingAfterCategoryChange.body?.[0]);
+    const inactiveUpload = await j(await fetch(`${BASE}/api/opportunities/${oppId}/documents`, {
+      method: "POST", headers: H,
+      body: JSON.stringify({ name: "Inactive.pdf", objectPath: "/objects/uploads/__test-inactive", category: "rfp" }),
+    }));
+    check("inactive category rejected for a new document", inactiveUpload.status === 400, inactiveUpload);
+
     const badCategory = await j(await fetch(`${BASE}/api/opportunities/${oppId}/documents`, {
       method: "POST", headers: H,
       body: JSON.stringify({ name: "Bad.pdf", objectPath: "/objects/uploads/__test-bad", category: "not_a_real_category" }),
@@ -107,6 +125,12 @@ async function main() {
     }));
     check("upload v2 201", v2.status === 201 && v2.body?.documentVersion === 2 && v2.body?.documentStatus === "current", v2);
     check("v2 shares v1's group id", v2.body?.documentGroupId === docId1, v2.body);
+    check("inactive category remains valid for a new version", v2.body?.category === "rfp", v2.body);
+    await fetch(`${BASE}/api/document-categories/${rfpCategory?.id}`, {
+      method: "PATCH", headers: H,
+      body: JSON.stringify({ name: rfpCategory?.name, isActive: rfpCategory?.isActive }),
+    });
+    rfpCategory = null;
 
     const v1After = await j(await fetch(`${BASE}/api/opportunities/${oppId}/documents`, { headers: H }));
     const v1Row = v1After.body?.find((d: any) => d.id === docId1);
@@ -200,6 +224,9 @@ async function main() {
     console.log(failures === 0 ? "\nALL TESTS PASSED" : `\n${failures} TEST(S) FAILED`);
   } finally {
     console.log("Cleaning up temp data...");
+    if (rfpCategory) {
+      await db.execute(sql`UPDATE document_categories SET name = ${rfpCategory.name}, is_active = ${rfpCategory.isActive}, updated_at = NOW() WHERE id = ${rfpCategory.id}`);
+    }
     if (oppId || opp2Id) {
       const ids = [oppId, opp2Id].filter(Boolean) as number[];
       await db.execute(sql`DELETE FROM files WHERE related_entity_type = 'opportunity' AND related_entity_id = ANY(ARRAY[${sql.join(ids, sql`, `)}]::int[])`);

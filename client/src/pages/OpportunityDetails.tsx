@@ -31,8 +31,8 @@ import {
   getOpportunityStatusLabel, labelFor, OPPORTUNITY_CONTACT_ROLES, OPPORTUNITY_LOST_REASONS,
   OPPORTUNITY_NO_BID_REASONS, OPPORTUNITY_PROJECT_TYPES, OPPORTUNITY_SOURCES, OPPORTUNITY_STATUSES,
 } from "@shared/opportunityStatus";
-import { DOCUMENT_CATEGORY_LABELS, DOCUMENT_CATEGORY_VALUES, getDocumentCategoryLabel } from "@shared/documentCategory";
-import type { Contact, FileWithUploader, OpportunityContactWithDetails } from "@shared/schema";
+import type { Contact, DocumentCategoryRecord, FileWithUploader, OpportunityContactWithDetails } from "@shared/schema";
+import { useDocumentCategories } from "@/hooks/use-document-categories";
 
 export default function OpportunityDetails() {
   const { id } = useParams<{ id: string }>();
@@ -166,6 +166,7 @@ function groupDocuments(documents: FileWithUploader[]): DocumentGroup[] {
 }
 
 function DocumentsTab({ documents, onUpload, onNewVersion, opportunityId }: { documents: FileWithUploader[]; onUpload: () => void; onNewVersion: (doc: FileWithUploader) => void; opportunityId: number }) {
+  const { data: configuredCategories = [] } = useDocumentCategories();
   const remove = useDeleteOpportunityDocument(opportunityId);
   const { toast } = useToast();
   const [categoryFilter, setCategoryFilter] = useState("all");
@@ -179,7 +180,12 @@ function DocumentsTab({ documents, onUpload, onNewVersion, opportunityId }: { do
     if (!byCategory.has(cat)) byCategory.set(cat, []);
     byCategory.get(cat)!.push(g);
   }
-  const categoriesPresent = DOCUMENT_CATEGORY_VALUES.filter(c => byCategory.has(c));
+  const configuredKeys = new Set(configuredCategories.map(category => category.key));
+  const historicalCategories: DocumentCategoryRecord[] = Array.from(byCategory.keys())
+    .filter(key => !configuredKeys.has(key))
+    .map((key, index) => ({ id: -(index + 1), key, name: key, displayOrder: Number.MAX_SAFE_INTEGER, isActive: false, createdAt: new Date(), updatedAt: new Date() }));
+  const categories = [...configuredCategories, ...historicalCategories];
+  const categoriesPresent = categories.filter(category => byCategory.has(category.key));
 
   return (
     <div className="space-y-4">
@@ -188,7 +194,7 @@ function DocumentsTab({ documents, onUpload, onNewVersion, opportunityId }: { do
           <SelectTrigger className="min-h-11 w-full sm:w-56"><SelectValue placeholder="Filter by category" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All categories</SelectItem>
-            {DOCUMENT_CATEGORY_VALUES.map(c => <SelectItem key={c} value={c}>{DOCUMENT_CATEGORY_LABELS[c]}</SelectItem>)}
+            {categories.filter(category => category.isActive || byCategory.has(category.key)).map(category => <SelectItem key={category.key} value={category.key}>{category.name}{!category.isActive ? " (inactive)" : ""}</SelectItem>)}
           </SelectContent>
         </Select>
         <Button className="min-h-11" onClick={onUpload}><Upload className="w-4 h-4 mr-2" />Upload document</Button>
@@ -199,11 +205,11 @@ function DocumentsTab({ documents, onUpload, onNewVersion, opportunityId }: { do
         <Card><Empty text="No documents in this category." /></Card>
       ) : (
         <div className="space-y-5">
-          {categoriesPresent.map(cat => (
-            <div key={cat} className="space-y-2">
-              <h3 className="text-sm font-semibold text-muted-foreground">{DOCUMENT_CATEGORY_LABELS[cat]} ({byCategory.get(cat)!.length})</h3>
+          {categoriesPresent.map(category => (
+            <div key={category.key} className="space-y-2">
+              <h3 className="text-sm font-semibold text-muted-foreground">{category.name} ({byCategory.get(category.key)!.length})</h3>
               <div className="space-y-2">
-                {byCategory.get(cat)!.map(group => (
+                {byCategory.get(category.key)!.map(group => (
                   <DocumentGroupCard
                     key={group.groupId}
                     group={group}
@@ -270,19 +276,22 @@ function DocumentGroupCard({ group, onNewVersion, onDelete }: { group: DocumentG
 }
 
 function DocumentUploadDialog({ open, onOpenChange, opportunityId, versionTarget }: { open: boolean; onOpenChange: (v: boolean) => void; opportunityId: number; versionTarget: FileWithUploader | null }) {
+  const { data: categories = [] } = useDocumentCategories();
   const create = useCreateOpportunityDocument(opportunityId);
   const { toast } = useToast();
-  const [category, setCategory] = useState(versionTarget?.category || "other");
+  const [category, setCategory] = useState(versionTarget?.category || "");
   const [description, setDescription] = useState("");
   const [uploaded, setUploaded] = useState<{ name: string; objectPath: string; size: number; type: string } | null>(null);
 
-  const reset = () => { setDescription(""); setUploaded(null); setCategory(versionTarget?.category || "other"); };
+  const activeCategories = categories.filter(item => item.isActive);
+  const selectedCategory = category || activeCategories[0]?.key || "";
+  const reset = () => { setDescription(""); setUploaded(null); setCategory(versionTarget?.category || ""); };
 
   const submit = () => {
     if (!uploaded) return;
     create.mutate({
       name: uploaded.name, objectPath: uploaded.objectPath, contentType: uploaded.type, size: uploaded.size,
-      category, description: description.trim() || null, supersedesId: versionTarget?.id ?? null,
+      category: selectedCategory, description: description.trim() || null, supersedesId: versionTarget?.id ?? null,
     }, {
       onSuccess: () => { toast({ title: versionTarget ? "New version uploaded" : "Document uploaded" }); reset(); onOpenChange(false); },
       onError: e => toast({ title: "Couldn't upload document", description: extractApiError(e, "Try again."), variant: "destructive" }),
@@ -320,9 +329,9 @@ function DocumentUploadDialog({ open, onOpenChange, opportunityId, versionTarget
           {!versionTarget && (
             <div>
               <Label>Category *</Label>
-              <Select value={category} onValueChange={setCategory}>
+              <Select value={selectedCategory} onValueChange={setCategory}>
                 <SelectTrigger className="min-h-11"><SelectValue /></SelectTrigger>
-                <SelectContent>{DOCUMENT_CATEGORY_VALUES.map(c => <SelectItem key={c} value={c}>{DOCUMENT_CATEGORY_LABELS[c]}</SelectItem>)}</SelectContent>
+                <SelectContent>{activeCategories.map(item => <SelectItem key={item.key} value={item.key}>{item.name}</SelectItem>)}</SelectContent>
               </Select>
             </div>
           )}
@@ -333,7 +342,7 @@ function DocumentUploadDialog({ open, onOpenChange, opportunityId, versionTarget
         </div>
         <DialogFooter>
           <Button className="min-h-11" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-          <Button className="min-h-11" disabled={!uploaded || create.isPending} onClick={submit}>
+          <Button className="min-h-11" disabled={!uploaded || !selectedCategory || create.isPending} onClick={submit}>
             {create.isPending && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
             {versionTarget ? "Upload new version" : "Upload"}
           </Button>

@@ -7,7 +7,6 @@ import { setupAuth, registerAuthRoutes, isAuthenticated } from "./replit_integra
 import { registerObjectStorageRoutes, ObjectStorageService } from "./replit_integrations/object_storage";
 import type { User, FileMetadata } from "@shared/schema";
 import { insertAuthorizedUserSchema, insertRfiSchema, insertTaskTitleSchema } from "@shared/schema";
-import { getDocumentCategoryLabel } from "@shared/documentCategory";
 import { computeScopeReadiness, getScopeItemStatusLabel } from "@shared/scopeChecklist";
 import { isAdmin, isAuthorizedUser } from "./middleware/auth";
 import { sendInviteEmail } from "./services/email";
@@ -1434,6 +1433,55 @@ export async function registerRoutes(
 
   // ---------- Opportunity Documents ----------
 
+  app.get(api.documentCategories.list.path, isAuthenticated, isAuthorizedUser, async (_req, res) => {
+    res.json(await storage.getDocumentCategories());
+  });
+
+  app.post(api.documentCategories.create.path, isAuthenticated, isAuthorizedUser, isAdmin, async (req, res) => {
+    try {
+      const { name } = api.documentCategories.create.input.parse(req.body);
+      const baseKey = name.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 70) || "category";
+      let key = baseKey;
+      let suffix = 2;
+      while (await storage.getDocumentCategoryByKey(key)) key = `${baseKey}_${suffix++}`;
+      const categories = await storage.getDocumentCategories();
+      const displayOrder = (categories.at(-1)?.displayOrder ?? 0) + 10;
+      res.status(201).json(await storage.createDocumentCategory({ key, name, displayOrder, isActive: true }));
+    } catch (err) {
+      if (err instanceof z.ZodError) return res.status(400).json({ message: err.errors[0].message });
+      throw err;
+    }
+  });
+
+  app.put(api.documentCategories.reorder.path, isAuthenticated, isAuthorizedUser, isAdmin, async (req, res) => {
+    try {
+      const { orderedIds } = api.documentCategories.reorder.input.parse(req.body);
+      const categories = await storage.getDocumentCategories();
+      if (orderedIds.length !== categories.length || new Set(orderedIds).size !== categories.length ||
+          categories.some(category => !orderedIds.includes(category.id))) {
+        return res.status(400).json({ message: "Reorder request must include every category exactly once" });
+      }
+      await storage.reorderDocumentCategories(orderedIds);
+      res.status(204).send();
+    } catch (err) {
+      if (err instanceof z.ZodError) return res.status(400).json({ message: err.errors[0].message });
+      throw err;
+    }
+  });
+
+  app.patch(api.documentCategories.update.path, isAuthenticated, isAuthorizedUser, isAdmin, async (req, res) => {
+    try {
+      const input = api.documentCategories.update.input.parse(req.body);
+      const categoryId = z.coerce.number().int().positive().parse(req.params.id);
+      const category = await storage.updateDocumentCategory(categoryId, input);
+      if (!category) return res.status(404).json({ message: "Document category not found" });
+      res.json(category);
+    } catch (err) {
+      if (err instanceof z.ZodError) return res.status(400).json({ message: err.errors[0].message });
+      throw err;
+    }
+  });
+
   app.get(api.opportunityDocuments.list.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
     const opp = await storage.getOpportunity(Number(req.params.id));
     if (!opp) return res.status(404).json({ message: "Opportunity not found" });
@@ -1450,16 +1498,24 @@ export async function registerRoutes(
       const actor = actorFromUser(user);
 
       let previous: FileMetadata | undefined;
+      let selectedCategoryName: string | undefined;
       if (input.supersedesId) {
         previous = await storage.getFile(input.supersedesId);
         if (!previous || previous.relatedEntityType !== "opportunity" || previous.relatedEntityId !== opp.id) {
           return res.status(400).json({ message: "Document being superseded does not belong to this opportunity" });
         }
+      } else {
+        const category = await storage.getDocumentCategoryByKey(input.category);
+        if (!category || !category.isActive) {
+          return res.status(400).json({ message: "Choose an active document category" });
+        }
+        selectedCategoryName = category.name;
       }
 
       const { supersedesId, ...rest } = input;
       const doc = await storage.createDocumentVersion({
         ...rest,
+        category: previous?.category ?? rest.category,
         description: input.description || null,
         contentType: input.contentType || null,
         size: input.size ?? null,
@@ -1475,7 +1531,7 @@ export async function registerRoutes(
         action: previous ? "document_version_added" : "document_uploaded",
         description: previous
           ? `${actor.name} uploaded a new version (v${doc.documentVersion}) of "${doc.name}" for ${opportunityDisplay(opp)}, superseding the previous version.`
-          : `${actor.name} uploaded "${doc.name}" (${getDocumentCategoryLabel(doc.category)}) for ${opportunityDisplay(opp)}.`,
+          : `${actor.name} uploaded "${doc.name}" (${selectedCategoryName || doc.category || "Uncategorized"}) for ${opportunityDisplay(opp)}.`,
         metadata: { customerId: opp.customerId, opportunityId: opp.id, category: doc.category, documentGroupId: doc.documentGroupId },
       });
 
@@ -1496,10 +1552,11 @@ export async function registerRoutes(
     }
     const user = await getCurrentUser(req);
     const actor = actorFromUser(user);
+    const category = doc.category ? await storage.getDocumentCategoryByKey(doc.category) : undefined;
     await storage.deleteDocumentVersion(doc.id);
     await logActivity({
       entityType: "opportunity_document", entityId: doc.id, actor, action: "document_deleted",
-      description: `${actor.name} deleted "${doc.name}" (${getDocumentCategoryLabel(doc.category)}) from ${opportunityDisplay(opp)}.`,
+      description: `${actor.name} deleted "${doc.name}" (${category?.name || doc.category || "Uncategorized"}) from ${opportunityDisplay(opp)}.`,
       metadata: { customerId: opp.customerId, opportunityId: opp.id, category: doc.category },
     });
     res.status(204).send();

@@ -8,6 +8,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { useEffect, useCallback } from "react";
+import { DocumentCategoriesSettings } from "@/components/settings/DocumentCategoriesSettings";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -172,6 +173,8 @@ export default function Settings() {
             </div>
           </CardContent>
         </Card>
+
+        {isAdmin && <DocumentCategoriesSettings />}
 
         <Card data-testid="card-outlook-connection">
           <CardHeader>
