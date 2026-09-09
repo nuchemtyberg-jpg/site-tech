@@ -1,9 +1,51 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
 
+function responseLabel(res: Response) {
+  return `${res.status}${res.statusText ? ` ${res.statusText}` : ""}`;
+}
+
+async function readErrorMessage(res: Response) {
+  const contentType = res.headers.get("content-type") ?? "";
+  const text = (await res.text()).trim();
+
+  if (contentType.includes("application/json") && text) {
+    try {
+      const body = JSON.parse(text) as { message?: unknown; error?: unknown };
+      const message = typeof body.message === "string"
+        ? body.message
+        : typeof body.error === "string"
+          ? body.error
+          : undefined;
+      if (message) return message;
+    } catch {
+      // The fallback below explains that the server returned an invalid response.
+    }
+  }
+
+  if (contentType.includes("text/html") || text.startsWith("<!DOCTYPE") || text.startsWith("<html")) {
+    return "The server returned the application page instead of an API response. The requested API endpoint may be unavailable or the server build may be out of date.";
+  }
+
+  return text || res.statusText || "The server did not provide an error message.";
+}
+
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
-    const text = (await res.text()) || res.statusText;
-    throw new Error(`${res.status}: ${text}`);
+    throw new Error(`${responseLabel(res)}: ${await readErrorMessage(res)}`);
+  }
+}
+
+export async function parseJsonResponse<T>(res: Response): Promise<T> {
+  const contentType = res.headers.get("content-type") ?? "";
+  if (!contentType.includes("application/json")) {
+    const message = await readErrorMessage(res);
+    throw new Error(`Invalid API response: ${message}`);
+  }
+
+  try {
+    return await res.json() as T;
+  } catch {
+    throw new Error("Invalid API response: the server returned malformed JSON.");
   }
 }
 
@@ -26,7 +68,7 @@ export async function apiRequest(
 type UnauthorizedBehavior = "returnNull" | "throw";
 export const getQueryFn: <T>(options: {
   on401: UnauthorizedBehavior;
-}) => QueryFunction<T> =
+}) => QueryFunction<T | null> =
   ({ on401: unauthorizedBehavior }) =>
   async ({ queryKey }) => {
     const res = await fetch(queryKey.join("/") as string, {
@@ -38,7 +80,7 @@ export const getQueryFn: <T>(options: {
     }
 
     await throwIfResNotOk(res);
-    return await res.json();
+    return await parseJsonResponse(res);
   };
 
 export const queryClient = new QueryClient({

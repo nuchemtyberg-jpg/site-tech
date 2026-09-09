@@ -71,6 +71,15 @@ app.use((req, res, next) => {
   // Daily due-today / overdue todo reminders (duplicate-safe)
   startTodoReminderScheduler();
 
+  // API requests must never fall through to Vite or the production SPA shell.
+  // Returning JSON here also makes stale builds and unavailable endpoints
+  // actionable to API clients instead of producing an HTML parse error.
+  app.use("/api/{*path}", (req, res) => {
+    res.status(404).json({
+      message: `API endpoint not found: ${req.method} ${req.originalUrl}`,
+    });
+  });
+
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";

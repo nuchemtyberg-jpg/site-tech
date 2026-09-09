@@ -69,6 +69,8 @@ async function main() {
     }));
     createdId = create.body?.id ?? null;
     check("admin can add category with stable generated key", create.status === 201 && create.body?.key === "temporary_trade_documents" && create.body?.isActive === true, create);
+    const afterCreate = await json(await fetch(`${BASE}/api/document-categories`, { headers: admin.headers }));
+    check("created category persists on a fresh list request", afterCreate.body?.some((category: any) => category.id === createdId), afterCreate);
     await db.insert(files).values([
       {
         name: "__Category usage v1",
@@ -147,6 +149,21 @@ async function main() {
 
     const unauthenticated = await fetch(`${BASE}/api/document-categories`);
     check("unauthenticated list is rejected", unauthenticated.status === 401, unauthenticated.status);
+
+    const missingRoute = await fetch(`${BASE}/api/document-categories/endpoint-that-does-not-exist`, {
+      method: "DELETE",
+      headers: admin.headers,
+    });
+    const missingContentType = missingRoute.headers.get("content-type") ?? "";
+    const missingBody = await missingRoute.json().catch(() => null);
+    check(
+      "missing API route returns a JSON error instead of the application HTML",
+      missingRoute.status === 404 &&
+        missingContentType.includes("application/json") &&
+        typeof missingBody?.message === "string" &&
+        missingBody.message.includes("API endpoint not found"),
+      { status: missingRoute.status, contentType: missingContentType, body: missingBody },
+    );
 
     console.log(failures === 0 ? "\nALL TESTS PASSED" : `\n${failures} TEST(S) FAILED`);
   } finally {
