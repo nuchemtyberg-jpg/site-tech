@@ -1,6 +1,6 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link } from "wouter";
-import { Plus, Search, Phone, Mail, Building2, MapPin, Star, AlertTriangle, Users as UsersIcon } from "lucide-react";
+import { Plus, Search, Phone, Mail, Building2, MapPin, Star, AlertTriangle, Users as UsersIcon, LayoutGrid, List } from "lucide-react";
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -60,6 +60,7 @@ export default function Customers() {
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("active");
+  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [contactRoles, setContactRoles] = useState<ContactRole[]>([]);
   const [duplicates, setDuplicates] = useState<{ id: number; name: string }[]>([]);
@@ -498,21 +499,66 @@ export default function Customers() {
             ))}
           </SelectContent>
         </Select>
+        <div className="flex items-center self-stretch border rounded-lg overflow-hidden" role="group" aria-label="Customer view">
+          <Button
+            variant={viewMode === "grid" ? "default" : "ghost"}
+            size="sm"
+            className="rounded-none flex-1 sm:flex-none"
+            onClick={() => setViewMode("grid")}
+            aria-label="Card view"
+            aria-pressed={viewMode === "grid"}
+            title="Card view"
+            data-testid="button-view-grid"
+          >
+            <LayoutGrid className="w-4 h-4" />
+            <span className="sr-only">Card view</span>
+          </Button>
+          <Button
+            variant={viewMode === "list" ? "default" : "ghost"}
+            size="sm"
+            className="rounded-none flex-1 sm:flex-none"
+            onClick={() => setViewMode("list")}
+            aria-label="List view"
+            aria-pressed={viewMode === "list"}
+            title="List view"
+            data-testid="button-view-list"
+          >
+            <List className="w-4 h-4" />
+            <span className="sr-only">List view</span>
+          </Button>
+        </div>
       </div>
 
       {isLoading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className={viewMode === "grid" ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" : "space-y-2"}>
           {[1, 2, 3].map((i) => (
             <Card key={i} className="animate-pulse">
-              <CardHeader className="pb-2">
-                <div className="h-6 bg-muted rounded w-3/4" />
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2">
-                  <div className="h-4 bg-muted rounded w-1/2" />
-                  <div className="h-4 bg-muted rounded w-2/3" />
-                </div>
-              </CardContent>
+              {viewMode === "grid" ? (
+                <>
+                  <CardHeader className="pb-2">
+                    <div className="h-6 bg-muted rounded w-3/4" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-2">
+                      <div className="h-4 bg-muted rounded w-1/2" />
+                      <div className="h-4 bg-muted rounded w-2/3" />
+                    </div>
+                  </CardContent>
+                </>
+              ) : (
+                <CardContent className="p-4">
+                  <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
+                    <div className="space-y-2 flex-1">
+                      <div className="h-5 bg-muted rounded w-2/3 sm:w-1/3" />
+                      <div className="h-4 bg-muted rounded w-1/2 sm:w-1/4" />
+                    </div>
+                    <div className="space-y-2 flex-1">
+                      <div className="h-4 bg-muted rounded w-3/4" />
+                      <div className="h-4 bg-muted rounded w-1/2" />
+                    </div>
+                  </div>
+                </CardContent>
+              )}
             </Card>
           ))}
         </div>
@@ -534,7 +580,7 @@ export default function Customers() {
             )}
           </CardContent>
         </Card>
-      ) : (
+      ) : viewMode === "grid" ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {customers.map((customer) => (
             <Link key={customer.id} href={`/customers/${customer.id}`}>
@@ -614,6 +660,102 @@ export default function Customers() {
               </Card>
             </Link>
           ))}
+        </div>
+      ) : (
+        <div className="space-y-2" data-testid="customer-list">
+          {customers.map((customer) => {
+            const primaryPhone = customer.primaryContact?.mobilePhone || customer.primaryContact?.officePhone;
+            const location = [customer.city, customer.state].filter(Boolean).join(", ");
+
+            return (
+              <Link key={customer.id} href={`/customers/${customer.id}`}>
+                <Card className="hover-elevate cursor-pointer" data-testid={`row-customer-${customer.id}`}>
+                  <CardContent className="p-3 sm:p-4">
+                    <div className="flex flex-col sm:grid sm:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)_minmax(0,1fr)] gap-3 sm:gap-4">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <Building2 className="w-4 h-4 text-muted-foreground shrink-0" />
+                          <h3 className="font-semibold truncate">{customer.name}</h3>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                          {customer.customerType && (
+                            <Badge variant="secondary" className="text-xs">
+                              {CUSTOMER_TYPE_LABELS[customer.customerType as CustomerType] || customer.customerType}
+                            </Badge>
+                          )}
+                          {customer.status !== "active" && (
+                            <Badge variant="outline" className="text-xs capitalize">{customer.status}</Badge>
+                          )}
+                          {customer.nameNeedsReview && (
+                            <Badge variant="outline" className="text-xs text-yellow-700 dark:text-yellow-400 border-yellow-400">
+                              Needs review
+                            </Badge>
+                          )}
+                        </div>
+                        {customer.matchReason && (
+                          <div className="text-xs text-primary mt-2" data-testid={`text-match-reason-${customer.id}`}>
+                            Matched — {customer.matchReason}
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="min-w-0 space-y-1 text-sm">
+                        {customer.primaryContact ? (
+                          <>
+                            <div className="flex items-center gap-2 min-w-0">
+                              <Star className="w-3.5 h-3.5 text-primary shrink-0" />
+                              <span className="font-medium truncate">
+                                {customer.primaryContact.firstName} {customer.primaryContact.lastName || ""}
+                              </span>
+                              <span className="text-xs text-muted-foreground shrink-0">Primary</span>
+                            </div>
+                            {customer.primaryContact.email && (
+                              <div className="flex items-center gap-2 text-muted-foreground min-w-0">
+                                <Mail className="w-4 h-4 shrink-0" />
+                                <span className="truncate">{customer.primaryContact.email}</span>
+                              </div>
+                            )}
+                            {primaryPhone && (
+                              <div className="flex items-center gap-2 text-muted-foreground">
+                                <Phone className="w-4 h-4 shrink-0" />
+                                <span>{primaryPhone}</span>
+                              </div>
+                            )}
+                          </>
+                        ) : (
+                          <span className="text-muted-foreground">No primary contact</span>
+                        )}
+                      </div>
+
+                      <div className="min-w-0 space-y-1 text-sm text-muted-foreground">
+                        {location && (
+                          <div className="flex items-center gap-2">
+                            <MapPin className="w-4 h-4 shrink-0" />
+                            <span>{location}</span>
+                          </div>
+                        )}
+                        {customer.email && (
+                          <div className="flex items-center gap-2 min-w-0">
+                            <Mail className="w-4 h-4 shrink-0" />
+                            <span className="truncate">{customer.email}</span>
+                          </div>
+                        )}
+                        {customer.phone && (
+                          <div className="flex items-center gap-2">
+                            <Phone className="w-4 h-4 shrink-0" />
+                            <span>{customer.phone}</span>
+                          </div>
+                        )}
+                        {!location && !customer.email && !customer.phone && (
+                          <span>No company contact details</span>
+                        )}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </Link>
+            );
+          })}
         </div>
       )}
     </div>
