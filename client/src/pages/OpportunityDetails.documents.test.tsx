@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { DocumentsTab, DocumentUploadDialog } from "./OpportunityDetails";
@@ -9,6 +9,11 @@ const categories = [
   { id: 3, key: "contracts", name: "Contracts", isActive: true, displayOrder: 2, documentUsageCount: 0 },
 ];
 
+const deleteMutation = vi.hoisted(() => ({
+  mutate: vi.fn(),
+  isPending: false,
+}));
+
 vi.mock("@/hooks/use-document-categories", () => ({
   useDocumentCategories: () => ({ data: categories }),
 }));
@@ -17,7 +22,7 @@ vi.mock("@/hooks/use-opportunities", async importOriginal => {
   const actual = await importOriginal<typeof import("@/hooks/use-opportunities")>();
   return {
     ...actual,
-    useDeleteOpportunityDocument: () => ({ mutate: vi.fn() }),
+    useDeleteOpportunityDocument: () => deleteMutation,
     useCreateOpportunityDocument: () => ({ mutate: vi.fn(), isPending: false }),
   };
 });
@@ -62,5 +67,60 @@ describe("opportunity document categories", () => {
     expect(await screen.findByRole("option", { name: "Construction Drawings" })).toBeInTheDocument();
     expect(screen.getByRole("option", { name: "Contracts" })).toBeInTheDocument();
     expect(screen.queryByRole("option", { name: "Old Permits" })).not.toBeInTheDocument();
+  });
+});
+
+describe("opportunity document deletion confirmation", () => {
+  it("does not delete when the confirmation is canceled", async () => {
+    const user = userEvent.setup();
+    deleteMutation.mutate.mockClear();
+    render(<DocumentsTab documents={documents} onUpload={vi.fn()} onNewVersion={vi.fn()} opportunityId={1} />);
+
+    await user.click(screen.getByRole("button", { name: "Delete site-plan.pdf" }));
+    expect(screen.getByRole("alertdialog")).toHaveTextContent("site-plan.pdf");
+    expect(screen.getByRole("alertdialog")).toHaveTextContent(/cannot be undone/i);
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+
+    expect(deleteMutation.mutate).not.toHaveBeenCalled();
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
+  });
+
+  it("does not delete when the confirmation is dismissed", async () => {
+    const user = userEvent.setup();
+    deleteMutation.mutate.mockClear();
+    render(<DocumentsTab documents={documents} onUpload={vi.fn()} onNewVersion={vi.fn()} opportunityId={1} />);
+
+    await user.click(screen.getByRole("button", { name: "Delete site-plan.pdf" }));
+    await user.keyboard("{Escape}");
+
+    expect(deleteMutation.mutate).not.toHaveBeenCalled();
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
+  });
+
+  it("deletes the selected document exactly once after confirmation", async () => {
+    const user = userEvent.setup();
+    deleteMutation.mutate.mockClear();
+    render(<DocumentsTab documents={documents} onUpload={vi.fn()} onNewVersion={vi.fn()} opportunityId={1} />);
+
+    await user.click(screen.getByRole("button", { name: "Delete permit.pdf" }));
+    await user.click(screen.getByTestId("button-confirm-delete-opportunity-document"));
+
+    expect(deleteMutation.mutate).toHaveBeenCalledTimes(1);
+    expect(deleteMutation.mutate).toHaveBeenCalledWith(12, expect.objectContaining({
+      onSuccess: expect.any(Function),
+      onError: expect.any(Function),
+    }));
+  });
+
+  it("disables dialog actions while deletion is pending", async () => {
+    const user = userEvent.setup();
+    deleteMutation.isPending = true;
+    render(<DocumentsTab documents={documents} onUpload={vi.fn()} onNewVersion={vi.fn()} opportunityId={1} />);
+
+    await user.click(screen.getByRole("button", { name: "Delete site-plan.pdf" }));
+
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeDisabled();
+    expect(screen.getByTestId("button-confirm-delete-opportunity-document")).toBeDisabled();
+    deleteMutation.isPending = false;
   });
 });

@@ -8,6 +8,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
+  AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -170,6 +174,15 @@ export function DocumentsTab({ documents, onUpload, onNewVersion, opportunityId 
   const remove = useDeleteOpportunityDocument(opportunityId);
   const { toast } = useToast();
   const [categoryFilter, setCategoryFilter] = useState("all");
+  const [documentToDelete, setDocumentToDelete] = useState<FileWithUploader | null>(null);
+
+  const confirmDelete = () => {
+    if (!documentToDelete || remove.isPending) return;
+    remove.mutate(documentToDelete.id, {
+      onSuccess: () => setDocumentToDelete(null),
+      onError: e => toast({ title: "Couldn't delete document", description: extractApiError(e, "Try again."), variant: "destructive" }),
+    });
+  };
 
   const groups = groupDocuments(documents);
   const filtered = categoryFilter === "all" ? groups : groups.filter(g => (g.current.category || "other") === categoryFilter);
@@ -214,7 +227,7 @@ export function DocumentsTab({ documents, onUpload, onNewVersion, opportunityId 
                     key={group.groupId}
                     group={group}
                     onNewVersion={() => onNewVersion(group.current)}
-                    onDelete={fileId => remove.mutate(fileId, { onError: e => toast({ title: "Couldn't delete document", description: extractApiError(e, "Try again."), variant: "destructive" }) })}
+                    onDelete={() => setDocumentToDelete(group.current)}
                   />
                 ))}
               </div>
@@ -222,11 +235,41 @@ export function DocumentsTab({ documents, onUpload, onNewVersion, opportunityId 
           ))}
         </div>
       )}
+      <AlertDialog
+        open={documentToDelete !== null}
+        onOpenChange={open => {
+          if (!open && !remove.isPending) setDocumentToDelete(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete document?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete "{documentToDelete?.name}"? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={remove.isPending}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={remove.isPending}
+              onClick={event => {
+                event.preventDefault();
+                confirmDelete();
+              }}
+              data-testid="button-confirm-delete-opportunity-document"
+            >
+              {remove.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
 
-function DocumentGroupCard({ group, onNewVersion, onDelete }: { group: DocumentGroup; onNewVersion: () => void; onDelete: (fileId: number) => void }) {
+function DocumentGroupCard({ group, onNewVersion, onDelete }: { group: DocumentGroup; onNewVersion: () => void; onDelete: () => void }) {
   const [expanded, setExpanded] = useState(false);
   const { current, history } = group;
   return (
@@ -246,7 +289,7 @@ function DocumentGroupCard({ group, onNewVersion, onDelete }: { group: DocumentG
           <div className="flex flex-wrap gap-2 shrink-0">
             <a className="inline-flex" href={getProxyUrlWithFilename(current.objectPath, current.name, true)} target="_blank" rel="noreferrer"><Button className="min-h-11" variant="outline" size="sm"><Download className="w-4 h-4 mr-1" />Download</Button></a>
             <Button className="min-h-11" variant="outline" size="sm" onClick={onNewVersion}><Upload className="w-4 h-4 mr-1" />New version</Button>
-            <Button className="min-h-11 min-w-11" variant="ghost" size="icon" onClick={() => onDelete(current.id)}><Trash2 className="w-4 h-4 text-destructive" /></Button>
+            <Button className="min-h-11 min-w-11" variant="ghost" size="icon" onClick={onDelete} aria-label={`Delete ${current.name}`}><Trash2 className="w-4 h-4 text-destructive" /></Button>
           </div>
         </div>
         {history.length > 0 && (
