@@ -59,6 +59,7 @@ function generateProjectEmailSlug(name: string, id: number): string {
 
 export interface IStorage {
   getDocumentCategories(): Promise<DocumentCategoryRecord[]>;
+  getDocumentCategoryActivity(limit?: number): Promise<ActivityLog[]>;
   getDocumentCategoryByKey(key: string): Promise<DocumentCategoryRecord | undefined>;
   createDocumentCategory(category: InsertDocumentCategory): Promise<DocumentCategoryRecord>;
   updateDocumentCategory(id: number, updates: Partial<Pick<DocumentCategoryRecord, "name" | "isActive">>): Promise<DocumentCategoryRecord | undefined>;
@@ -547,6 +548,13 @@ export class DatabaseStorage implements IStorage {
   async getDocumentCategories(): Promise<DocumentCategoryRecord[]> {
     await this.ensureDocumentCategories();
     return db.select().from(documentCategories).orderBy(asc(documentCategories.displayOrder), asc(documentCategories.id));
+  }
+
+  async getDocumentCategoryActivity(limit = 100): Promise<ActivityLog[]> {
+    return db.select().from(activityLogs)
+      .where(eq(activityLogs.entityType, "document_category"))
+      .orderBy(desc(activityLogs.createdAt))
+      .limit(limit);
   }
 
   async getDocumentCategoryByKey(key: string): Promise<DocumentCategoryRecord | undefined> {

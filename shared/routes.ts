@@ -48,6 +48,11 @@ export const api = {
       path: '/api/document-categories',
       responses: { 200: z.array(z.custom<DocumentCategoryRecord>()) },
     },
+    history: {
+      method: 'GET' as const,
+      path: '/api/document-categories/history',
+      responses: { 200: z.array(z.custom<typeof activityLogs.$inferSelect>()) },
+    },
     create: {
       method: 'POST' as const,
       path: '/api/document-categories',

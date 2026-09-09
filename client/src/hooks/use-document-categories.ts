@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, buildUrl } from "@shared/routes";
-import type { DocumentCategoryRecord } from "@shared/schema";
+import type { ActivityLog, DocumentCategoryRecord } from "@shared/schema";
 import { apiRequest } from "@/lib/queryClient";
 
 export function useDocumentCategories() {
@@ -9,9 +9,18 @@ export function useDocumentCategories() {
   });
 }
 
+export function useDocumentCategoryHistory() {
+  return useQuery<ActivityLog[]>({
+    queryKey: [api.documentCategories.history.path],
+  });
+}
+
 function useInvalidateDocumentCategories() {
   const queryClient = useQueryClient();
-  return () => queryClient.invalidateQueries({ queryKey: [api.documentCategories.list.path] });
+  return () => {
+    queryClient.invalidateQueries({ queryKey: [api.documentCategories.list.path] });
+    queryClient.invalidateQueries({ queryKey: [api.documentCategories.history.path] });
+  };
 }
 
 export function useCreateDocumentCategory() {

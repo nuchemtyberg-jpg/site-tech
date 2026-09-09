@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { ArrowDown, ArrowUp, FileText, Loader2, Pencil, Plus } from "lucide-react";
+import { ArrowDown, ArrowUp, Clock, FileText, Loader2, Pencil, Plus } from "lucide-react";
+import { format } from "date-fns";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,12 +10,14 @@ import { useToast } from "@/hooks/use-toast";
 import {
   useCreateDocumentCategory,
   useDocumentCategories,
+  useDocumentCategoryHistory,
   useReorderDocumentCategories,
   useUpdateDocumentCategory,
 } from "@/hooks/use-document-categories";
 
 export function DocumentCategoriesSettings() {
   const { data: categories = [], isLoading } = useDocumentCategories();
+  const { data: history = [], isLoading: isHistoryLoading } = useDocumentCategoryHistory();
   const create = useCreateDocumentCategory();
   const update = useUpdateDocumentCategory();
   const reorder = useReorderDocumentCategories();
@@ -127,6 +130,35 @@ export function DocumentCategoriesSettings() {
             Add
           </Button>
         </form>
+        <div className="space-y-3 border-t pt-4" data-testid="document-category-history">
+          <div>
+            <h3 className="flex items-center gap-2 font-medium">
+              <Clock className="h-4 w-4" />
+              Change history
+            </h3>
+            <p className="text-sm text-muted-foreground">Recent changes made by administrators.</p>
+          </div>
+          {isHistoryLoading ? (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Loading history...
+            </div>
+          ) : history.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No category changes have been recorded yet.</p>
+          ) : (
+            <div className="max-h-72 space-y-3 overflow-y-auto pr-1">
+              {history.map(entry => (
+                <div key={entry.id} className="border-l-2 pl-3 text-sm">
+                  <p>{entry.description}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {entry.actorName}
+                    {entry.createdAt ? ` · ${format(new Date(entry.createdAt), "MMM d, yyyy 'at' h:mm a")}` : ""}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </CardContent>
     </Card>
   );

@@ -1437,6 +1437,10 @@ export async function registerRoutes(
     res.json(await storage.getDocumentCategories());
   });
 
+  app.get(api.documentCategories.history.path, isAuthenticated, isAuthorizedUser, isAdmin, async (_req, res) => {
+    res.json(await storage.getDocumentCategoryActivity());
+  });
+
   app.post(api.documentCategories.create.path, isAuthenticated, isAuthorizedUser, isAdmin, async (req, res) => {
     try {
       const { name } = api.documentCategories.create.input.parse(req.body);
@@ -1446,7 +1450,16 @@ export async function registerRoutes(
       while (await storage.getDocumentCategoryByKey(key)) key = `${baseKey}_${suffix++}`;
       const categories = await storage.getDocumentCategories();
       const displayOrder = (categories.at(-1)?.displayOrder ?? 0) + 10;
-      res.status(201).json(await storage.createDocumentCategory({ key, name, displayOrder, isActive: true }));
+      const category = await storage.createDocumentCategory({ key, name, displayOrder, isActive: true });
+      await logActivity({
+        entityType: "document_category",
+        entityId: category.id,
+        action: "document_category_created",
+        actor: await getActor(req),
+        description: `Added document category "${category.name}"`,
+        metadata: { previous: null, new: { name: category.name, isActive: category.isActive, displayOrder: category.displayOrder } },
+      });
+      res.status(201).json(category);
     } catch (err) {
       if (err instanceof z.ZodError) return res.status(400).json({ message: err.errors[0].message });
       throw err;
@@ -1462,6 +1475,18 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Reorder request must include every category exactly once" });
       }
       await storage.reorderDocumentCategories(orderedIds);
+      const previousOrder = categories.map(({ id, name, displayOrder }) => ({ id, name, displayOrder }));
+      const newOrder = orderedIds.map((id, index) => {
+        const category = categories.find(item => item.id === id)!;
+        return { id, name: category.name, displayOrder: (index + 1) * 10 };
+      });
+      await logActivity({
+        entityType: "document_category",
+        action: "document_categories_reordered",
+        actor: await getActor(req),
+        description: "Reordered document categories",
+        metadata: { previous: previousOrder, new: newOrder },
+      });
       res.status(204).send();
     } catch (err) {
       if (err instanceof z.ZodError) return res.status(400).json({ message: err.errors[0].message });
@@ -1473,8 +1498,36 @@ export async function registerRoutes(
     try {
       const input = api.documentCategories.update.input.parse(req.body);
       const categoryId = z.coerce.number().int().positive().parse(req.params.id);
+      const previous = (await storage.getDocumentCategories()).find(category => category.id === categoryId);
+      if (!previous) return res.status(404).json({ message: "Document category not found" });
       const category = await storage.updateDocumentCategory(categoryId, input);
       if (!category) return res.status(404).json({ message: "Document category not found" });
+      const changes: Record<string, { previous: unknown; new: unknown }> = {};
+      if (input.name !== undefined && input.name !== previous.name) {
+        changes.name = { previous: previous.name, new: category.name };
+      }
+      if (input.isActive !== undefined && input.isActive !== previous.isActive) {
+        changes.isActive = { previous: previous.isActive, new: category.isActive };
+      }
+      if (Object.keys(changes).length > 0) {
+        const renamed = changes.name !== undefined;
+        const statusChanged = changes.isActive !== undefined;
+        const description = renamed && statusChanged
+          ? `Renamed document category "${previous.name}" to "${category.name}" and ${category.isActive ? "activated" : "deactivated"} it`
+          : renamed
+            ? `Renamed document category "${previous.name}" to "${category.name}"`
+            : `${category.isActive ? "Activated" : "Deactivated"} document category "${category.name}"`;
+        await logActivity({
+          entityType: "document_category",
+          entityId: category.id,
+          action: renamed && statusChanged
+            ? "document_category_updated"
+            : renamed ? "document_category_renamed" : category.isActive ? "document_category_activated" : "document_category_deactivated",
+          actor: await getActor(req),
+          description,
+          metadata: { changes },
+        });
+      }
       res.json(category);
     } catch (err) {
       if (err instanceof z.ZodError) return res.status(400).json({ message: err.errors[0].message });
