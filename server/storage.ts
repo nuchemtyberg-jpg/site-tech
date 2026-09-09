@@ -36,7 +36,7 @@ import {
   type PayApplication, type PayApplicationItem, type TaskTitle,
   type ScheduleEntry,
   type User, type UpsertUser, type AuthorizedUser,
-  type DocumentCategoryRecord, type InsertDocumentCategory
+  type DocumentCategoryRecord, type DocumentCategoryWithUsage, type InsertDocumentCategory
 } from "@shared/schema";
 import { DEFAULT_DOCUMENT_CATEGORIES } from "@shared/documentCategory";
 import { db } from "./db";
@@ -58,7 +58,7 @@ function generateProjectEmailSlug(name: string, id: number): string {
 }
 
 export interface IStorage {
-  getDocumentCategories(): Promise<DocumentCategoryRecord[]>;
+  getDocumentCategories(): Promise<DocumentCategoryWithUsage[]>;
   getDocumentCategoryActivity(limit?: number): Promise<ActivityLog[]>;
   getDocumentCategoryByKey(key: string): Promise<DocumentCategoryRecord | undefined>;
   createDocumentCategory(category: InsertDocumentCategory): Promise<DocumentCategoryRecord>;
@@ -545,9 +545,21 @@ export class DatabaseStorage implements IStorage {
     this.documentCategoriesSeeded = true;
   }
 
-  async getDocumentCategories(): Promise<DocumentCategoryRecord[]> {
+  async getDocumentCategories(): Promise<DocumentCategoryWithUsage[]> {
     await this.ensureDocumentCategories();
-    return db.select().from(documentCategories).orderBy(asc(documentCategories.displayOrder), asc(documentCategories.id));
+    const rows = await db.select({
+      category: documentCategories,
+      documentUsageCount: sql<number>`count(${files.id})::int`,
+    })
+      .from(documentCategories)
+      .leftJoin(files, and(
+        eq(files.category, documentCategories.key),
+        eq(files.relatedEntityType, "opportunity"),
+        isNull(files.deletedAt),
+      ))
+      .groupBy(documentCategories.id)
+      .orderBy(asc(documentCategories.displayOrder), asc(documentCategories.id));
+    return rows.map(({ category, documentUsageCount }) => ({ ...category, documentUsageCount }));
   }
 
   async getDocumentCategoryActivity(limit = 100): Promise<ActivityLog[]> {

@@ -48,6 +48,9 @@ export const insertDocumentCategorySchema = createInsertSchema(documentCategorie
     displayOrder: z.number().int().positive(),
   });
 export type DocumentCategoryRecord = typeof documentCategories.$inferSelect;
+export type DocumentCategoryWithUsage = DocumentCategoryRecord & {
+  documentUsageCount: number;
+};
 export type InsertDocumentCategory = z.infer<typeof insertDocumentCategorySchema>;
 
 // Customers - a Customer represents a company/organization

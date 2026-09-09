@@ -1,11 +1,16 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, buildUrl } from "@shared/routes";
-import type { ActivityLog, DocumentCategoryRecord } from "@shared/schema";
+import type { ActivityLog, DocumentCategoryRecord, DocumentCategoryWithUsage } from "@shared/schema";
 import { apiRequest } from "@/lib/queryClient";
+import {
+  documentCategoriesQueryKey,
+  invalidateDocumentCategoryUsage,
+} from "@/lib/document-category-cache";
 
 export function useDocumentCategories() {
-  return useQuery<DocumentCategoryRecord[]>({
-    queryKey: [api.documentCategories.list.path],
+  return useQuery<DocumentCategoryWithUsage[]>({
+    queryKey: documentCategoriesQueryKey,
+    refetchOnMount: "always",
   });
 }
 
@@ -18,7 +23,7 @@ export function useDocumentCategoryHistory() {
 function useInvalidateDocumentCategories() {
   const queryClient = useQueryClient();
   return () => {
-    queryClient.invalidateQueries({ queryKey: [api.documentCategories.list.path] });
+    invalidateDocumentCategoryUsage(queryClient);
     queryClient.invalidateQueries({ queryKey: [api.documentCategories.history.path] });
   };
 }

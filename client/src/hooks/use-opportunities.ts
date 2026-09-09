@@ -8,6 +8,7 @@ import type {
   FileWithUploader, FileMetadata,
 } from "@shared/schema";
 import { localToday } from "@/hooks/use-todos";
+import { invalidateDocumentCategoryUsage } from "@/lib/document-category-cache";
 
 export type OpportunityListFilters = {
   status?: string;
@@ -287,6 +288,7 @@ export function useCreateOpportunityDocument(opportunityId: number) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [api.opportunityDocuments.list.path, opportunityId] });
       queryClient.invalidateQueries({ queryKey: [api.opportunities.activity.path, opportunityId] });
+      invalidateDocumentCategoryUsage(queryClient);
     },
   });
 }
@@ -300,6 +302,7 @@ export function useDeleteOpportunityDocument(opportunityId: number) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [api.opportunityDocuments.list.path, opportunityId] });
       queryClient.invalidateQueries({ queryKey: [api.opportunities.activity.path, opportunityId] });
+      invalidateDocumentCategoryUsage(queryClient);
     },
   });
 }

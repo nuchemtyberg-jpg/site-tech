@@ -4,7 +4,7 @@
  */
 import crypto from "node:crypto";
 import { db } from "../server/db";
-import { documentCategories } from "../shared/schema";
+import { documentCategories, files } from "../shared/schema";
 import { eq, sql } from "drizzle-orm";
 
 const BASE = process.env.TEST_BASE_URL ?? "http://localhost:5000";
@@ -69,6 +69,28 @@ async function main() {
     }));
     createdId = create.body?.id ?? null;
     check("admin can add category with stable generated key", create.status === 201 && create.body?.key === "temporary_trade_documents" && create.body?.isActive === true, create);
+    await db.insert(files).values([
+      {
+        name: "__Category usage v1",
+        objectPath: "__test/category-usage-v1",
+        relatedEntityType: "opportunity",
+        relatedEntityId: 1,
+        category: create.body.key,
+        documentVersion: 1,
+        documentStatus: "superseded",
+      },
+      {
+        name: "__Category usage v2",
+        objectPath: "__test/category-usage-v2",
+        relatedEntityType: "opportunity",
+        relatedEntityId: 1,
+        category: create.body.key,
+        documentVersion: 2,
+        documentStatus: "current",
+      },
+    ]);
+    const withUsage = await json(await fetch(`${BASE}/api/document-categories`, { headers: admin.headers }));
+    check("usage count includes current and historical versions", withUsage.body?.find((category: any) => category.id === createdId)?.documentUsageCount === 2, withUsage);
 
     const memberCreate = await fetch(`${BASE}/api/document-categories`, {
       method: "POST", headers: member.headers, body: JSON.stringify({ name: "Forbidden" }),
@@ -128,6 +150,7 @@ async function main() {
 
     console.log(failures === 0 ? "\nALL TESTS PASSED" : `\n${failures} TEST(S) FAILED`);
   } finally {
+    await db.delete(files).where(sql`${files.objectPath} LIKE '__test/category-usage-%'`);
     for (const category of originalOrder) {
       await db.update(documentCategories).set({ displayOrder: category.displayOrder }).where(eq(documentCategories.id, category.id));
     }

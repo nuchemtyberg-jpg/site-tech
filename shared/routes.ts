@@ -13,7 +13,7 @@ import {
   type TodoUpdate, type TodoUpdateWithAuthor, type TodoUpdatesPage,
   type OpportunityWithDetails, type OpportunityContactWithDetails, type OpportunityDashboardResult,
   type FileWithUploader, type OpportunityScopeItemWithDetails, type ScopeCategory,
-  type DocumentCategoryRecord,
+  type DocumentCategoryWithUsage,
 } from './schema';
 import { SCOPE_ITEM_STATUS_VALUES } from './scopeChecklist';
 
@@ -46,7 +46,7 @@ export const api = {
     list: {
       method: 'GET' as const,
       path: '/api/document-categories',
-      responses: { 200: z.array(z.custom<DocumentCategoryRecord>()) },
+      responses: { 200: z.array(z.custom<DocumentCategoryWithUsage>()) },
     },
     history: {
       method: 'GET' as const,

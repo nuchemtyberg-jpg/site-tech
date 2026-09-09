@@ -6,6 +6,16 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import {
   useCreateDocumentCategory,
@@ -25,6 +35,7 @@ export function DocumentCategoriesSettings() {
   const [newName, setNewName] = useState("");
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editingName, setEditingName] = useState("");
+  const [pendingDeactivationId, setPendingDeactivationId] = useState<number | null>(null);
 
   const onError = (error: Error) => toast({
     title: "Couldn't update document categories",
@@ -63,6 +74,18 @@ export function DocumentCategoriesSettings() {
       onError,
     });
   };
+
+  const setActive = (id: number, isActive: boolean) => {
+    update.mutate({ id, isActive }, {
+      onSuccess: () => {
+        setPendingDeactivationId(null);
+        toast({ title: isActive ? "Category activated" : "Category deactivated" });
+      },
+      onError,
+    });
+  };
+
+  const pendingDeactivation = categories.find(category => category.id === pendingDeactivationId);
 
   return (
     <Card data-testid="card-document-categories">
@@ -103,7 +126,12 @@ export function DocumentCategoriesSettings() {
                   <>
                     <div className="min-w-0 flex-1">
                       <p className="font-medium truncate">{category.name}</p>
-                      {!category.isActive && <Badge variant="secondary" className="mt-1">Inactive</Badge>}
+                      <div className="mt-1 flex flex-wrap items-center gap-2">
+                        {!category.isActive && <Badge variant="secondary">Inactive</Badge>}
+                        <span className="text-xs text-muted-foreground" data-testid={`document-category-usage-${category.id}`}>
+                          {category.documentUsageCount} {category.documentUsageCount === 1 ? "document version" : "document versions"}
+                        </span>
+                      </div>
                     </div>
                     <Button variant="ghost" size="icon" className="min-h-10 min-w-10" onClick={() => { setEditingId(category.id); setEditingName(category.name); }} aria-label={`Rename ${category.name}`}>
                       <Pencil className="w-4 h-4" />
@@ -111,10 +139,13 @@ export function DocumentCategoriesSettings() {
                     <Switch
                       checked={category.isActive}
                       disabled={update.isPending}
-                      onCheckedChange={isActive => update.mutate({ id: category.id, isActive }, {
-                        onSuccess: () => toast({ title: isActive ? "Category activated" : "Category deactivated" }),
-                        onError,
-                      })}
+                      onCheckedChange={isActive => {
+                        if (!isActive && category.documentUsageCount > 0) {
+                          setPendingDeactivationId(category.id);
+                        } else {
+                          setActive(category.id, isActive);
+                        }
+                      }}
                       aria-label={`${category.isActive ? "Deactivate" : "Activate"} ${category.name}`}
                     />
                   </>
@@ -159,6 +190,34 @@ export function DocumentCategoriesSettings() {
             </div>
           )}
         </div>
+        <AlertDialog
+          open={pendingDeactivation !== undefined}
+          onOpenChange={open => {
+            if (!open && !update.isPending) setPendingDeactivationId(null);
+          }}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Deactivate {pendingDeactivation?.name}?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This category is used by {pendingDeactivation?.documentUsageCount} historical or current document {pendingDeactivation?.documentUsageCount === 1 ? "version" : "versions"}.
+                Existing documents will keep this category, but it will no longer be available for new uploads.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={update.isPending}>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                disabled={update.isPending}
+                onClick={event => {
+                  event.preventDefault();
+                  if (pendingDeactivation) setActive(pendingDeactivation.id, false);
+                }}
+              >
+                {update.isPending ? "Deactivating..." : "Deactivate category"}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </CardContent>
     </Card>
   );
