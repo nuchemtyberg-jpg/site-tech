@@ -1,53 +1,22 @@
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
-import { Plus, Search, Phone, Mail, Building2, MapPin, Star, AlertTriangle, Users as UsersIcon, LayoutGrid, List } from "lucide-react";
+import { Plus, Search, Phone, Mail, Building2, MapPin, Star, Users as UsersIcon, LayoutGrid, List } from "lucide-react";
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
-import { queryClient, apiRequest } from "@/lib/queryClient";
-import { useToast } from "@/hooks/use-toast";
+import { CustomerCreationDialog } from "@/components/CustomerCreationDialog";
 import {
-  CUSTOMER_TYPES, CUSTOMER_TYPE_LABELS, CONTACT_ROLES, CONTACT_ROLE_LABELS,
-  type Customer, type Contact, type CustomerType, type ContactRole,
+  CUSTOMER_TYPE_LABELS,
+  type Customer, type Contact, type CustomerType,
 } from "@shared/schema";
 
 type CustomerListItem = Customer & {
   primaryContact: Contact | null;
   matchReason: string | null;
 };
-
-const customerFormSchema = z.object({
-  // Company information
-  name: z.string().min(1, "Company name is required"),
-  customerType: z.string().optional(),
-  phone: z.string().optional(),
-  email: z.string().email().optional().or(z.literal("")),
-  website: z.string().optional(),
-  address: z.string().optional(),
-  city: z.string().optional(),
-  state: z.string().optional(),
-  zip: z.string().optional(),
-  notes: z.string().optional(),
-  // Optional primary contact
-  contactFirstName: z.string().optional(),
-  contactLastName: z.string().optional(),
-  contactJobTitle: z.string().optional(),
-  contactEmail: z.string().email().optional().or(z.literal("")),
-  contactOfficePhone: z.string().optional(),
-  contactMobilePhone: z.string().optional(),
-  contactExtension: z.string().optional(),
-});
-
-type CustomerFormData = z.infer<typeof customerFormSchema>;
 
 const STATUS_FILTERS = [
   { value: "active", label: "Active" },
@@ -62,9 +31,6 @@ export default function Customers() {
   const [statusFilter, setStatusFilter] = useState("active");
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [contactRoles, setContactRoles] = useState<ContactRole[]>([]);
-  const [duplicates, setDuplicates] = useState<{ id: number; name: string }[]>([]);
-  const { toast } = useToast();
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search), 250);
@@ -82,83 +48,6 @@ export default function Customers() {
     },
   });
 
-  const form = useForm<CustomerFormData>({
-    resolver: zodResolver(customerFormSchema),
-    defaultValues: {
-      name: "", customerType: "", phone: "", email: "", website: "",
-      address: "", city: "", state: "", zip: "", notes: "",
-      contactFirstName: "", contactLastName: "", contactJobTitle: "",
-      contactEmail: "", contactOfficePhone: "", contactMobilePhone: "", contactExtension: "",
-    },
-  });
-
-  // Non-blocking duplicate company-name warning
-  const companyName = form.watch("name");
-  useEffect(() => {
-    if (!dialogOpen || !companyName || companyName.trim().length < 3) {
-      setDuplicates([]);
-      return;
-    }
-    const t = setTimeout(async () => {
-      try {
-        const res = await fetch(`/api/customers/duplicate-check?name=${encodeURIComponent(companyName.trim())}`, { credentials: "include" });
-        if (res.ok) setDuplicates(await res.json());
-      } catch {
-        // best-effort warning only
-      }
-    }, 400);
-    return () => clearTimeout(t);
-  }, [companyName, dialogOpen]);
-
-  const createMutation = useMutation({
-    mutationFn: async (data: CustomerFormData) => {
-      const res = await apiRequest("POST", "/api/customers", {
-        name: data.name,
-        customerType: data.customerType || null,
-        phone: data.phone || null,
-        email: data.email || null,
-        website: data.website || null,
-        address: data.address || null,
-        city: data.city || null,
-        state: data.state || null,
-        zip: data.zip || null,
-        notes: data.notes || null,
-      });
-      const customer = await res.json();
-      // Optional primary contact created alongside the company
-      if (data.contactFirstName?.trim()) {
-        await apiRequest("POST", `/api/customers/${customer.id}/contacts`, {
-          firstName: data.contactFirstName.trim(),
-          lastName: data.contactLastName?.trim() || null,
-          jobTitle: data.contactJobTitle || null,
-          roles: contactRoles,
-          email: data.contactEmail || null,
-          officePhone: data.contactOfficePhone || null,
-          mobilePhone: data.contactMobilePhone || null,
-          extension: data.contactExtension || null,
-          isPrimary: true,
-          isActive: true,
-        });
-      }
-      return customer;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/customers"] });
-      setDialogOpen(false);
-      form.reset();
-      setContactRoles([]);
-      setDuplicates([]);
-      toast({ title: "Customer created successfully" });
-    },
-    onError: (err: Error) => {
-      toast({ title: "Failed to create customer", description: err.message, variant: "destructive" });
-    },
-  });
-
-  const toggleRole = (role: ContactRole) => {
-    setContactRoles((prev) => prev.includes(role) ? prev.filter((r) => r !== role) : [...prev, role]);
-  };
-
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between gap-4">
@@ -166,316 +55,11 @@ export default function Customers() {
           <h1 className="text-3xl font-bold tracking-tight">Customers</h1>
           <p className="text-muted-foreground">Manage your customer companies and contacts</p>
         </div>
-        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-          <DialogTrigger asChild>
-            <Button data-testid="button-new-customer">
-              <Plus className="w-4 h-4 mr-2" />
-              New Customer
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>Add New Customer</DialogTitle>
-            </DialogHeader>
-            <Form {...form}>
-              <form onSubmit={form.handleSubmit((data) => createMutation.mutate(data))} className="space-y-4">
-                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Company Information</h3>
-                <FormField
-                  control={form.control}
-                  name="name"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Company Name *</FormLabel>
-                      <FormControl>
-                        <Input placeholder="ABC Construction" {...field} data-testid="input-customer-name" />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                {duplicates.length > 0 && (
-                  <div className="rounded-md border border-yellow-400/50 bg-yellow-50 dark:bg-yellow-950/30 p-3 text-sm" data-testid="warning-duplicate-customer">
-                    <div className="flex items-center gap-2 font-medium text-yellow-800 dark:text-yellow-300">
-                      <AlertTriangle className="w-4 h-4" />
-                      Possible existing customer
-                    </div>
-                    <ul className="mt-1 space-y-1">
-                      {duplicates.map((d) => (
-                        <li key={d.id}>
-                          <Link href={`/customers/${d.id}`} className="text-primary hover:underline">
-                            {d.name}
-                          </Link>
-                        </li>
-                      ))}
-                    </ul>
-                    <p className="text-muted-foreground mt-1">You can still create this customer if it's a different company.</p>
-                  </div>
-                )}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <FormField
-                    control={form.control}
-                    name="customerType"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Customer Type</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value}>
-                          <FormControl>
-                            <SelectTrigger data-testid="select-customer-type">
-                              <SelectValue placeholder="Select type" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {CUSTOMER_TYPES.map((t) => (
-                              <SelectItem key={t} value={t}>{CUSTOMER_TYPE_LABELS[t]}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="phone"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Main Phone</FormLabel>
-                        <FormControl>
-                          <Input type="tel" placeholder="(555) 123-4567" {...field} data-testid="input-customer-phone" />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <FormField
-                    control={form.control}
-                    name="email"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>General Email</FormLabel>
-                        <FormControl>
-                          <Input type="email" placeholder="info@company.com" {...field} data-testid="input-customer-email" />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="website"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Website</FormLabel>
-                        <FormControl>
-                          <Input placeholder="www.company.com" {...field} data-testid="input-customer-website" />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-                <FormField
-                  control={form.control}
-                  name="address"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Address</FormLabel>
-                      <FormControl>
-                        <Input placeholder="123 Main Street" {...field} data-testid="input-customer-address" />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <div className="grid grid-cols-3 gap-4">
-                  <FormField
-                    control={form.control}
-                    name="city"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>City</FormLabel>
-                        <FormControl>
-                          <Input placeholder="Cityville" {...field} data-testid="input-customer-city" />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="state"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>State</FormLabel>
-                        <FormControl>
-                          <Input placeholder="NJ" {...field} data-testid="input-customer-state" />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="zip"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>ZIP</FormLabel>
-                        <FormControl>
-                          <Input placeholder="12345" {...field} data-testid="input-customer-zip" />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-                <FormField
-                  control={form.control}
-                  name="notes"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Notes</FormLabel>
-                      <FormControl>
-                        <Textarea placeholder="Additional notes..." {...field} data-testid="input-customer-notes" />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <div className="pt-2 border-t">
-                  <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mt-2">Primary Contact (optional)</h3>
-                  <p className="text-xs text-muted-foreground mb-3">Add the first contact for this company. They'll be marked as the Primary Contact.</p>
-                  <div className="space-y-4">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <FormField
-                        control={form.control}
-                        name="contactFirstName"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>First Name</FormLabel>
-                            <FormControl>
-                              <Input placeholder="John" {...field} data-testid="input-contact-first-name" />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={form.control}
-                        name="contactLastName"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Last Name</FormLabel>
-                            <FormControl>
-                              <Input placeholder="Smith" {...field} data-testid="input-contact-last-name" />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <FormField
-                        control={form.control}
-                        name="contactJobTitle"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Job Title</FormLabel>
-                            <FormControl>
-                              <Input placeholder="Senior Estimator" {...field} data-testid="input-contact-job-title" />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={form.control}
-                        name="contactEmail"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Email</FormLabel>
-                            <FormControl>
-                              <Input type="email" placeholder="john@company.com" {...field} data-testid="input-contact-email" />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      <FormField
-                        control={form.control}
-                        name="contactOfficePhone"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Office Phone</FormLabel>
-                            <FormControl>
-                              <Input type="tel" {...field} data-testid="input-contact-office-phone" />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={form.control}
-                        name="contactMobilePhone"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Mobile Phone</FormLabel>
-                            <FormControl>
-                              <Input type="tel" {...field} data-testid="input-contact-mobile-phone" />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={form.control}
-                        name="contactExtension"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Extension</FormLabel>
-                            <FormControl>
-                              <Input {...field} data-testid="input-contact-extension" />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                    </div>
-                    <div>
-                      <FormLabel>Role(s)</FormLabel>
-                      <div className="flex flex-wrap gap-2 mt-2">
-                        {CONTACT_ROLES.map((role) => (
-                          <Badge
-                            key={role}
-                            variant={contactRoles.includes(role) ? "default" : "outline"}
-                            className="cursor-pointer select-none"
-                            onClick={() => toggleRole(role)}
-                            data-testid={`badge-role-${role}`}
-                          >
-                            {CONTACT_ROLE_LABELS[role]}
-                          </Badge>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex justify-end gap-2">
-                  <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
-                    Cancel
-                  </Button>
-                  <Button type="submit" disabled={createMutation.isPending} data-testid="button-save-customer">
-                    {createMutation.isPending ? "Creating..." : "Create Customer"}
-                  </Button>
-                </div>
-              </form>
-            </Form>
-          </DialogContent>
-        </Dialog>
+        <Button data-testid="button-new-customer" onClick={() => setDialogOpen(true)}>
+          <Plus className="w-4 h-4 mr-2" />
+          New Customer
+        </Button>
+        <CustomerCreationDialog open={dialogOpen} onOpenChange={setDialogOpen} />
       </div>
 
       <div className="flex flex-col sm:flex-row gap-3">

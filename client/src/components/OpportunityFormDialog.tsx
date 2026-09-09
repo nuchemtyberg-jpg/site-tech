@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Loader2, Plus } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -9,9 +9,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
-import { apiRequest } from "@/lib/queryClient";
 import { extractApiError, useAppUsers, userDisplayName } from "@/hooks/use-todos";
 import { useCreateOpportunity, useUpdateOpportunity } from "@/hooks/use-opportunities";
+import { CustomerCreationDialog } from "@/components/CustomerCreationDialog";
 import { OPPORTUNITY_PROJECT_TYPES, OPPORTUNITY_SOURCES } from "@shared/opportunityStatus";
 import type { Customer, OpportunityWithDetails } from "@shared/schema";
 
@@ -34,30 +34,19 @@ export function OpportunityFormDialog({ open, onOpenChange, opportunity, onSaved
 }) {
   const { toast } = useToast();
   const { isAdmin } = useAuth();
-  const queryClient = useQueryClient();
   const [form, setForm] = useState(empty);
-  const [newCustomerName, setNewCustomerName] = useState("");
   const [addingCustomer, setAddingCustomer] = useState(false);
+  const [newlySelectedCustomer, setNewlySelectedCustomer] = useState<Pick<Customer, "id" | "name"> | null>(null);
   const { data: customers = [] } = useQuery<Customer[]>({ queryKey: ["/api/customers"] });
   const { data: users = [] } = useAppUsers();
   const create = useCreateOpportunity();
   const update = useUpdateOpportunity();
-  const createCustomer = useMutation({
-    mutationFn: async (name: string) => {
-      const response = await apiRequest("POST", "/api/customers", { name: name.trim() });
-      return (await response.json()) as Customer;
-    },
-    onSuccess: customer => {
-      queryClient.invalidateQueries({ queryKey: ["/api/customers"] });
-      setForm(current => ({ ...current, customerId: String(customer.id) }));
-      setNewCustomerName(""); setAddingCustomer(false);
-      toast({ title: "Customer created and selected" });
-    },
-    onError: error => toast({ title: "Couldn't create customer", description: extractApiError(error, "Try a different company name."), variant: "destructive" }),
-  });
-
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      setAddingCustomer(false);
+      setNewlySelectedCustomer(null);
+      return;
+    }
     setForm(opportunity ? {
       name: opportunity.name, customerId: String(opportunity.customerId), status: opportunity.status,
       responsibleUserId: opportunity.responsibleUserId || "", streetAddress: opportunity.streetAddress || "",
@@ -72,6 +61,13 @@ export function OpportunityFormDialog({ open, onOpenChange, opportunity, onSaved
   }, [open, opportunity]);
 
   const field = (key: keyof FormState) => (value: string) => setForm(current => ({ ...current, [key]: value }));
+  const customerOptions = newlySelectedCustomer && !customers.some(customer => customer.id === newlySelectedCustomer.id)
+    ? [...customers, newlySelectedCustomer]
+    : customers;
+  const selectNewCustomer = (customer: Pick<Customer, "id" | "name">) => {
+    setNewlySelectedCustomer(customer);
+    setForm(current => ({ ...current, customerId: String(customer.id) }));
+  };
   const save = (confirmRemoveContacts = false) => {
     if (!form.name.trim() || !form.customerId) {
       toast({ title: "Name and customer are required", variant: "destructive" }); return;
@@ -109,8 +105,8 @@ export function OpportunityFormDialog({ open, onOpenChange, opportunity, onSaved
         <DialogHeader><DialogTitle>{opportunity ? `Edit ${opportunity.opportunityNumber}` : "New Bid Opportunity"}</DialogTitle>
           <DialogDescription>Start with the essentials. You can add the rest later.</DialogDescription></DialogHeader>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div className="sm:col-span-2"><Label>Name *</Label><Input className="min-h-11" value={form.name} onChange={e => field("name")(e.target.value)} /></div>
-          <div><Label>Customer *</Label><Select value={form.customerId} onValueChange={field("customerId")}><SelectTrigger className="min-h-11" data-testid="select-opp-customer"><SelectValue placeholder="Choose customer" /></SelectTrigger><SelectContent>{customers.map(c => <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>)}</SelectContent></Select>{addingCustomer ? <div className="flex gap-2 mt-2"><Input className="min-h-11" value={newCustomerName} onChange={e => setNewCustomerName(e.target.value)} placeholder="Company name" data-testid="input-inline-customer-name" /><Button type="button" className="min-h-11 shrink-0" disabled={!newCustomerName.trim() || createCustomer.isPending} onClick={() => createCustomer.mutate(newCustomerName)} data-testid="button-save-inline-customer">{createCustomer.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : "Add"}</Button></div> : <Button type="button" variant="link" className="px-0 min-h-11" onClick={() => setAddingCustomer(true)} data-testid="button-add-inline-customer"><Plus className="w-4 h-4 mr-1" />Add new customer</Button>}</div>
+          <div className="sm:col-span-2"><Label>Name *</Label><Input className="min-h-11" value={form.name} onChange={e => field("name")(e.target.value)} data-testid="input-opportunity-name" /></div>
+            <div><Label>Customer *</Label><Select value={form.customerId} onValueChange={field("customerId")}><SelectTrigger className="min-h-11" data-testid="select-opp-customer"><SelectValue placeholder="Choose customer" /></SelectTrigger><SelectContent>{customerOptions.map(c => <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>)}</SelectContent></Select><Button type="button" variant="link" className="px-0 min-h-11" onClick={() => setAddingCustomer(true)} data-testid="button-add-inline-customer"><Plus className="w-4 h-4 mr-1" />Add new customer</Button></div>
           <div><Label>Responsible</Label><Select value={form.responsibleUserId || "none"} onValueChange={v => field("responsibleUserId")(v === "none" ? "" : v)}><SelectTrigger className="min-h-11"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="none">Unassigned</SelectItem>{users.map(u => <SelectItem key={u.id} value={u.id}>{userDisplayName(u)}</SelectItem>)}</SelectContent></Select></div>
           <div><Label>Bid due</Label><div className="flex gap-2"><Input className="min-h-11 min-w-0" type="date" value={form.bidDueDate} onChange={e => field("bidDueDate")(e.target.value)} /><Input className="min-h-11 w-28" type="time" value={form.bidDueTime} onChange={e => field("bidDueTime")(e.target.value)} /></div></div>
           <div><Label>Source</Label><Select value={form.source || "none"} onValueChange={v => field("source")(v === "none" ? "" : v)}><SelectTrigger className="min-h-11"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="none">Not set</SelectItem>{OPPORTUNITY_SOURCES.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}</SelectContent></Select></div>
@@ -127,6 +123,12 @@ export function OpportunityFormDialog({ open, onOpenChange, opportunity, onSaved
         </div>
         <DialogFooter><Button className="min-h-11" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button><Button className="min-h-11" disabled={pending} onClick={() => save()}>{pending && <Loader2 className="w-4 h-4 animate-spin mr-2" />}{opportunity ? "Save changes" : "Create opportunity"}</Button></DialogFooter>
       </DialogContent>
+      <CustomerCreationDialog
+        open={addingCustomer}
+        onOpenChange={setAddingCustomer}
+        onCreated={selectNewCustomer}
+        onSelectExisting={selectNewCustomer}
+      />
     </Dialog>
   );
 }
