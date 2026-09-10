@@ -33,7 +33,7 @@ function useInvalidateScope(opportunityId: number) {
 export function useAddScopeItem(opportunityId: number) {
   const invalidate = useInvalidateScope(opportunityId);
   return useMutation({
-    mutationFn: async (input: { categoryKey: string; name: string; description?: string | null }) => {
+    mutationFn: async (input: { categoryKey: string; name: string }) => {
       const res = await apiRequest("POST", buildUrl(api.opportunityScope.createItem.path, { id: opportunityId }), input);
       return (await res.json()) as OpportunityScopeItemWithDetails;
     },
@@ -44,7 +44,7 @@ export function useAddScopeItem(opportunityId: number) {
 export function useUpdateScopeItem(opportunityId: number) {
   const invalidate = useInvalidateScope(opportunityId);
   return useMutation({
-    mutationFn: async ({ itemId, ...input }: { itemId: number; status?: string; notes?: string | null; name?: string; description?: string | null }) => {
+    mutationFn: async ({ itemId, ...input }: { itemId: number; status?: string; notes?: string | null; name?: string }) => {
       const res = await apiRequest("PUT", buildUrl(api.opportunityScope.updateItem.path, { id: opportunityId, itemId }), input);
       return (await res.json()) as OpportunityScopeItemWithDetails;
     },

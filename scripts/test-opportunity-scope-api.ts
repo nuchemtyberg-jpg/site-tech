@@ -8,7 +8,7 @@ import { db } from "../server/db";
 import { sql } from "drizzle-orm";
 
 const BASE = process.env.TEST_BASE_URL ?? "http://localhost:5000";
-const USER_ID = "mobile-user-001"; // admin, approved
+const USER_ID = "__scope-catalog-admin";
 const ADDRESS = { streetAddress: "123 Scope Lane", city: "Testville", state: "TX", zip: "75001" };
 const MEMBER_ID = "__scope-catalog-member";
 
@@ -25,11 +25,15 @@ function makeCookie(sid: string): string {
 }
 
 async function main() {
+  const adminEmail = "__scope-catalog-admin@test.local";
+  await db.execute(sql`INSERT INTO users (id, email, first_name, last_name, role, is_authorized)
+    VALUES (${USER_ID}, ${adminEmail}, 'Scope', 'Admin', 'admin', 'approved')
+    ON CONFLICT (id) DO UPDATE SET role = 'admin', is_authorized = 'approved'`);
   const sid = crypto.randomBytes(16).toString("hex");
   const expiresAtSec = Math.floor(Date.now() / 1000) + 6 * 3600;
   const sess = {
     cookie: { originalMaxAge: 604800000, expires: new Date(Date.now() + 6 * 3600_000).toISOString(), httpOnly: true, path: "/" },
-    passport: { user: { claims: { sub: USER_ID, email: "admin@test.com" }, expires_at: expiresAtSec, access_token: "test", refresh_token: "test" } },
+    passport: { user: { claims: { sub: USER_ID, email: adminEmail }, expires_at: expiresAtSec, access_token: "test", refresh_token: "test" } },
   };
   await db.execute(sql`INSERT INTO sessions (sid, sess, expire) VALUES (${sid}, ${JSON.stringify(sess)}::jsonb, NOW() + interval '6 hours')`);
   const H = { Cookie: makeCookie(sid), "Content-Type": "application/json" };
@@ -38,6 +42,7 @@ async function main() {
   let custId: number | null = null;
   let oppId: number | null = null;
   let secondOppId: number | null = null;
+  let futureSnapshotOppId: number | null = null;
   let catalogCategoryId: number | null = null;
   let catalogItemId: number | null = null;
   let secondCatalogItemId: number | null = null;
@@ -65,10 +70,15 @@ async function main() {
     catalogCategoryId = newCategory.body?.id;
     check("admin can create scope category", newCategory.status === 201 && newCategory.body?.isActive === true, newCategory);
     const newTemplate = await j(await fetch(`${BASE}/api/admin/scope-catalog/items`, {
-      method: "POST", headers: H, body: JSON.stringify({ categoryId: catalogCategoryId, name: "__SCOPE Temporary Template" }),
+      method: "POST", headers: H, body: JSON.stringify({
+        categoryId: catalogCategoryId,
+        name: "__SCOPE Temporary Template",
+        description: "__SCOPE original catalog description",
+      }),
     }));
     catalogItemId = newTemplate.body?.id;
-    check("admin can create scope item template", newTemplate.status === 201 && newTemplate.body?.isActive === true, newTemplate);
+    check("admin can create scope item template with description", newTemplate.status === 201 &&
+      newTemplate.body?.description === "__SCOPE original catalog description", newTemplate);
     const secondTemplate = await j(await fetch(`${BASE}/api/admin/scope-catalog/items`, {
       method: "POST", headers: H, body: JSON.stringify({ categoryId: catalogCategoryId, name: "__SCOPE Second Temporary Template" }),
     }));
@@ -82,6 +92,10 @@ async function main() {
       method: "POST", headers: MEMBER_H, body: JSON.stringify({ categoryId: catalogCategoryId, name: "Forbidden" }),
     }));
     check("non-admin cannot create catalog items", memberWrite.status === 403, memberWrite);
+    const memberItemUpdate = await j(await fetch(`${BASE}/api/admin/scope-catalog/items/${catalogItemId}`, {
+      method: "PATCH", headers: MEMBER_H, body: JSON.stringify({ description: "Forbidden" }),
+    }));
+    check("non-admin cannot edit catalog item descriptions", memberItemUpdate.status === 403, memberItemUpdate);
     const memberUpdate = await j(await fetch(`${BASE}/api/admin/scope-catalog/categories/${catalogCategoryId}`, {
       method: "PATCH", headers: MEMBER_H, body: JSON.stringify({ name: "Forbidden" }),
     }));
@@ -109,6 +123,8 @@ async function main() {
     check("scope list returns 200", empty.status === 200, empty);
     check("new opportunity automatically receives active catalog items", empty.body?.items?.length > 0, empty.body);
     check("new opportunity includes newly active catalog template", empty.body?.items?.some((item: any) => item.templateId === catalogItemId), empty.body);
+    check("new opportunity snapshots the catalog description", empty.body?.items?.find((item: any) =>
+      item.templateId === catalogItemId)?.description === "__SCOPE original catalog description", empty.body);
     const firstIndex = empty.body.items.findIndex((item: any) => item.templateId === catalogItemId);
     const secondIndex = empty.body.items.findIndex((item: any) => item.templateId === secondCatalogItemId);
     check("preloaded items follow configured category/item order", firstIndex >= 0 && secondIndex === firstIndex + 1, [firstIndex, secondIndex]);
@@ -133,12 +149,30 @@ async function main() {
     const reapplied = await j(await fetch(`${BASE}/api/opportunities/${oppId}/scope/apply-template`, { method: "POST", headers: H, body: "{}" }));
     check("re-apply is idempotent (no duplicates)", reapplied.body?.items?.length === totalTemplateItems, [reapplied.body?.items?.length, totalTemplateItems]);
 
-    console.log("== Custom item (name + optional master description, separate from notes) ==");
-    const custom = await j(await fetch(`${BASE}/api/opportunities/${oppId}/scope`, { method: "POST", headers: H, body: JSON.stringify({ categoryKey: "other", name: "__SCOPE custom widget removal", description: "__SCOPE master description detail" }) }));
+    console.log("== Opportunity writes cannot supply master descriptions ==");
+    for (const description of ["__SCOPE forbidden", null, ""]) {
+      const rejected = await j(await fetch(`${BASE}/api/opportunities/${oppId}/scope`, {
+        method: "POST",
+        headers: H,
+        body: JSON.stringify({ categoryKey: "other", name: "__SCOPE forbidden custom", description }),
+      }));
+      check(`admin custom create rejects supplied description ${JSON.stringify(description)}`,
+        rejected.status === 400 && /Scope Catalog/.test(rejected.body?.message), rejected);
+    }
+    const memberRejectedCreate = await j(await fetch(`${BASE}/api/opportunities/${oppId}/scope`, {
+      method: "POST",
+      headers: MEMBER_H,
+      body: JSON.stringify({ categoryKey: "other", name: "__SCOPE forbidden member custom", description: "Forbidden" }),
+    }));
+    check("authorized non-admin custom create rejects supplied description",
+      memberRejectedCreate.status === 400 && /Scope Catalog/.test(memberRejectedCreate.body?.message), memberRejectedCreate);
+
+    console.log("== Custom item name remains Opportunity-editable ==");
+    const custom = await j(await fetch(`${BASE}/api/opportunities/${oppId}/scope`, { method: "POST", headers: H, body: JSON.stringify({ categoryKey: "other", name: "__SCOPE custom widget removal" }) }));
     check("create custom item 201", custom.status === 201, custom);
     check("custom item flagged isCustom", custom.body?.isCustom === true, custom.body);
     check("custom item stores name", custom.body?.name === "__SCOPE custom widget removal", custom.body);
-    check("custom item stores master description separately", custom.body?.description === "__SCOPE master description detail", custom.body);
+    check("custom item has no master description", custom.body?.description === null, custom.body);
     const customId = custom.body?.id;
 
     const badCustom = await j(await fetch(`${BASE}/api/opportunities/${oppId}/scope`, { method: "POST", headers: H, body: JSON.stringify({ categoryKey: "other", name: "" }) }));
@@ -171,11 +205,26 @@ async function main() {
     check("name unchanged by notes update", notesUpdate.body?.name === allItems[allItems.length - 1].name, notesUpdate.body);
     check("notes stored separately", notesUpdate.body?.notes === "__SCOPE opportunity-specific note", notesUpdate.body);
 
-    console.log("== Master description can be edited independently of notes ==");
-    const descUpdate = await j(await fetch(`${BASE}/api/opportunities/${oppId}/scope/${lastId}`, { method: "PUT", headers: H, body: JSON.stringify({ description: "__SCOPE updated master description" }) }));
-    check("description update 200", descUpdate.status === 200, descUpdate);
-    check("description updated", descUpdate.body?.description === "__SCOPE updated master description", descUpdate.body);
-    check("notes unaffected by description update", descUpdate.body?.notes === "__SCOPE opportunity-specific note", descUpdate.body);
+    console.log("== Opportunity updates cannot change master descriptions ==");
+    const descriptionBeforeRejectedUpdates = notesUpdate.body?.description;
+    for (const description of ["__SCOPE forbidden update", null, ""]) {
+      const rejected = await j(await fetch(`${BASE}/api/opportunities/${oppId}/scope/${lastId}`, {
+        method: "PUT", headers: H, body: JSON.stringify({ description }),
+      }));
+      check(`admin update rejects supplied description ${JSON.stringify(description)}`,
+        rejected.status === 400 && /Scope Catalog/.test(rejected.body?.message), rejected);
+    }
+    const memberRejectedUpdate = await j(await fetch(`${BASE}/api/opportunities/${oppId}/scope/${lastId}`, {
+      method: "PUT", headers: MEMBER_H, body: JSON.stringify({ description: "Forbidden" }),
+    }));
+    check("authorized non-admin update rejects supplied description",
+      memberRejectedUpdate.status === 400 && /Scope Catalog/.test(memberRejectedUpdate.body?.message), memberRejectedUpdate);
+    const afterRejectedDescription = await j(await fetch(`${BASE}/api/opportunities/${oppId}/scope`, { headers: H }));
+    const unchangedDescriptionItem = afterRejectedDescription.body?.items?.find((item: any) => item.id === lastId);
+    check("rejected updates preserve saved description", unchangedDescriptionItem?.description === descriptionBeforeRejectedUpdates,
+      unchangedDescriptionItem);
+    check("notes remain saved after rejected description updates",
+      unchangedDescriptionItem?.notes === "__SCOPE opportunity-specific note", unchangedDescriptionItem);
 
     console.log("== Create clarification Todo ==");
     const todoRes = await j(await fetch(`${BASE}/api/opportunities/${oppId}/scope/${lastId}/todo`, { method: "POST", headers: H, body: JSON.stringify({ assignedToUserId: USER_ID }) }));
@@ -231,6 +280,38 @@ async function main() {
     check("total item count unchanged after no-op re-apply", afterReapply.body.items.length === totalBeforeReapply, [afterReapply.body.items.length, totalBeforeReapply]);
     check("apply-template response also returns categories (consistent contract with list)", reapplyAfterRemoval.body?.categories?.length >= 1, reapplyAfterRemoval.body?.categories);
 
+    console.log("== Catalog description edits affect only future Opportunity snapshots ==");
+    const editCatalogDescription = await j(await fetch(`${BASE}/api/admin/scope-catalog/items/${catalogItemId}`, {
+      method: "PATCH", headers: H, body: JSON.stringify({ description: "__SCOPE revised catalog description" }),
+    }));
+    check("admin can edit catalog description", editCatalogDescription.status === 200 &&
+      editCatalogDescription.body?.description === "__SCOPE revised catalog description", editCatalogDescription);
+    const catalogAfterEdit = await j(await fetch(`${BASE}/api/admin/scope-catalog`, { headers: H }));
+    check("edited catalog description persists", catalogAfterEdit.body?.items?.find((item: any) =>
+      item.id === catalogItemId)?.description === "__SCOPE revised catalog description", catalogAfterEdit);
+    const existingAfterCatalogEdit = await j(await fetch(`${BASE}/api/opportunities/${oppId}/scope`, { headers: H }));
+    check("existing Opportunity keeps original description snapshot", existingAfterCatalogEdit.body?.items?.find((item: any) =>
+      item.templateId === catalogItemId)?.description === "__SCOPE original catalog description", existingAfterCatalogEdit);
+    const futureSnapshot = await j(await fetch(`${BASE}/api/opportunities`, {
+      method: "POST", headers: H, body: JSON.stringify({ name: "__SCOPE Revised Snapshot Bid", customerId: custId, status: "new", ...ADDRESS }),
+    }));
+    futureSnapshotOppId = futureSnapshot.body?.id;
+    check("future snapshot opportunity create succeeds", futureSnapshot.status === 201, futureSnapshot);
+    const futureSnapshotScope = await j(await fetch(`${BASE}/api/opportunities/${futureSnapshotOppId}/scope`, { headers: H }));
+    check("future Opportunity preloads revised catalog description", futureSnapshotScope.body?.items?.find((item: any) =>
+      item.templateId === catalogItemId)?.description === "__SCOPE revised catalog description", futureSnapshotScope);
+    const clearCatalogDescription = await j(await fetch(`${BASE}/api/admin/scope-catalog/items/${catalogItemId}`, {
+      method: "PATCH", headers: H, body: JSON.stringify({ description: null }),
+    }));
+    check("admin can clear catalog description", clearCatalogDescription.status === 200 &&
+      clearCatalogDescription.body?.description === null, clearCatalogDescription);
+    const catalogAfterClear = await j(await fetch(`${BASE}/api/admin/scope-catalog`, { headers: H }));
+    check("cleared catalog description persists", catalogAfterClear.body?.items?.find((item: any) =>
+      item.id === catalogItemId)?.description === null, catalogAfterClear);
+    const existingAfterClear = await j(await fetch(`${BASE}/api/opportunities/${futureSnapshotOppId}/scope`, { headers: H }));
+    check("clearing catalog does not alter existing revised snapshot", existingAfterClear.body?.items?.find((item: any) =>
+      item.templateId === catalogItemId)?.description === "__SCOPE revised catalog description", existingAfterClear);
+
     console.log("== Catalog deactivation preserves history and affects only future Opportunities ==");
     const deactivateTemplate = await j(await fetch(`${BASE}/api/admin/scope-catalog/items/${catalogItemId}`, {
       method: "PATCH", headers: H, body: JSON.stringify({ isActive: false }),
@@ -268,6 +349,11 @@ async function main() {
       await db.execute(sql`DELETE FROM activity_logs WHERE metadata->>'opportunityId' = ${String(secondOppId)}`);
       await db.execute(sql`DELETE FROM opportunities WHERE id = ${secondOppId}`);
     }
+    if (futureSnapshotOppId) {
+      await db.execute(sql`DELETE FROM opportunity_scope_items WHERE opportunity_id = ${futureSnapshotOppId}`);
+      await db.execute(sql`DELETE FROM activity_logs WHERE metadata->>'opportunityId' = ${String(futureSnapshotOppId)}`);
+      await db.execute(sql`DELETE FROM opportunities WHERE id = ${futureSnapshotOppId}`);
+    }
     if (catalogItemId) await db.execute(sql`DELETE FROM scope_item_templates WHERE id = ${catalogItemId}`);
     if (secondCatalogItemId) await db.execute(sql`DELETE FROM scope_item_templates WHERE id = ${secondCatalogItemId}`);
     if (catalogCategoryId) await db.execute(sql`DELETE FROM scope_categories WHERE id = ${catalogCategoryId}`);
@@ -275,6 +361,7 @@ async function main() {
     await db.execute(sql`DELETE FROM sessions WHERE sid = ${sid}`);
     await db.execute(sql`DELETE FROM sessions WHERE sid = ${memberSid}`);
     await db.execute(sql`DELETE FROM users WHERE id = ${MEMBER_ID}`);
+    await db.execute(sql`DELETE FROM users WHERE id = ${USER_ID}`);
     console.log("Cleanup done.");
   }
 

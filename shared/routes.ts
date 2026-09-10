@@ -1168,8 +1168,7 @@ export const api = {
       input: z.object({
         categoryKey: z.string().min(1),
         name: z.string().trim().min(1, "Name is required"),
-        description: z.string().trim().min(1).nullable().optional(),
-      }),
+      }).strict("Description is managed in the Scope Catalog and cannot be set on an Opportunity scope item"),
       responses: {
         201: z.custom<OpportunityScopeItemWithDetails>(),
         400: errorSchemas.validation,
@@ -1183,8 +1182,7 @@ export const api = {
         status: z.enum(SCOPE_ITEM_STATUS_VALUES).optional(),
         notes: z.string().nullable().optional(),
         name: z.string().trim().min(1).optional(),
-        description: z.string().trim().min(1).nullable().optional(),
-      }),
+      }).strict("Description is managed in the Scope Catalog and cannot be set on an Opportunity scope item"),
       responses: {
         200: z.custom<OpportunityScopeItemWithDetails>(),
         400: errorSchemas.validation,

@@ -477,7 +477,7 @@ export interface IStorage {
   getOpportunityScopeItems(opportunityId: number): Promise<OpportunityScopeItemWithDetails[]>;
   getOpportunityScopeItem(id: number): Promise<OpportunityScopeItem | undefined>;
   createOpportunityScopeItem(item: InsertOpportunityScopeItem): Promise<OpportunityScopeItem>;
-  updateOpportunityScopeItem(id: number, updates: Partial<Pick<OpportunityScopeItem, "status" | "notes" | "description" | "linkedTodoId">>): Promise<OpportunityScopeItem>;
+  updateOpportunityScopeItem(id: number, updates: Partial<Pick<OpportunityScopeItem, "status" | "notes" | "name" | "linkedTodoId">>): Promise<OpportunityScopeItem>;
   deleteOpportunityScopeItem(id: number): Promise<void>;
   reorderOpportunityScopeItems(opportunityId: number, orderedIds: number[]): Promise<void>;
   applyScopeTemplate(opportunityId: number, createdByUserId: string | null): Promise<OpportunityScopeItemWithDetails[]>;
@@ -3160,11 +3160,11 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createOpportunityScopeItem(item: InsertOpportunityScopeItem): Promise<OpportunityScopeItem> {
-    const [result] = await db.insert(opportunityScopeItems).values(item).returning();
+    const [result] = await db.insert(opportunityScopeItems).values({ ...item, description: null }).returning();
     return result;
   }
 
-  async updateOpportunityScopeItem(id: number, updates: Partial<Pick<OpportunityScopeItem, "status" | "notes" | "name" | "description" | "linkedTodoId">>): Promise<OpportunityScopeItem> {
+  async updateOpportunityScopeItem(id: number, updates: Partial<Pick<OpportunityScopeItem, "status" | "notes" | "name" | "linkedTodoId">>): Promise<OpportunityScopeItem> {
     const [result] = await db.update(opportunityScopeItems)
       .set({ ...updates, updatedAt: new Date() })
       .where(eq(opportunityScopeItems.id, id))

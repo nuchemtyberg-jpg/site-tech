@@ -3,6 +3,8 @@ import { ArrowDown, ArrowUp, ListChecks, Loader2, Pencil, Plus, Trash2 } from "l
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
@@ -24,8 +26,12 @@ export function ScopeCatalogSettings() {
   const reorderItems = useReorderScopeCatalogItems();
   const { toast } = useToast();
   const [newCategory, setNewCategory] = useState("");
-  const [newItems, setNewItems] = useState<Record<number, string>>({});
-  const [editing, setEditing] = useState<{ type: "category" | "item"; id: number; name: string } | null>(null);
+  const [newItems, setNewItems] = useState<Record<number, { name: string; description: string }>>({});
+  const [editing, setEditing] = useState<
+    | { type: "category"; id: number; name: string }
+    | { type: "item"; id: number; name: string; description: string; originalDescription: string | null; descriptionEdited: boolean }
+    | null
+  >(null);
   const [deactivate, setDeactivate] = useState<{ type: "category" | "item"; id: number; name: string } | null>(null);
   const categories = data?.categories || [];
   const items = data?.items || [];
@@ -48,12 +54,22 @@ export function ScopeCatalogSettings() {
   };
   const saveEdit = () => {
     if (!editing?.name.trim()) return;
+    if (editing.type === "item" && editing.description.trim().length > 2000) return;
     const options = {
       onSuccess: () => { setEditing(null); success("Scope catalog updated"); },
       onError: fail,
     };
     if (editing.type === "category") updateCategory.mutate({ id: editing.id, name: editing.name.trim() }, options);
-    else updateItem.mutate({ id: editing.id, name: editing.name.trim() }, options);
+    else {
+      const input: { id: number; name: string; description?: string | null } = {
+        id: editing.id,
+        name: editing.name.trim(),
+      };
+      // Omit an untouched description so old values are preserved byte-for-byte
+      // when an administrator is only renaming an item.
+      if (editing.descriptionEdited) input.description = editing.description.trim() || null;
+      updateItem.mutate(input, options);
+    }
   };
   const confirmDeactivate = () => {
     if (!deactivate) return;
@@ -99,21 +115,74 @@ export function ScopeCatalogSettings() {
                   <Button className="min-h-11 min-w-11" size="icon" variant="ghost" disabled={index === 0 || reorderItems.isPending} onClick={() => moveItem(category.id, index, -1)} aria-label={`Move ${item.name} up`}><ArrowUp className="h-4 w-4" /></Button>
                   <Button className="min-h-11 min-w-11" size="icon" variant="ghost" disabled={index === categoryItems.length - 1 || reorderItems.isPending} onClick={() => moveItem(category.id, index, 1)} aria-label={`Move ${item.name} down`}><ArrowDown className="h-4 w-4" /></Button>
                   {editing?.type === "item" && editing.id === item.id
-                    ? <form className="order-first flex basis-full flex-wrap gap-2 sm:order-none sm:min-w-0 sm:flex-1 sm:flex-nowrap" onSubmit={e => { e.preventDefault(); saveEdit(); }}>
-                        <Input className="min-w-0 basis-full sm:basis-auto" value={editing.name} onChange={e => setEditing({ ...editing, name: e.target.value })} aria-label={`Scope item name for ${item.name}`} />
-                        <Button className="min-h-11" type="submit">Save</Button>
+                    ? <form className="order-first basis-full space-y-3 sm:order-none sm:min-w-0 sm:flex-1" onSubmit={e => { e.preventDefault(); saveEdit(); }}>
+                        <div className="space-y-1">
+                          <Label htmlFor={`item-name-${item.id}`}>Scope item name</Label>
+                          <Input id={`item-name-${item.id}`} aria-label={`Scope item name for ${item.name}`} value={editing.name} onChange={e => setEditing({ ...editing, name: e.target.value })} />
+                        </div>
+                        <div className="space-y-1">
+                          <Label htmlFor={`item-description-${item.id}`}>Master description <span className="font-normal text-muted-foreground">(optional)</span></Label>
+                          <Textarea
+                            id={`item-description-${item.id}`}
+                            value={editing.description}
+                            onChange={e => setEditing({ ...editing, description: e.target.value, descriptionEdited: e.target.value !== (editing.originalDescription ?? "") })}
+                            aria-label={`Master description for ${item.name} (optional)`}
+                            aria-describedby={`item-description-help-${item.id}`}
+                          />
+                          <div id={`item-description-help-${item.id}`} className={`text-xs ${editing.description.trim().length > 2000 ? "text-destructive" : "text-muted-foreground"}`}>
+                            {editing.description.trim().length}/2000 characters{editing.description.trim().length > 2000 ? " — Master description must be 2000 characters or fewer." : ""}
+                          </div>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            disabled={!editing.description}
+                            onClick={() => setEditing({ ...editing, description: "", descriptionEdited: (editing.originalDescription ?? "") !== "" })}
+                          >
+                            Clear Master description
+                          </Button>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <Button className="min-h-11" type="submit" disabled={!editing.name.trim() || editing.description.trim().length > 2000 || updateItem.isPending}>Save changes</Button>
+                          <Button className="min-h-11" type="button" variant="outline" onClick={() => setEditing(null)}>Cancel</Button>
+                        </div>
                       </form>
                     : <>
-                        <span className="order-first min-w-0 basis-full break-words text-sm sm:order-none sm:flex-1 sm:basis-auto">{item.name} {!item.isActive && <Badge variant="secondary">Inactive</Badge>}</span>
-                        <Button className="min-h-11 min-w-11" size="icon" variant="ghost" onClick={() => setEditing({ type: "item", id: item.id, name: item.name })} aria-label={`Rename ${item.name}`}><Pencil className="h-4 w-4" /></Button>
+                        <div className="order-first min-w-0 basis-full break-words text-sm sm:order-none sm:flex-1 sm:basis-auto">
+                          <div>{item.name} {!item.isActive && <Badge variant="secondary">Inactive</Badge>}</div>
+                          <div className="mt-1 text-muted-foreground">
+                            <span className="font-medium text-foreground">Master description: </span>
+                            {item.description || <span className="italic">None</span>}
+                          </div>
+                        </div>
+                        <Button className="min-h-11 min-w-11" size="icon" variant="ghost" onClick={() => setEditing({ type: "item", id: item.id, name: item.name, description: item.description ?? "", originalDescription: item.description, descriptionEdited: false })} aria-label={`Edit ${item.name}`}><Pencil className="h-4 w-4" /></Button>
                         {item.isActive
                           ? <Button className="min-h-11 min-w-11" size="icon" variant="ghost" onClick={() => setDeactivate({ type: "item", id: item.id, name: item.name })} aria-label={`Deactivate ${item.name}`}><Trash2 className="h-4 w-4" /></Button>
                           : <Button className="min-h-11" size="sm" variant="outline" onClick={() => updateItem.mutate({ id: item.id, isActive: true }, { onSuccess: () => success("Item activated"), onError: fail })}>Activate</Button>}
                       </>}
                 </div>)}
-              {category.isActive && <form className="flex flex-wrap gap-2 border-t pt-3" onSubmit={e => { e.preventDefault(); const name = (newItems[category.id] || "").trim(); if (!name) return; createItem.mutate({ categoryId: category.id, name }, { onSuccess: () => { setNewItems(v => ({ ...v, [category.id]: "" })); success("Scope item added"); }, onError: fail }); }}>
-                <Input className="min-w-0 basis-full sm:flex-1 sm:basis-auto" placeholder="New scope item" value={newItems[category.id] || ""} onChange={e => setNewItems(v => ({ ...v, [category.id]: e.target.value }))} aria-label={`New scope item in ${category.name}`} />
-                <Button className="min-h-11" type="submit" disabled={!newItems[category.id]?.trim() || createItem.isPending}><Plus className="h-4 w-4 mr-1" />Add item</Button>
+              {category.isActive && <form className="space-y-3 border-t pt-3" onSubmit={e => {
+                e.preventDefault();
+                const draft = newItems[category.id] || { name: "", description: "" };
+                const name = draft.name.trim();
+                const description = draft.description.trim();
+                if (!name || description.length > 2000) return;
+                createItem.mutate(
+                  { categoryId: category.id, name, ...(description ? { description } : {}) },
+                  { onSuccess: () => { setNewItems(v => ({ ...v, [category.id]: { name: "", description: "" } })); success("Scope item added"); }, onError: fail },
+                );
+              }}>
+                <div className="space-y-1">
+                  <Label htmlFor={`new-item-name-${category.id}`}>Scope item name</Label>
+                  <Input id={`new-item-name-${category.id}`} placeholder="New scope item" value={newItems[category.id]?.name || ""} onChange={e => setNewItems(v => ({ ...v, [category.id]: { name: e.target.value, description: v[category.id]?.description || "" } }))} aria-label={`New scope item in ${category.name}`} />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor={`new-item-description-${category.id}`}>Master description <span className="font-normal text-muted-foreground">(optional)</span></Label>
+                  <Textarea id={`new-item-description-${category.id}`} aria-label={`Master description for new item in ${category.name} (optional)`} value={newItems[category.id]?.description || ""} onChange={e => setNewItems(v => ({ ...v, [category.id]: { name: v[category.id]?.name || "", description: e.target.value } }))} />
+                  {(newItems[category.id]?.description || "").trim().length > 2000 &&
+                    <p className="text-xs text-destructive">Master description must be 2000 characters or fewer.</p>}
+                </div>
+                <Button className="min-h-11" type="submit" disabled={!newItems[category.id]?.name.trim() || (newItems[category.id]?.description || "").trim().length > 2000 || createItem.isPending}><Plus className="h-4 w-4 mr-1" />Add item</Button>
               </form>}
             </section>;
           })}

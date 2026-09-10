@@ -101,11 +101,34 @@ async function main() {
     const scopeSection = page.locator("section").filter({ has: page.getByRole("heading", { name: scopeName, exact: true }) });
     await expect(scopeSection).toBeVisible();
     await scopeSection.getByPlaceholder("New scope item").fill(`${tag} Scope Item`);
+    await scopeSection.getByRole("textbox", { name: `Master description for new item in ${scopeName} (optional)`, exact: true }).fill("Original master description");
     await scopeSection.getByRole("button", { name: "Add item", exact: true }).click();
     await expect(scopeSection.getByText(`${tag} Scope Item`, { exact: true })).toBeVisible();
     await page.reload();
     await expect(scopeSection.getByText(`${tag} Scope Item`, { exact: true })).toBeVisible();
-    console.log("PASS scope category/item creation and refresh persistence");
+    await expect(scopeSection.getByText("Master description: Original master description", { exact: true })).toBeVisible();
+    await scopeSection.getByRole("button", { name: `Edit ${tag} Scope Item`, exact: true }).click();
+    const masterDescription = scopeSection.getByRole("textbox", { name: `Master description for ${tag} Scope Item (optional)`, exact: true });
+    await expect(masterDescription).toHaveValue("Original master description");
+    await masterDescription.fill("Revised master description");
+    await scopeSection.getByRole("button", { name: "Save changes", exact: true }).click();
+    await expect(masterDescription).toHaveCount(0);
+    await page.reload();
+    await expect(scopeSection.getByText("Master description: Revised master description", { exact: true })).toBeVisible();
+    await scopeSection.getByRole("button", { name: `Edit ${tag} Scope Item`, exact: true }).click();
+    await scopeSection.screenshot({ path: ".local/screenshots/master-description-editor.png" });
+    await scopeSection.getByRole("button", { name: "Clear Master description", exact: true }).click();
+    await scopeSection.getByRole("button", { name: "Cancel", exact: true }).click();
+    await expect(scopeSection.getByText("Master description: Revised master description", { exact: true })).toBeVisible();
+    await scopeSection.getByRole("button", { name: `Edit ${tag} Scope Item`, exact: true }).click();
+    await scopeSection.getByRole("button", { name: "Clear Master description", exact: true }).click();
+    await scopeSection.getByRole("button", { name: "Save changes", exact: true }).click();
+    await expect(masterDescription).toHaveCount(0);
+    await page.reload();
+    await scopeSection.getByRole("button", { name: `Edit ${tag} Scope Item`, exact: true }).click();
+    await expect(masterDescription).toHaveValue("");
+    await scopeSection.getByRole("button", { name: "Cancel", exact: true }).click();
+    console.log("PASS scope description create, edit, cancel, clear and refresh persistence");
 
     for (const width of [375, 320]) {
       await page.setViewportSize({ width, height: 812 });

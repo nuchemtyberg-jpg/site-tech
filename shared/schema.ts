@@ -1506,15 +1506,15 @@ export type ScopeItemTemplate = typeof scopeItemTemplates.$inferSelect;
 // Per-Opportunity scope item instance. `id` is the stable reference future
 // Takeoff work can link against (per Task spec). `templateId` is null for
 // custom items added directly on an Opportunity. `name` is the short
-// checklist label; `description` is an optional longer master description;
-// `notes` is Opportunity-specific and always kept separate from both.
+// checklist label; `description` is the catalog-managed master-description
+// snapshot (null for custom items); `notes` is Opportunity-specific.
 export const opportunityScopeItems = pgTable("opportunity_scope_items", {
   id: serial("id").primaryKey(),
   opportunityId: integer("opportunity_id").notNull(),
   categoryId: integer("category_id").notNull(),
   templateId: integer("template_id"), // null => custom item
   name: text("name").notNull(), // short checklist label: copied from the template, or authored for a custom item
-  description: text("description"), // optional longer master description, copied from the template's or authored for a custom item — distinct from opportunity-specific notes
+  description: text("description"), // catalog-managed master description snapshot, copied from the template; custom items use null
   notes: text("notes"), // Opportunity-specific notes, always distinct from name/description
   status: text("status").notNull().default("not_reviewed"), // see SCOPE_ITEM_STATUS_VALUES
   isCustom: boolean("is_custom").notNull().default(false),
@@ -1541,10 +1541,9 @@ export const opportunityScopeItems = pgTable("opportunity_scope_items", {
 ]);
 
 export const insertOpportunityScopeItemSchema = createInsertSchema(opportunityScopeItems).omit({
-  id: true, createdAt: true, updatedAt: true, linkedTodoId: true,
+  id: true, description: true, createdAt: true, updatedAt: true, linkedTodoId: true,
 }).extend({
   name: z.string().trim().min(1, "Name is required"),
-  description: z.string().trim().nullable().optional(),
   notes: z.string().nullable().optional(),
   status: z.enum(SCOPE_ITEM_STATUS_VALUES).optional(),
 });

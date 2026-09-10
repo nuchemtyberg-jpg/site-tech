@@ -1765,7 +1765,6 @@ export async function registerRoutes(
         categoryId: category.id,
         templateId: null,
         name: input.name,
-        description: input.description ?? null,
         notes: null,
         status: "not_reviewed",
         isCustom: true,
@@ -1811,10 +1810,10 @@ export async function registerRoutes(
           metadata: { customerId: opp.customerId, opportunityId: opp.id },
         });
       }
-      if ((input.name !== undefined && input.name !== existing.name) || (input.description !== undefined && (input.description || "") !== (existing.description || ""))) {
+      if (input.name !== undefined && input.name !== existing.name) {
         await logActivity({
           entityType: "opportunity_scope_item", entityId: updated.id, actor, action: "scope_item_changed",
-          description: `${actor.name} changed a scope item's description on ${opportunityDisplay(opp)}: "${updated.name}".`,
+          description: `${actor.name} renamed a scope item on ${opportunityDisplay(opp)} to "${updated.name}".`,
           metadata: { customerId: opp.customerId, opportunityId: opp.id },
         });
       }

@@ -137,13 +137,12 @@ export default function OpportunityScopeTab({ opportunityId }: { opportunityId: 
 
 function AddCustomItemForm({ categoryKey, opportunityId, onDone }: { categoryKey: string; opportunityId: number; onDone: () => void }) {
   const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
   const add = useAddScopeItem(opportunityId);
   const { toast } = useToast();
   const submit = () => {
     if (!name.trim()) return;
-    add.mutate({ categoryKey, name: name.trim(), description: description.trim() || null }, {
-      onSuccess: () => { setName(""); setDescription(""); onDone(); },
+    add.mutate({ categoryKey, name: name.trim() }, {
+      onSuccess: () => { setName(""); onDone(); },
       onError: e => toast({ title: "Couldn't add item", description: extractApiError(e, "Try again."), variant: "destructive" }),
     });
   };
@@ -158,16 +157,6 @@ function AddCustomItemForm({ categoryKey, opportunityId, onDone }: { categoryKey
           onChange={e => setName(e.target.value)}
           autoFocus
           data-testid={`input-custom-scope-item-name-${categoryKey}`}
-        />
-      </div>
-      <div>
-        <Label className="text-xs">Master description (optional)</Label>
-        <Textarea
-          className="text-sm"
-          placeholder="Additional detail describing exactly what this item covers"
-          value={description}
-          onChange={e => setDescription(e.target.value)}
-          data-testid={`textarea-custom-scope-item-description-${categoryKey}`}
         />
       </div>
       <div className="flex gap-2 shrink-0">
@@ -187,8 +176,6 @@ function ScopeItemRow({ item, opportunityId, canMoveUp, canMoveDown, onMove }: {
   const { toast } = useToast();
   const [notesOpen, setNotesOpen] = useState(Boolean(item.notes));
   const [notes, setNotes] = useState(item.notes || "");
-  const [descOpen, setDescOpen] = useState(false);
-  const [description, setDescription] = useState(item.description || "");
   const [todoOpen, setTodoOpen] = useState(false);
   const [confirmRemove, setConfirmRemove] = useState(false);
 
@@ -206,13 +193,6 @@ function ScopeItemRow({ item, opportunityId, canMoveUp, canMoveDown, onMove }: {
     update.mutate({ itemId: item.id, notes: notes || null }, {
       onSuccess: () => toast({ title: "Scope item notes saved" }),
       onError: e => toast({ title: "Couldn't save notes", description: extractApiError(e, "Try again."), variant: "destructive" }),
-    });
-  };
-
-  const saveDescription = () => {
-    if ((description || "") === (item.description || "")) return;
-    update.mutate({ itemId: item.id, description: description || null }, {
-      onError: e => toast({ title: "Couldn't save description", description: extractApiError(e, "Try again."), variant: "destructive" }),
     });
   };
 
@@ -242,9 +222,6 @@ function ScopeItemRow({ item, opportunityId, canMoveUp, canMoveDown, onMove }: {
                 {item.name}
                 {item.isCustom && <Badge variant="outline" className="text-xs">Custom</Badge>}
               </p>
-              {item.description && !descOpen && (
-                <p className="text-xs text-muted-foreground break-words mt-0.5">{item.description}</p>
-              )}
             </div>
           </div>
           <div className="shrink-0">
@@ -264,10 +241,6 @@ function ScopeItemRow({ item, opportunityId, canMoveUp, canMoveDown, onMove }: {
         </div>
 
         <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-          <button className="min-h-11 inline-flex items-center hover:text-foreground" onClick={() => setDescOpen(v => !v)} data-testid={`button-toggle-description-${item.id}`}>
-            {descOpen ? <ChevronDown className="w-3.5 h-3.5 mr-1" /> : <ChevronRight className="w-3.5 h-3.5 mr-1" />}
-            {item.description ? "Edit description" : "Add master description"}
-          </button>
           <button className="min-h-11 inline-flex items-center hover:text-foreground" onClick={() => setNotesOpen(v => !v)} data-testid={`button-toggle-notes-${item.id}`}>
             {notesOpen ? <ChevronDown className="w-3.5 h-3.5 mr-1" /> : <ChevronRight className="w-3.5 h-3.5 mr-1" />}
             {item.notes ? "Notes" : "Add notes"}
@@ -285,22 +258,11 @@ function ScopeItemRow({ item, opportunityId, canMoveUp, canMoveDown, onMove }: {
           </button>
         </div>
 
-        {descOpen && (
-          <Textarea
-            className="text-sm"
-            placeholder="Master description — additional detail about exactly what this item covers (separate from Opportunity-specific notes)"
-            value={description}
-            onChange={e => setDescription(e.target.value)}
-            onBlur={saveDescription}
-            data-testid={`textarea-scope-description-${item.id}`}
-          />
-        )}
-
         {notesOpen && (
           <div className="space-y-2">
             <Textarea
               className="text-sm"
-              placeholder="Opportunity-specific notes (separate from the item name/description)"
+              placeholder="Opportunity-specific notes"
               value={notes}
               onChange={e => setNotes(e.target.value)}
               data-testid={`textarea-scope-notes-${item.id}`}
