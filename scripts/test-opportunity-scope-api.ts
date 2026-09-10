@@ -9,6 +9,7 @@ import { sql } from "drizzle-orm";
 
 const BASE = process.env.TEST_BASE_URL ?? "http://localhost:5000";
 const USER_ID = "mobile-user-001"; // admin, approved
+const ADDRESS = { streetAddress: "123 Scope Lane", city: "Testville", state: "TX", zip: "75001" };
 const MEMBER_ID = "__scope-catalog-member";
 
 let failures = 0;
@@ -99,7 +100,7 @@ async function main() {
     custId = cust.body?.id;
     check("setup customer", cust.status === 201, cust);
 
-    const opp = await j(await fetch(`${BASE}/api/opportunities`, { method: "POST", headers: H, body: JSON.stringify({ name: "__SCOPE Test Bid", customerId: custId, status: "new" }) }));
+    const opp = await j(await fetch(`${BASE}/api/opportunities`, { method: "POST", headers: H, body: JSON.stringify({ name: "__SCOPE Test Bid", customerId: custId, status: "new", ...ADDRESS }) }));
     oppId = opp.body?.id;
     check("setup opportunity", opp.status === 201, opp);
 
@@ -244,7 +245,7 @@ async function main() {
     const historicalAfterCategory = await j(await fetch(`${BASE}/api/opportunities/${oppId}/scope`, { headers: H }));
     check("category deactivation preserves all historical category items", historicalAfterCategory.body?.items?.some((item: any) => item.templateId === secondCatalogItemId), historicalAfterCategory.body);
     const second = await j(await fetch(`${BASE}/api/opportunities`, {
-      method: "POST", headers: H, body: JSON.stringify({ name: "__SCOPE Future Bid", customerId: custId, status: "new" }),
+      method: "POST", headers: H, body: JSON.stringify({ name: "__SCOPE Future Bid", customerId: custId, status: "new", ...ADDRESS }),
     }));
     check("future opportunity create succeeds", second.status === 201, second);
     secondOppId = second.body?.id;

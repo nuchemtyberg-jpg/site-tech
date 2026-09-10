@@ -29,6 +29,8 @@ interface ParsedAddress {
 }
 
 interface AddressAutocompleteProps {
+  id?: string;
+  "aria-describedby"?: string;
   onAddressSelect: (address: ParsedAddress) => void;
   placeholder?: string;
   initialValue?: string;
@@ -103,6 +105,8 @@ function getStateAbbreviation(stateName: string): string {
 }
 
 export function AddressAutocomplete({
+  id,
+  "aria-describedby": ariaDescribedBy,
   onAddressSelect,
   placeholder = "Start typing an address...",
   initialValue = "",
@@ -259,6 +263,8 @@ export function AddressAutocomplete({
       <div className="relative">
         <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
         <Input
+          id={id}
+          aria-describedby={ariaDescribedBy}
           type="text"
           value={query}
           onChange={(e) => handleInputChange(e.target.value)}

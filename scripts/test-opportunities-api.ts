@@ -11,6 +11,7 @@ import { handleOpportunityStatusChange } from "../server/services/workflowEngine
 
 const BASE = process.env.TEST_BASE_URL ?? "http://localhost:5000";
 const USER_ID = "mobile-user-001"; // admin, approved
+const ADDRESS = { streetAddress: "123 Test Street", city: "Testville", state: "TX", zip: "75001" };
 
 let failures = 0;
 function check(label: string, cond: boolean, extra?: unknown) {
@@ -54,6 +55,7 @@ async function main() {
   let custBId: number | null = null;
   let oppId: number | null = null;
   let opp2Id: number | null = null;
+  let legacyOppId: number | null = null;
   let ruleId: number | null = null;
   let todoId: number | null = null;
   let commId: number | null = null;
@@ -70,35 +72,80 @@ async function main() {
     const ctB1 = await j(await fetch(`${BASE}/api/customers/${custBId}/contacts`, { method: "POST", headers: H, body: JSON.stringify({ firstName: "Blake", lastName: "OtherCo", mobilePhone: "555-3003", email: "blake@opp.local" }) }));
     check("setup contacts", ctA1.status === 201 && ctA2.status === 201 && ctB1.status === 201);
 
+    console.log("== Required address validation ==");
+    const omittedAddress = await j(await fetch(`${BASE}/api/opportunities`, {
+      method: "POST", headers: H, body: JSON.stringify({ name: "__OPP Invalid Omitted Address", customerId: custAId }),
+    }));
+    check("create rejects omitted address", omittedAddress.status === 400, omittedAddress);
+    const addressFields = ["streetAddress", "city", "state", "zip"] as const;
+    for (const field of addressFields) {
+      for (const [kind, value] of [["null", null], ["empty", ""], ["whitespace", "   "]] as const) {
+        const invalidAddress = await j(await fetch(`${BASE}/api/opportunities`, {
+          method: "POST", headers: H,
+          body: JSON.stringify({ name: `__OPP Invalid ${kind} ${field}`, customerId: custAId, ...ADDRESS, [field]: value }),
+        }));
+        check(`create rejects ${kind} ${field}`, invalidAddress.status === 400, invalidAddress);
+      }
+      const { [field]: omitted, ...partialAddress } = ADDRESS;
+      const partial = await j(await fetch(`${BASE}/api/opportunities`, {
+        method: "POST", headers: H,
+        body: JSON.stringify({ name: `__OPP Invalid Partial ${field}`, customerId: custAId, ...partialAddress }),
+      }));
+      check(`create rejects partial address missing ${field}`, partial.status === 400, partial);
+    }
+
     console.log("== Creation + number generation ==");
-    const create = await j(await fetch(`${BASE}/api/opportunities`, { method: "POST", headers: H, body: JSON.stringify({ name: "__OPP Test Warehouse Bid", customerId: custAId, status: "new" }) }));
+    const create = await j(await fetch(`${BASE}/api/opportunities`, {
+      method: "POST", headers: H,
+      body: JSON.stringify({
+        name: "__OPP Test Warehouse Bid", customerId: custAId, status: "new",
+        streetAddress: "  123 Test Street  ", city: "  Testville ", state: " TX  ", zip: " 75001 ",
+      }),
+    }));
     const terminalCreates = await Promise.all(["lost", "no_bid", "awarded"].map(async status =>
       j(await fetch(`${BASE}/api/opportunities`, {
         method: "POST", headers: H,
-        body: JSON.stringify({ name: `__OPP Invalid ${status}`, customerId: custAId, status }),
+        body: JSON.stringify({ name: `__OPP Invalid ${status}`, customerId: custAId, status, ...ADDRESS }),
       })),
     ));
     check("terminal statuses cannot bypass centralized status change on create", terminalCreates.every(r => r.status === 400), terminalCreates);
     oppId = create.body?.id;
     const year = new Date().getFullYear();
-    check("create 201 with minimal fields", create.status === 201, create);
+    check("create 201 with required address", create.status === 201, create);
+    check("create response contains trimmed address", addressFields.every(field => create.body?.[field] === ADDRESS[field]), create.body);
+    const createdDetail = await j(await fetch(`${BASE}/api/opportunities/${oppId}`, { headers: H }));
+    check("GET persists trimmed address", createdDetail.status === 200 && addressFields.every(field => createdDetail.body?.[field] === ADDRESS[field]), createdDetail);
     check(`number matches OPP-${year}-NNNN`, new RegExp(`^OPP-${year}-\\d{4}$`).test(create.body?.opportunityNumber ?? ""), create.body?.opportunityNumber);
 
-    const create2 = await j(await fetch(`${BASE}/api/opportunities`, { method: "POST", headers: H, body: JSON.stringify({ name: "__OPP Test Second", customerId: custAId }) }));
+    const create2 = await j(await fetch(`${BASE}/api/opportunities`, { method: "POST", headers: H, body: JSON.stringify({ name: "__OPP Test Second", customerId: custAId, ...ADDRESS }) }));
     opp2Id = create2.body?.id;
     check("second create gets a different number", create2.status === 201 && create2.body?.opportunityNumber !== create.body?.opportunityNumber, [create.body?.opportunityNumber, create2.body?.opportunityNumber]);
 
-    const badCust = await j(await fetch(`${BASE}/api/opportunities`, { method: "POST", headers: H, body: JSON.stringify({ name: "x", customerId: 99999999 }) }));
+    const badCust = await j(await fetch(`${BASE}/api/opportunities`, { method: "POST", headers: H, body: JSON.stringify({ name: "x", customerId: 99999999, ...ADDRESS }) }));
     check("create with missing customer 400", badCust.status === 400, badCust);
-    const badProb = await j(await fetch(`${BASE}/api/opportunities`, { method: "POST", headers: H, body: JSON.stringify({ name: "x", customerId: custAId, probability: 150 }) }));
+    const badProb = await j(await fetch(`${BASE}/api/opportunities`, { method: "POST", headers: H, body: JSON.stringify({ name: "x", customerId: custAId, probability: 150, ...ADDRESS }) }));
     check("probability > 100 rejected 400", badProb.status === 400, badProb);
-    const badStatus = await j(await fetch(`${BASE}/api/opportunities`, { method: "POST", headers: H, body: JSON.stringify({ name: "x", customerId: custAId, status: "bogus" }) }));
+    const badStatus = await j(await fetch(`${BASE}/api/opportunities`, { method: "POST", headers: H, body: JSON.stringify({ name: "x", customerId: custAId, status: "bogus", ...ADDRESS }) }));
     check("invalid status rejected 400", badStatus.status === 400, badStatus);
 
     console.log("== Edit optional fields later ==");
     const upd = await j(await fetch(`${BASE}/api/opportunities/${oppId}`, { method: "PUT", headers: H, body: JSON.stringify({ bidDueDate: "2026-09-15", bidDueTime: "14:00", expectedValue: 250000, probability: 60, source: "email_rfp", projectType: "commercial" }) }));
     check("update optional fields 200", upd.status === 200 && upd.body?.probability === 60 && upd.body?.bidDueTime === "14:00", upd);
     check("number unchanged after edits", upd.body?.opportunityNumber === create.body?.opportunityNumber);
+    const legacy = await storage.createOpportunity({
+      name: "__OPP Legacy Addressless", customerId: custAId!, status: "new", createdByUserId: USER_ID,
+    });
+    legacyOppId = legacy.id;
+    const legacyEdit = await j(await fetch(`${BASE}/api/opportunities/${legacyOppId}`, {
+      method: "PUT", headers: H, body: JSON.stringify({ name: "__OPP Legacy Addressless Edited" }),
+    }));
+    check(
+      "legacy addressless opportunity remains editable",
+      legacyEdit.status === 200
+        && legacyEdit.body?.name === "__OPP Legacy Addressless Edited"
+        && addressFields.every(field => legacyEdit.body?.[field] === null),
+      legacyEdit,
+    );
 
     console.log("== Contacts ==");
     const l1 = await j(await fetch(`${BASE}/api/opportunities/${oppId}/contacts`, { method: "POST", headers: H, body: JSON.stringify({ contactId: ctA1.body.id, role: "estimator", isPrimary: true }) }));
@@ -125,10 +172,10 @@ async function main() {
     check("dashboard includes last opportunity activity", !!combined.body?.items?.[0]?.lastActivityAt, combined.body?.items?.[0]);
     // Terminal outcomes must not leak into the default active work queue, while
     // explicit outcome/status views and the outcome summary remain available.
-    const regressionAwarded = await j(await fetch(`${BASE}/api/opportunities`, { method: "POST", headers: H, body: JSON.stringify({ name: "__OPP Regression Awarded", customerId: custAId }) }));
-    const regressionSent = await j(await fetch(`${BASE}/api/opportunities`, { method: "POST", headers: H, body: JSON.stringify({ name: "__OPP Regression Sent", customerId: custAId, bidDueDate: "2026-09-14" }) }));
-    const regressionTomorrow = await j(await fetch(`${BASE}/api/opportunities`, { method: "POST", headers: H, body: JSON.stringify({ name: "__OPP Regression Tomorrow", customerId: custAId, bidDueDate: "2026-09-16" }) }));
-    const regressionWeek = await j(await fetch(`${BASE}/api/opportunities`, { method: "POST", headers: H, body: JSON.stringify({ name: "__OPP Regression Week", customerId: custAId, bidDueDate: "2026-09-18" }) }));
+    const regressionAwarded = await j(await fetch(`${BASE}/api/opportunities`, { method: "POST", headers: H, body: JSON.stringify({ name: "__OPP Regression Awarded", customerId: custAId, ...ADDRESS }) }));
+    const regressionSent = await j(await fetch(`${BASE}/api/opportunities`, { method: "POST", headers: H, body: JSON.stringify({ name: "__OPP Regression Sent", customerId: custAId, bidDueDate: "2026-09-14", ...ADDRESS }) }));
+    const regressionTomorrow = await j(await fetch(`${BASE}/api/opportunities`, { method: "POST", headers: H, body: JSON.stringify({ name: "__OPP Regression Tomorrow", customerId: custAId, bidDueDate: "2026-09-16", ...ADDRESS }) }));
+    const regressionWeek = await j(await fetch(`${BASE}/api/opportunities`, { method: "POST", headers: H, body: JSON.stringify({ name: "__OPP Regression Week", customerId: custAId, bidDueDate: "2026-09-18", ...ADDRESS }) }));
     const regressionAwardedStatus = await j(await fetch(`${BASE}/api/opportunities/${regressionAwarded.body?.id}/status`, { method: "POST", headers: H, body: JSON.stringify({ status: "awarded" }) }));
     const regressionSentStatus = await j(await fetch(`${BASE}/api/opportunities/${regressionSent.body?.id}/status`, { method: "POST", headers: H, body: JSON.stringify({ status: "proposal_sent" }) }));
     check("setup dashboard regressions", [regressionAwarded, regressionSent, regressionTomorrow, regressionWeek].every(r => r.status === 201) && regressionAwardedStatus.status === 200 && regressionSentStatus.status === 200);
@@ -158,7 +205,7 @@ async function main() {
     check("non-admin customer opportunity list redacts preliminary values", regularCustomerOpp?.expectedValue === null && regularCustomerOpp?.probability === null, regularCustomerOpp);
     const forbiddenUpdate = await j(await fetch(`${BASE}/api/opportunities/${oppId}`, { method: "PUT", headers: HU, body: JSON.stringify({ expectedValue: 1 }) }));
     check("non-admin preliminary value update rejected 403", forbiddenUpdate.status === 403, forbiddenUpdate);
-    const forbiddenCreate = await j(await fetch(`${BASE}/api/opportunities`, { method: "POST", headers: HU, body: JSON.stringify({ name: "__OPP Forbidden Value", customerId: custAId, expectedValue: 1 }) }));
+    const forbiddenCreate = await j(await fetch(`${BASE}/api/opportunities`, { method: "POST", headers: HU, body: JSON.stringify({ name: "__OPP Forbidden Value", customerId: custAId, expectedValue: 1, ...ADDRESS }) }));
     check("non-admin preliminary value create rejected 403", forbiddenCreate.status === 403, forbiddenCreate);
 
     console.log("== Workflow rule + status change ==");
@@ -218,7 +265,7 @@ async function main() {
     // The status update and its history row commit in ONE transaction: a
     // single storage call returns both, and a workflow dispatch that dies can
     // be replayed against the same history row without duplicating work.
-    const opp3 = await j(await fetch(`${BASE}/api/opportunities`, { method: "POST", headers: H, body: JSON.stringify({ name: "__OPP Test Atomicity", customerId: custAId }) }));
+    const opp3 = await j(await fetch(`${BASE}/api/opportunities`, { method: "POST", headers: H, body: JSON.stringify({ name: "__OPP Test Atomicity", customerId: custAId, ...ADDRESS }) }));
     const tr = await storage.updateOpportunityWithStatusTracking(opp3.body.id, { status: "estimating" }, { userId: USER_ID, name: "Atomicity Test" });
     check("transition returns committed history atomically", tr.changed === true && !!tr.history && tr.history.newStatus === "estimating", tr.history);
     const histRows = await db.execute(sql`SELECT count(*)::int AS n FROM opportunity_status_history WHERE opportunity_id = ${opp3.body.id}`);
@@ -324,6 +371,7 @@ async function main() {
       await db.execute(sql`DELETE FROM workflow_rules WHERE name LIKE '__OPP%'`);
       await db.execute(sql`DELETE FROM opportunity_status_history WHERE opportunity_id IN (SELECT id FROM opportunities WHERE name LIKE '__OPP%')`);
       await db.execute(sql`DELETE FROM opportunity_contacts WHERE opportunity_id IN (SELECT id FROM opportunities WHERE name LIKE '__OPP%')`);
+      await db.execute(sql`DELETE FROM opportunity_scope_items WHERE opportunity_id IN (SELECT id FROM opportunities WHERE name LIKE '__OPP%')`);
       await db.execute(sql`DELETE FROM activity_logs WHERE (entity_type = 'opportunity' AND entity_id IN (SELECT id FROM opportunities WHERE name LIKE '__OPP%')) OR description LIKE '%__OPP%'`);
       await db.execute(sql`DELETE FROM opportunities WHERE name LIKE '__OPP%'`);
       await db.execute(sql`DELETE FROM contacts WHERE email LIKE '%@opp.local'`);

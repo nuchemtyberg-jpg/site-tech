@@ -969,7 +969,13 @@ export const api = {
       path: '/api/opportunities',
       // Initial records always enter the pipeline as New. Every later status
       // transition must use changeStatus so reasons, history and workflows run.
-      input: insertOpportunitySchema.extend({ status: z.literal("new").optional() }),
+      input: insertOpportunitySchema.extend({
+        status: z.literal("new").optional(),
+        streetAddress: z.string().trim().min(1, "Street address is required"),
+        city: z.string().trim().min(1, "City is required"),
+        state: z.string().trim().min(1, "State is required"),
+        zip: z.string().trim().min(1, "ZIP code is required"),
+      }),
       responses: {
         201: z.custom<typeof opportunities.$inferSelect>(),
         400: errorSchemas.validation,

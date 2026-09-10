@@ -10,6 +10,7 @@ import { sql } from "drizzle-orm";
 
 const BASE = process.env.TEST_BASE_URL ?? "http://localhost:5000";
 const USER_ID = "mobile-user-001"; // admin, approved
+const ADDRESS = { streetAddress: "123 Document Way", city: "Testville", state: "TX", zip: "75001" };
 
 let failures = 0;
 function check(label: string, cond: boolean, extra?: unknown) {
@@ -57,10 +58,10 @@ async function main() {
     custId = cust.body?.id;
     check("setup customer", cust.status === 201, cust);
 
-    const opp = await j(await fetch(`${BASE}/api/opportunities`, { method: "POST", headers: H, body: JSON.stringify({ name: "__OPPDOC Test Bid", customerId: custId }) }));
+    const opp = await j(await fetch(`${BASE}/api/opportunities`, { method: "POST", headers: H, body: JSON.stringify({ name: "__OPPDOC Test Bid", customerId: custId, ...ADDRESS }) }));
     oppId = opp.body?.id;
     check("setup opportunity", opp.status === 201, opp);
-    const opp2 = await j(await fetch(`${BASE}/api/opportunities`, { method: "POST", headers: H, body: JSON.stringify({ name: "__OPPDOC Test Bid 2", customerId: custId }) }));
+    const opp2 = await j(await fetch(`${BASE}/api/opportunities`, { method: "POST", headers: H, body: JSON.stringify({ name: "__OPPDOC Test Bid 2", customerId: custId, ...ADDRESS }) }));
     opp2Id = opp2.body?.id;
     check("setup second opportunity", opp2.status === 201, opp2);
 
@@ -231,7 +232,8 @@ async function main() {
       const ids = [oppId, opp2Id].filter(Boolean) as number[];
       await db.execute(sql`DELETE FROM files WHERE related_entity_type = 'opportunity' AND related_entity_id = ANY(ARRAY[${sql.join(ids, sql`, `)}]::int[])`);
       await db.execute(sql`DELETE FROM opportunity_status_history WHERE opportunity_id = ANY(ARRAY[${sql.join(ids, sql`, `)}]::int[])`);
-      await db.execute(sql`DELETE FROM activity_logs WHERE entity_type = 'opportunity_document' AND (metadata->>'opportunityId')::int = ANY(ARRAY[${sql.join(ids, sql`, `)}]::int[])`);
+      await db.execute(sql`DELETE FROM opportunity_scope_items WHERE opportunity_id = ANY(ARRAY[${sql.join(ids, sql`, `)}]::int[])`);
+      await db.execute(sql`DELETE FROM activity_logs WHERE (entity_type = 'opportunity' AND entity_id = ANY(ARRAY[${sql.join(ids, sql`, `)}]::int[])) OR (entity_type = 'opportunity_document' AND (metadata->>'opportunityId')::int = ANY(ARRAY[${sql.join(ids, sql`, `)}]::int[]))`);
       await db.execute(sql`DELETE FROM opportunities WHERE id = ANY(ARRAY[${sql.join(ids, sql`, `)}]::int[])`);
     }
     if (projectId) {

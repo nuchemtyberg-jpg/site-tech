@@ -12,6 +12,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { extractApiError, useAppUsers, userDisplayName } from "@/hooks/use-todos";
 import { useCreateOpportunity, useUpdateOpportunity } from "@/hooks/use-opportunities";
 import { CustomerCreationDialog } from "@/components/CustomerCreationDialog";
+import { AddressAutocomplete } from "@/components/AddressAutocomplete";
 import { OPPORTUNITY_PROJECT_TYPES, OPPORTUNITY_SOURCES } from "@shared/opportunityStatus";
 import type { Customer, OpportunityWithDetails } from "@shared/schema";
 
@@ -27,6 +28,13 @@ const empty: FormState = {
   rfpReceivedDate: "", bidDueDate: "", bidDueTime: "", estimatedStartDate: "", source: "", projectType: "",
   scopeSummary: "", internalNotes: "", expectedValue: "", probability: "",
 };
+const addressFields = [
+  ["streetAddress", "Street address"],
+  ["city", "City"],
+  ["state", "State"],
+  ["zip", "ZIP"],
+] as const;
+type AddressField = typeof addressFields[number][0];
 
 export function OpportunityFormDialog({ open, onOpenChange, opportunity, onSaved }: {
   open: boolean; onOpenChange: (open: boolean) => void; opportunity?: OpportunityWithDetails | null;
@@ -35,6 +43,7 @@ export function OpportunityFormDialog({ open, onOpenChange, opportunity, onSaved
   const { toast } = useToast();
   const { isAdmin } = useAuth();
   const [form, setForm] = useState(empty);
+  const [addressValidationAttempted, setAddressValidationAttempted] = useState(false);
   const [addingCustomer, setAddingCustomer] = useState(false);
   const [newlySelectedCustomer, setNewlySelectedCustomer] = useState<Pick<Customer, "id" | "name"> | null>(null);
   const { data: customers = [] } = useQuery<Customer[]>({ queryKey: ["/api/customers"] });
@@ -42,6 +51,7 @@ export function OpportunityFormDialog({ open, onOpenChange, opportunity, onSaved
   const create = useCreateOpportunity();
   const update = useUpdateOpportunity();
   useEffect(() => {
+    setAddressValidationAttempted(false);
     if (!open) {
       setAddingCustomer(false);
       setNewlySelectedCustomer(null);
@@ -69,6 +79,15 @@ export function OpportunityFormDialog({ open, onOpenChange, opportunity, onSaved
     setForm(current => ({ ...current, customerId: String(customer.id) }));
   };
   const save = (confirmRemoveContacts = false) => {
+    if (!opportunity) {
+      setAddressValidationAttempted(true);
+      const missing = addressFields.find(([key]) => !form[key].trim());
+      if (missing) {
+        toast({ title: "Complete the opportunity address", description: "Street address, city, state, and ZIP are required.", variant: "destructive" });
+        document.getElementById(`opportunity-${missing[0]}`)?.focus();
+        return;
+      }
+    }
     if (!form.name.trim() || !form.customerId) {
       toast({ title: "Name and customer are required", variant: "destructive" }); return;
     }
@@ -95,15 +114,31 @@ export function OpportunityFormDialog({ open, onOpenChange, opportunity, onSaved
       else toast({ title: "Couldn't save opportunity", description: message, variant: "destructive" });
     };
     if (opportunity) update.mutate({ id: opportunity.id, ...common, confirmRemoveContacts }, { onSuccess: success, onError: failure });
-    else create.mutate({ ...common, status: "new" }, { onSuccess: success, onError: failure });
+    else create.mutate({
+      ...common, status: "new",
+      streetAddress: form.streetAddress.trim(), city: form.city.trim(),
+      state: form.state.trim(), zip: form.zip.trim(),
+    }, { onSuccess: success, onError: failure });
   };
   const pending = create.isPending || update.isPending;
+  const addressInput = (key: AddressField) => {
+    const label = addressFields.find(([field]) => field === key)![1];
+    const invalid = !opportunity && addressValidationAttempted && !form[key].trim();
+    return <div className={key === "streetAddress" ? "sm:col-span-2" : undefined}>
+      <Label htmlFor={`opportunity-${key}`}>{label}{!opportunity && " *"}</Label>
+      <Input id={`opportunity-${key}`} className="min-h-11" value={form[key]}
+        required={!opportunity} aria-invalid={invalid}
+        aria-describedby={invalid ? `opportunity-${key}-error` : undefined}
+        onChange={e => field(key)(e.target.value)} />
+      {invalid && <p id={`opportunity-${key}-error`} className="text-sm text-destructive" role="alert">{label} is required</p>}
+    </div>;
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[92vh] overflow-y-auto">
         <DialogHeader><DialogTitle>{opportunity ? `Edit ${opportunity.opportunityNumber}` : "New Bid Opportunity"}</DialogTitle>
-          <DialogDescription>Start with the essentials. You can add the rest later.</DialogDescription></DialogHeader>
+          <DialogDescription>Start with the essentials. Fields marked with * are required.</DialogDescription></DialogHeader>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="sm:col-span-2"><Label>Name *</Label><Input className="min-h-11" value={form.name} onChange={e => field("name")(e.target.value)} data-testid="input-opportunity-name" /></div>
             <div><Label>Customer *</Label><Select value={form.customerId} onValueChange={field("customerId")}><SelectTrigger className="min-h-11" data-testid="select-opp-customer"><SelectValue placeholder="Choose customer" /></SelectTrigger><SelectContent>{customerOptions.map(c => <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>)}</SelectContent></Select><Button type="button" variant="link" className="px-0 min-h-11" onClick={() => setAddingCustomer(true)} data-testid="button-add-inline-customer"><Plus className="w-4 h-4 mr-1" />Add new customer</Button></div>
@@ -113,9 +148,20 @@ export function OpportunityFormDialog({ open, onOpenChange, opportunity, onSaved
           <div><Label>Project type</Label><Select value={form.projectType || "none"} onValueChange={v => field("projectType")(v === "none" ? "" : v)}><SelectTrigger className="min-h-11"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="none">Not set</SelectItem>{OPPORTUNITY_PROJECT_TYPES.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}</SelectContent></Select></div>
           {isAdmin && <div><Label>Expected value</Label><Input className="min-h-11" type="number" min="0" value={form.expectedValue} onChange={e => field("expectedValue")(e.target.value)} /></div>}
           {isAdmin && <div><Label>Probability %</Label><Input className="min-h-11" type="number" min="0" max="100" value={form.probability} onChange={e => field("probability")(e.target.value)} /></div>}
-          <div className="sm:col-span-2"><Label>Street address</Label><Input className="min-h-11" value={form.streetAddress} onChange={e => field("streetAddress")(e.target.value)} /></div>
-          <div><Label>City</Label><Input className="min-h-11" value={form.city} onChange={e => field("city")(e.target.value)} /></div>
-          <div className="grid grid-cols-2 gap-2"><div><Label>State</Label><Input className="min-h-11" value={form.state} onChange={e => field("state")(e.target.value)} /></div><div><Label>ZIP</Label><Input className="min-h-11" value={form.zip} onChange={e => field("zip")(e.target.value)} /></div></div>
+          <div className="sm:col-span-2">
+            <Label htmlFor="opportunity-address-search">Search Address</Label>
+            <AddressAutocomplete key={opportunity?.id ?? "new"} id="opportunity-address-search"
+              aria-describedby="opportunity-address-guidance"
+              initialValue={opportunity ? [opportunity.streetAddress, opportunity.city, opportunity.state, opportunity.zip].filter(Boolean).join(", ") : ""}
+              onAddressSelect={address => setForm(current => ({
+                ...current, streetAddress: address.streetAddress, city: address.city,
+                state: address.state, zip: address.zipCode,
+              }))} />
+            <p id="opportunity-address-guidance" className="text-xs text-muted-foreground">Type to search, or fill in the fields below manually</p>
+          </div>
+          {addressInput("streetAddress")}
+          {addressInput("city")}
+          <div className="grid grid-cols-2 gap-2">{addressInput("state")}{addressInput("zip")}</div>
           <div><Label>RFP received</Label><Input className="min-h-11" type="date" value={form.rfpReceivedDate} onChange={e => field("rfpReceivedDate")(e.target.value)} /></div>
           <div><Label>Estimated start</Label><Input className="min-h-11" type="date" value={form.estimatedStartDate} onChange={e => field("estimatedStartDate")(e.target.value)} /></div>
           <div className="sm:col-span-2"><Label>Scope summary</Label><Textarea value={form.scopeSummary} onChange={e => field("scopeSummary")(e.target.value)} /></div>
