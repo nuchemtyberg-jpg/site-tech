@@ -467,6 +467,13 @@ export interface IStorage {
   // Opportunity Scope Checklist
   getScopeCategories(): Promise<ScopeCategory[]>;
   getScopeItemTemplates(): Promise<ScopeItemTemplate[]>;
+  getAllScopeItemTemplates(): Promise<ScopeItemTemplate[]>;
+  createScopeCategory(category: Omit<ScopeCategory, "id" | "createdAt">): Promise<ScopeCategory>;
+  updateScopeCategory(id: number, updates: Partial<Pick<ScopeCategory, "name" | "isActive">>): Promise<ScopeCategory | undefined>;
+  reorderScopeCategories(orderedIds: number[]): Promise<void>;
+  createScopeItemTemplate(item: Omit<ScopeItemTemplate, "id" | "createdAt">): Promise<ScopeItemTemplate>;
+  updateScopeItemTemplate(id: number, updates: Partial<Pick<ScopeItemTemplate, "categoryId" | "name" | "description" | "isActive">>): Promise<ScopeItemTemplate | undefined>;
+  reorderScopeItemTemplates(categoryId: number, orderedIds: number[]): Promise<void>;
   getOpportunityScopeItems(opportunityId: number): Promise<OpportunityScopeItemWithDetails[]>;
   getOpportunityScopeItem(id: number): Promise<OpportunityScopeItem | undefined>;
   createOpportunityScopeItem(item: InsertOpportunityScopeItem): Promise<OpportunityScopeItem>;
@@ -2926,6 +2933,23 @@ export class DatabaseStorage implements IStorage {
       const next = (row?.maxSeq ?? 0) + 1;
       const opportunityNumber = `${prefix}${String(next).padStart(4, "0")}`;
       const [result] = await tx.insert(opportunities).values({ ...opportunity, opportunityNumber }).returning();
+      const templates = await tx.select({ template: scopeItemTemplates }).from(scopeItemTemplates)
+        .innerJoin(scopeCategories, eq(scopeItemTemplates.categoryId, scopeCategories.id))
+        .where(and(eq(scopeItemTemplates.isActive, true), eq(scopeCategories.isActive, true)));
+      if (templates.length > 0) {
+        await tx.insert(opportunityScopeItems).values(templates.map(({ template }) => ({
+          opportunityId: result.id,
+          categoryId: template.categoryId,
+          templateId: template.id,
+          name: template.name,
+          description: template.description,
+          notes: null,
+          status: "not_reviewed",
+          isCustom: false,
+          displayOrder: template.displayOrder,
+          createdByUserId: opportunity.createdByUserId ?? null,
+        }))).onConflictDoNothing({ target: [opportunityScopeItems.opportunityId, opportunityScopeItems.templateId] });
+      }
       return result;
     });
   }
@@ -3065,9 +3089,55 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getScopeItemTemplates(): Promise<ScopeItemTemplate[]> {
-    return db.select().from(scopeItemTemplates)
-      .where(eq(scopeItemTemplates.isActive, true))
-      .orderBy(asc(scopeItemTemplates.displayOrder), asc(scopeItemTemplates.id));
+    const rows = await db.select({ template: scopeItemTemplates }).from(scopeItemTemplates)
+      .innerJoin(scopeCategories, eq(scopeItemTemplates.categoryId, scopeCategories.id))
+      .where(and(eq(scopeItemTemplates.isActive, true), eq(scopeCategories.isActive, true)))
+      .orderBy(asc(scopeCategories.displayOrder), asc(scopeItemTemplates.displayOrder), asc(scopeItemTemplates.id));
+    return rows.map(row => row.template);
+  }
+
+  async getAllScopeItemTemplates(): Promise<ScopeItemTemplate[]> {
+    const rows = await db.select({ template: scopeItemTemplates }).from(scopeItemTemplates)
+      .innerJoin(scopeCategories, eq(scopeItemTemplates.categoryId, scopeCategories.id))
+      .orderBy(asc(scopeCategories.displayOrder), asc(scopeItemTemplates.displayOrder), asc(scopeItemTemplates.id));
+    return rows.map(row => row.template);
+  }
+
+  async createScopeCategory(category: Omit<ScopeCategory, "id" | "createdAt">): Promise<ScopeCategory> {
+    const [result] = await db.insert(scopeCategories).values(category).returning();
+    return result;
+  }
+
+  async updateScopeCategory(id: number, updates: Partial<Pick<ScopeCategory, "name" | "isActive">>): Promise<ScopeCategory | undefined> {
+    const [result] = await db.update(scopeCategories).set(updates).where(eq(scopeCategories.id, id)).returning();
+    return result;
+  }
+
+  async reorderScopeCategories(orderedIds: number[]): Promise<void> {
+    await db.transaction(async tx => {
+      for (let index = 0; index < orderedIds.length; index++) {
+        await tx.update(scopeCategories).set({ displayOrder: (index + 1) * 10 }).where(eq(scopeCategories.id, orderedIds[index]));
+      }
+    });
+  }
+
+  async createScopeItemTemplate(item: Omit<ScopeItemTemplate, "id" | "createdAt">): Promise<ScopeItemTemplate> {
+    const [result] = await db.insert(scopeItemTemplates).values(item).returning();
+    return result;
+  }
+
+  async updateScopeItemTemplate(id: number, updates: Partial<Pick<ScopeItemTemplate, "categoryId" | "name" | "description" | "isActive">>): Promise<ScopeItemTemplate | undefined> {
+    const [result] = await db.update(scopeItemTemplates).set(updates).where(eq(scopeItemTemplates.id, id)).returning();
+    return result;
+  }
+
+  async reorderScopeItemTemplates(categoryId: number, orderedIds: number[]): Promise<void> {
+    await db.transaction(async tx => {
+      for (let index = 0; index < orderedIds.length; index++) {
+        await tx.update(scopeItemTemplates).set({ displayOrder: (index + 1) * 10 })
+          .where(and(eq(scopeItemTemplates.id, orderedIds[index]), eq(scopeItemTemplates.categoryId, categoryId)));
+      }
+    });
   }
 
   async getOpportunityScopeItems(opportunityId: number): Promise<OpportunityScopeItemWithDetails[]> {
@@ -3133,7 +3203,7 @@ export class DatabaseStorage implements IStorage {
     const templates = await db.select({ template: scopeItemTemplates, categoryKey: scopeCategories.key, categoryName: scopeCategories.name })
       .from(scopeItemTemplates)
       .leftJoin(scopeCategories, eq(scopeItemTemplates.categoryId, scopeCategories.id))
-      .where(eq(scopeItemTemplates.isActive, true))
+      .where(and(eq(scopeItemTemplates.isActive, true), eq(scopeCategories.isActive, true)))
       .orderBy(asc(scopeCategories.displayOrder), asc(scopeItemTemplates.displayOrder), asc(scopeItemTemplates.id));
     if (templates.length === 0) return [];
     const inserted = await db.insert(opportunityScopeItems).values(templates.map(t => ({

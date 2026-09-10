@@ -9,6 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { useEffect, useCallback } from "react";
 import { DocumentCategoriesSettings } from "@/components/settings/DocumentCategoriesSettings";
+import { ScopeCatalogSettings } from "@/components/settings/ScopeCatalogSettings";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -175,6 +176,7 @@ export default function Settings() {
         </Card>
 
         {isAdmin && <DocumentCategoriesSettings />}
+        {isAdmin && <ScopeCatalogSettings />}
 
         <Card data-testid="card-outlook-connection">
           <CardHeader>

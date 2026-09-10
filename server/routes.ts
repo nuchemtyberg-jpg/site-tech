@@ -1617,6 +1617,128 @@ export async function registerRoutes(
 
   // ---------- Opportunity Scope Checklist ----------
 
+  app.get(api.scopeCatalog.list.path, isAuthenticated, isAuthorizedUser, isAdmin, async (_req, res) => {
+    const [categories, items] = await Promise.all([
+      storage.getScopeCategories(),
+      storage.getAllScopeItemTemplates(),
+    ]);
+    res.json({ categories, items });
+  });
+
+  app.post(api.scopeCatalog.createCategory.path, isAuthenticated, isAuthorizedUser, isAdmin, async (req, res) => {
+    try {
+      const { name } = api.scopeCatalog.createCategory.input.parse(req.body);
+      const categories = await storage.getScopeCategories();
+      const baseKey = name.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 70) || "category";
+      const used = new Set(categories.map(category => category.key));
+      let key = baseKey;
+      let suffix = 2;
+      while (used.has(key)) key = `${baseKey}_${suffix++}`;
+      const category = await storage.createScopeCategory({
+        key,
+        name,
+        displayOrder: (categories.at(-1)?.displayOrder ?? 0) + 10,
+        isActive: true,
+      });
+      res.status(201).json(category);
+    } catch (err) {
+      if (err instanceof z.ZodError) return res.status(400).json({ message: err.errors[0].message });
+      throw err;
+    }
+  });
+
+  app.patch(api.scopeCatalog.updateCategory.path, isAuthenticated, isAuthorizedUser, isAdmin, async (req, res) => {
+    try {
+      const id = z.coerce.number().int().positive().parse(req.params.id);
+      const input = api.scopeCatalog.updateCategory.input.parse(req.body);
+      const category = await storage.updateScopeCategory(id, input);
+      if (!category) return res.status(404).json({ message: "Scope category not found" });
+      res.json(category);
+    } catch (err) {
+      if (err instanceof z.ZodError) return res.status(400).json({ message: err.errors[0].message });
+      throw err;
+    }
+  });
+
+  app.put(api.scopeCatalog.reorderCategories.path, isAuthenticated, isAuthorizedUser, isAdmin, async (req, res) => {
+    try {
+      const { orderedIds } = api.scopeCatalog.reorderCategories.input.parse(req.body);
+      const categories = await storage.getScopeCategories();
+      if (orderedIds.length !== categories.length || new Set(orderedIds).size !== categories.length ||
+          categories.some(category => !orderedIds.includes(category.id))) {
+        return res.status(400).json({ message: "Reorder request must include every category exactly once" });
+      }
+      await storage.reorderScopeCategories(orderedIds);
+      res.status(204).send();
+    } catch (err) {
+      if (err instanceof z.ZodError) return res.status(400).json({ message: err.errors[0].message });
+      throw err;
+    }
+  });
+
+  app.post(api.scopeCatalog.createItem.path, isAuthenticated, isAuthorizedUser, isAdmin, async (req, res) => {
+    try {
+      const input = api.scopeCatalog.createItem.input.parse(req.body);
+      const categories = await storage.getScopeCategories();
+      const category = categories.find(value => value.id === input.categoryId);
+      if (!category) return res.status(400).json({ message: "Scope category not found" });
+      if (!category.isActive) return res.status(400).json({ message: "Cannot add an item to an inactive category" });
+      const allItems = await storage.getAllScopeItemTemplates();
+      const categoryItems = allItems.filter(item => item.categoryId === category.id);
+      const baseKey = `${category.key}_${input.name}`.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 80) || "scope_item";
+      const used = new Set(allItems.map(item => item.key));
+      let key = baseKey;
+      let suffix = 2;
+      while (used.has(key)) key = `${baseKey}_${suffix++}`;
+      const item = await storage.createScopeItemTemplate({
+        categoryId: category.id,
+        key,
+        name: input.name,
+        description: input.description ?? null,
+        displayOrder: (categoryItems.at(-1)?.displayOrder ?? 0) + 10,
+        isActive: true,
+      });
+      res.status(201).json(item);
+    } catch (err) {
+      if (err instanceof z.ZodError) return res.status(400).json({ message: err.errors[0].message });
+      throw err;
+    }
+  });
+
+  app.patch(api.scopeCatalog.updateItem.path, isAuthenticated, isAuthorizedUser, isAdmin, async (req, res) => {
+    try {
+      const id = z.coerce.number().int().positive().parse(req.params.id);
+      const input = api.scopeCatalog.updateItem.input.parse(req.body);
+      if (input.categoryId !== undefined) {
+        const category = (await storage.getScopeCategories()).find(value => value.id === input.categoryId);
+        if (!category) return res.status(400).json({ message: "Scope category not found" });
+      }
+      const item = await storage.updateScopeItemTemplate(id, input);
+      if (!item) return res.status(404).json({ message: "Scope item not found" });
+      res.json(item);
+    } catch (err) {
+      if (err instanceof z.ZodError) return res.status(400).json({ message: err.errors[0].message });
+      throw err;
+    }
+  });
+
+  app.put(api.scopeCatalog.reorderItems.path, isAuthenticated, isAuthorizedUser, isAdmin, async (req, res) => {
+    try {
+      const categoryId = z.coerce.number().int().positive().parse(req.params.categoryId);
+      const { orderedIds } = api.scopeCatalog.reorderItems.input.parse(req.body);
+      const items = (await storage.getAllScopeItemTemplates()).filter(item => item.categoryId === categoryId);
+      if (orderedIds.length !== items.length || new Set(orderedIds).size !== items.length ||
+          items.some(item => !orderedIds.includes(item.id))) {
+        return res.status(400).json({ message: "Reorder request must include every item in the category exactly once" });
+      }
+      await storage.reorderScopeItemTemplates(categoryId, orderedIds);
+      res.status(204).send();
+    } catch (err) {
+      if (err instanceof z.ZodError) return res.status(400).json({ message: err.errors[0].message });
+      throw err;
+    }
+  });
+
   app.get(api.opportunityScope.list.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
     const opp = await storage.getOpportunity(Number(req.params.id));
     if (!opp) return res.status(404).json({ message: "Opportunity not found" });

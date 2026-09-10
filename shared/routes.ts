@@ -12,7 +12,7 @@ import {
   type TodoWithDetails, type MyWorkSummary, type WorkflowRuleWithDetails,
   type TodoUpdate, type TodoUpdateWithAuthor, type TodoUpdatesPage,
   type OpportunityWithDetails, type OpportunityContactWithDetails, type OpportunityDashboardResult,
-  type FileWithUploader, type OpportunityScopeItemWithDetails, type ScopeCategory,
+  type FileWithUploader, type OpportunityScopeItemWithDetails, type ScopeCategory, type ScopeItemTemplate,
   type DocumentCategoryWithUsage,
 } from './schema';
 import { SCOPE_ITEM_STATUS_VALUES } from './scopeChecklist';
@@ -42,6 +42,59 @@ export const errorSchemas = {
 };
 
 export const api = {
+  scopeCatalog: {
+    list: {
+      method: 'GET' as const,
+      path: '/api/admin/scope-catalog',
+      responses: { 200: z.object({ categories: z.array(z.custom<ScopeCategory>()), items: z.array(z.custom<ScopeItemTemplate>()) }) },
+    },
+    createCategory: {
+      method: 'POST' as const,
+      path: '/api/admin/scope-catalog/categories',
+      input: z.object({ name: z.string().trim().min(1).max(100) }),
+      responses: { 201: z.custom<ScopeCategory>(), 400: errorSchemas.validation },
+    },
+    updateCategory: {
+      method: 'PATCH' as const,
+      path: '/api/admin/scope-catalog/categories/:id',
+      input: z.object({ name: z.string().trim().min(1).max(100).optional(), isActive: z.boolean().optional() })
+        .refine(value => value.name !== undefined || value.isActive !== undefined, "Provide a name or active status"),
+      responses: { 200: z.custom<ScopeCategory>(), 404: errorSchemas.notFound },
+    },
+    reorderCategories: {
+      method: 'PUT' as const,
+      path: '/api/admin/scope-catalog/categories/reorder',
+      input: z.object({ orderedIds: z.array(z.number().int().positive()).min(1) }),
+      responses: { 204: z.void(), 400: errorSchemas.validation },
+    },
+    createItem: {
+      method: 'POST' as const,
+      path: '/api/admin/scope-catalog/items',
+      input: z.object({
+        categoryId: z.number().int().positive(),
+        name: z.string().trim().min(1).max(150),
+        description: z.string().trim().max(2000).nullable().optional(),
+      }),
+      responses: { 201: z.custom<ScopeItemTemplate>(), 400: errorSchemas.validation },
+    },
+    updateItem: {
+      method: 'PATCH' as const,
+      path: '/api/admin/scope-catalog/items/:id',
+      input: z.object({
+        categoryId: z.number().int().positive().optional(),
+        name: z.string().trim().min(1).max(150).optional(),
+        description: z.string().trim().max(2000).nullable().optional(),
+        isActive: z.boolean().optional(),
+      }).refine(value => Object.values(value).some(v => v !== undefined), "Provide at least one change"),
+      responses: { 200: z.custom<ScopeItemTemplate>(), 404: errorSchemas.notFound },
+    },
+    reorderItems: {
+      method: 'PUT' as const,
+      path: '/api/admin/scope-catalog/categories/:categoryId/items/reorder',
+      input: z.object({ orderedIds: z.array(z.number().int().positive()).min(1) }),
+      responses: { 204: z.void(), 400: errorSchemas.validation },
+    },
+  },
   documentCategories: {
     list: {
       method: 'GET' as const,

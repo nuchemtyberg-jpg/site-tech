@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ChevronDown, ChevronRight, CircleDot, Loader2, ListChecks, Plus, Sparkles, Trash2, X, ArrowUp, ArrowDown } from "lucide-react";
+import { ChevronDown, ChevronRight, CircleDot, Loader2, ListChecks, Plus, Trash2, X, ArrowUp, ArrowDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -8,7 +8,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
-  useAddScopeItem, useApplyScopeTemplate, useCreateScopeClarificationTodo,
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
+  AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
+  useAddScopeItem, useCreateScopeClarificationTodo,
   useDeleteScopeItem, useOpportunityScope, useReorderScopeItems, useUpdateScopeItem,
 } from "@/hooks/use-opportunity-scope";
 import { useAppUsers, userDisplayName } from "@/hooks/use-todos";
@@ -38,13 +42,22 @@ export function ReadinessBadge({ readiness }: { readiness: ScopeReadiness }) {
 }
 
 export default function OpportunityScopeTab({ opportunityId }: { opportunityId: number }) {
-  const { data, isLoading } = useOpportunityScope(opportunityId);
-  const applyTemplate = useApplyScopeTemplate(opportunityId);
+  const { data, isLoading, isError, error, refetch, isFetching } = useOpportunityScope(opportunityId);
   const reorder = useReorderScopeItems(opportunityId);
-  const { toast } = useToast();
   const [addingCategory, setAddingCategory] = useState<string | null>(null);
 
   if (isLoading) return <div className="py-12 text-center"><Loader2 className="w-6 h-6 animate-spin mx-auto" /></div>;
+  if (isError) return (
+    <Card data-testid="scope-error-state">
+      <CardContent className="p-6 text-center space-y-3">
+        <p className="font-medium text-destructive">Unable to load this Opportunity's scope checklist.</p>
+        <p className="text-sm text-muted-foreground">{error instanceof Error ? error.message : "Please try again."}</p>
+        <Button variant="outline" disabled={isFetching} onClick={() => refetch()}>
+          {isFetching && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}Retry
+        </Button>
+      </CardContent>
+    </Card>
+  );
   const items = data?.items || [];
   const categories = data?.categories || [];
   const readiness = data?.readiness || "not_started";
@@ -86,19 +99,6 @@ export default function OpportunityScopeTab({ opportunityId }: { opportunityId: 
             </>}
             <ReadinessBadge readiness={readiness} />
           </div>
-          <Button
-            className="min-h-11"
-            variant="outline"
-            disabled={applyTemplate.isPending}
-            onClick={() => applyTemplate.mutate(undefined, {
-              onSuccess: (res) => toast({ title: res.addedCount > 0 ? `Added ${res.addedCount} scope item${res.addedCount === 1 ? "" : "s"}` : "Scope template already applied" }),
-              onError: e => toast({ title: "Couldn't apply template", description: extractApiError(e, "Try again."), variant: "destructive" }),
-            })}
-            data-testid="button-apply-scope-template"
-          >
-            {applyTemplate.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Sparkles className="w-4 h-4 mr-2" />}
-            Apply starter template
-          </Button>
         </CardContent>
       </Card>
 
@@ -190,6 +190,7 @@ function ScopeItemRow({ item, opportunityId, canMoveUp, canMoveDown, onMove }: {
   const [descOpen, setDescOpen] = useState(false);
   const [description, setDescription] = useState(item.description || "");
   const [todoOpen, setTodoOpen] = useState(false);
+  const [confirmRemove, setConfirmRemove] = useState(false);
 
   const status = item.status as ScopeItemStatus;
 
@@ -203,6 +204,7 @@ function ScopeItemRow({ item, opportunityId, canMoveUp, canMoveDown, onMove }: {
   const saveNotes = () => {
     if ((notes || "") === (item.notes || "")) return;
     update.mutate({ itemId: item.id, notes: notes || null }, {
+      onSuccess: () => toast({ title: "Scope item notes saved" }),
       onError: e => toast({ title: "Couldn't save notes", description: extractApiError(e, "Try again."), variant: "destructive" }),
     });
   };
@@ -246,6 +248,10 @@ function ScopeItemRow({ item, opportunityId, canMoveUp, canMoveDown, onMove }: {
             </div>
           </div>
           <div className="shrink-0">
+            <div className="flex gap-1 mb-1">
+              <Button size="sm" variant={status === "included" ? "default" : "outline"} onClick={() => setStatus("included")} disabled={update.isPending} data-testid={`button-include-scope-item-${item.id}`}>Included</Button>
+              <Button size="sm" variant={status === "excluded" ? "secondary" : "outline"} onClick={() => setStatus("excluded")} disabled={update.isPending} data-testid={`button-exclude-scope-item-${item.id}`}>Excluded</Button>
+            </div>
             <Select value={status} onValueChange={setStatus}>
               <SelectTrigger className={`min-h-11 w-full sm:w-52 ${STATUS_BADGE_CLASS[status]} border-0`} data-testid={`select-scope-status-${item.id}`}>
                 <SelectValue />
@@ -274,7 +280,7 @@ function ScopeItemRow({ item, opportunityId, canMoveUp, canMoveDown, onMove }: {
           {status === "needs_clarification" && item.linkedTodoId && (
             <span className="inline-flex items-center text-muted-foreground"><CircleDot className="w-3.5 h-3.5 mr-1" />Todo created</span>
           )}
-          <button className="min-h-11 inline-flex items-center hover:text-destructive ml-auto" onClick={() => remove.mutate(item.id)} data-testid={`button-remove-scope-item-${item.id}`}>
+          <button className="min-h-11 inline-flex items-center hover:text-destructive ml-auto" onClick={() => setConfirmRemove(true)} data-testid={`button-remove-scope-item-${item.id}`}>
             <Trash2 className="w-3.5 h-3.5 mr-1" />Remove
           </button>
         </div>
@@ -291,17 +297,22 @@ function ScopeItemRow({ item, opportunityId, canMoveUp, canMoveDown, onMove }: {
         )}
 
         {notesOpen && (
-          <Textarea
-            className="text-sm"
-            placeholder="Opportunity-specific notes (separate from the item name/description)"
-            value={notes}
-            onChange={e => setNotes(e.target.value)}
-            onBlur={saveNotes}
-            data-testid={`textarea-scope-notes-${item.id}`}
-          />
+          <div className="space-y-2">
+            <Textarea
+              className="text-sm"
+              placeholder="Opportunity-specific notes (separate from the item name/description)"
+              value={notes}
+              onChange={e => setNotes(e.target.value)}
+              data-testid={`textarea-scope-notes-${item.id}`}
+            />
+            <Button size="sm" disabled={update.isPending || notes === (item.notes || "")} onClick={saveNotes} data-testid={`button-save-scope-notes-${item.id}`}>Save notes</Button>
+          </div>
         )}
 
         {todoOpen && <CreateClarificationTodo item={item} opportunityId={opportunityId} onDone={() => setTodoOpen(false)} />}
+        <AlertDialog open={confirmRemove} onOpenChange={setConfirmRemove}>
+          <AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Remove {item.name}?</AlertDialogTitle><AlertDialogDescription>This removes the item from this Opportunity only. Catalog items will remain available for future Opportunities.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={event => { event.preventDefault(); remove.mutate(item.id, { onSuccess: () => setConfirmRemove(false), onError: e => toast({ title: "Couldn't remove item", description: extractApiError(e, "Try again."), variant: "destructive" }) }); }}>Remove item</AlertDialogAction></AlertDialogFooter></AlertDialogContent>
+        </AlertDialog>
       </CardContent>
     </Card>
   );

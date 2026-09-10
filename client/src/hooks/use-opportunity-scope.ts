@@ -73,19 +73,6 @@ export function useReorderScopeItems(opportunityId: number) {
   });
 }
 
-export type ApplyTemplateResponse = ScopeListResponse & { addedCount: number };
-
-export function useApplyScopeTemplate(opportunityId: number) {
-  const invalidate = useInvalidateScope(opportunityId);
-  return useMutation({
-    mutationFn: async () => {
-      const res = await apiRequest("POST", buildUrl(api.opportunityScope.applyTemplate.path, { id: opportunityId }), {});
-      return (await res.json()) as ApplyTemplateResponse;
-    },
-    onSuccess: invalidate,
-  });
-}
-
 export function useCreateScopeClarificationTodo(opportunityId: number) {
   const invalidate = useInvalidateScope(opportunityId);
   const queryClient = useQueryClient();

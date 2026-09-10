@@ -1481,6 +1481,7 @@ export const scopeCategories = pgTable("scope_categories", {
   key: text("key").notNull(), // stable seed key, e.g. 'sitework'
   name: text("name").notNull(),
   displayOrder: integer("display_order").notNull().default(0),
+  isActive: boolean("is_active").notNull().default(true),
   createdAt: timestamp("created_at").defaultNow(),
 }, (table) => [
   uniqueIndex("uq_scope_categories_key").on(table.key),
