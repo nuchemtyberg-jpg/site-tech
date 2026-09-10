@@ -161,7 +161,7 @@ export default function WorkflowRules() {
   };
 
   return (
-    <div className="space-y-5 pt-14 md:pt-0">
+    <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2" data-testid="text-workflow-rules-title">

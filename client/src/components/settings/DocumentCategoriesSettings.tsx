@@ -107,25 +107,25 @@ export function DocumentCategoriesSettings() {
         ) : (
           <div className="space-y-2">
             {categories.map((category, index) => (
-              <div key={category.id} className="flex items-center gap-2 rounded-md border p-2" data-testid={`document-category-${category.id}`}>
+              <div key={category.id} className="flex flex-wrap items-center gap-2 rounded-md border p-2" data-testid={`document-category-${category.id}`}>
                 <div className="flex gap-1">
-                  <Button variant="ghost" size="icon" className="min-h-10 min-w-10" disabled={index === 0 || reorder.isPending} onClick={() => move(index, -1)} aria-label={`Move ${category.name} up`}>
+                  <Button variant="ghost" size="icon" className="min-h-11 min-w-11" disabled={index === 0 || reorder.isPending} onClick={() => move(index, -1)} aria-label={`Move ${category.name} up`}>
                     <ArrowUp className="w-4 h-4" />
                   </Button>
-                  <Button variant="ghost" size="icon" className="min-h-10 min-w-10" disabled={index === categories.length - 1 || reorder.isPending} onClick={() => move(index, 1)} aria-label={`Move ${category.name} down`}>
+                  <Button variant="ghost" size="icon" className="min-h-11 min-w-11" disabled={index === categories.length - 1 || reorder.isPending} onClick={() => move(index, 1)} aria-label={`Move ${category.name} down`}>
                     <ArrowDown className="w-4 h-4" />
                   </Button>
                 </div>
                 {editingId === category.id ? (
-                  <form className="flex flex-1 gap-2" onSubmit={event => { event.preventDefault(); saveName(category.id); }}>
-                    <Input value={editingName} onChange={event => setEditingName(event.target.value)} autoFocus maxLength={100} />
-                    <Button type="submit" disabled={!editingName.trim() || update.isPending}>Save</Button>
-                    <Button type="button" variant="outline" onClick={() => setEditingId(null)}>Cancel</Button>
+                  <form className="order-first flex basis-full flex-wrap gap-2 sm:order-none sm:min-w-0 sm:flex-1 sm:flex-nowrap" onSubmit={event => { event.preventDefault(); saveName(category.id); }}>
+                    <Input className="min-w-0 basis-full sm:basis-auto" value={editingName} onChange={event => setEditingName(event.target.value)} autoFocus maxLength={100} aria-label={`Category name for ${category.name}`} />
+                    <Button className="min-h-11" type="submit" disabled={!editingName.trim() || update.isPending}>Save</Button>
+                    <Button className="min-h-11" type="button" variant="outline" onClick={() => setEditingId(null)}>Cancel</Button>
                   </form>
                 ) : (
                   <>
-                    <div className="min-w-0 flex-1">
-                      <p className="font-medium truncate">{category.name}</p>
+                    <div className="order-first min-w-0 basis-full sm:order-none sm:flex-1 sm:basis-auto">
+                      <p className="break-words font-medium">{category.name}</p>
                       <div className="mt-1 flex flex-wrap items-center gap-2">
                         {!category.isActive && <Badge variant="secondary">Inactive</Badge>}
                         <span className="text-xs text-muted-foreground" data-testid={`document-category-usage-${category.id}`}>
@@ -133,7 +133,7 @@ export function DocumentCategoriesSettings() {
                         </span>
                       </div>
                     </div>
-                    <Button variant="ghost" size="icon" className="min-h-10 min-w-10" onClick={() => { setEditingId(category.id); setEditingName(category.name); }} aria-label={`Rename ${category.name}`}>
+                    <Button variant="ghost" size="icon" className="min-h-11 min-w-11" onClick={() => { setEditingId(category.id); setEditingName(category.name); }} aria-label={`Rename ${category.name}`}>
                       <Pencil className="w-4 h-4" />
                     </Button>
                     <Switch
@@ -154,9 +154,9 @@ export function DocumentCategoriesSettings() {
             ))}
           </div>
         )}
-        <form className="flex gap-2 border-t pt-4" onSubmit={event => { event.preventDefault(); add(); }}>
-          <Input value={newName} onChange={event => setNewName(event.target.value)} placeholder="New category name" maxLength={100} />
-          <Button type="submit" disabled={!newName.trim() || create.isPending}>
+        <form className="flex flex-wrap gap-2 border-t pt-4" onSubmit={event => { event.preventDefault(); add(); }}>
+          <Input className="min-w-0 basis-full sm:flex-1 sm:basis-auto" value={newName} onChange={event => setNewName(event.target.value)} placeholder="New category name" maxLength={100} aria-label="New document category name" />
+          <Button className="min-h-11" type="submit" disabled={!newName.trim() || create.isPending}>
             {create.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Plus className="w-4 h-4 mr-2" />}
             Add
           </Button>

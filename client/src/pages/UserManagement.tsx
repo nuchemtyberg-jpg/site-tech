@@ -181,7 +181,7 @@ export default function UserManagement() {
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="min-w-0 space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2">
@@ -193,7 +193,7 @@ export default function UserManagement() {
 
         <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
           <DialogTrigger asChild>
-            <Button data-testid="button-add-user">
+            <Button className="min-h-11" data-testid="button-add-user">
               <UserPlus className="w-4 h-4 mr-2" />
               Add Authorized User
             </Button>
@@ -250,7 +250,7 @@ export default function UserManagement() {
               <div className="space-y-2">
                 <Label htmlFor="role">Role</Label>
                 <Select value={newRole} onValueChange={setNewRole}>
-                  <SelectTrigger data-testid="select-role">
+                  <SelectTrigger id="role" aria-label="Role" data-testid="select-role">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -278,25 +278,25 @@ export default function UserManagement() {
         </Dialog>
       </div>
 
-      <Tabs defaultValue="users">
-        <TabsList>
-          <TabsTrigger value="users" className="flex items-center gap-2">
-            <Users className="w-4 h-4" />
+      <Tabs defaultValue="users" className="min-w-0">
+        <TabsList className="grid h-auto w-full grid-cols-2 sm:inline-grid sm:w-auto">
+          <TabsTrigger value="users" className="min-w-0 whitespace-normal px-2 py-2">
+            <Users className="mr-1.5 h-4 w-4 shrink-0" />
             Active Users ({users.length})
           </TabsTrigger>
-          <TabsTrigger value="authorized" className="flex items-center gap-2">
-            <Mail className="w-4 h-4" />
+          <TabsTrigger value="authorized" className="min-w-0 whitespace-normal px-2 py-2">
+            <Mail className="mr-1.5 h-4 w-4 shrink-0" />
             Authorized Emails ({authorizedUsers.length})
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="users" className="mt-4">
-          <Card>
+        <TabsContent value="users" className="min-w-0 mt-4">
+          <Card className="min-w-0">
             <CardHeader>
               <CardTitle>Registered Users</CardTitle>
               <CardDescription>Users who have logged into the system</CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="min-w-0">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -327,7 +327,7 @@ export default function UserManagement() {
                           value={user.role}
                           onValueChange={(role) => updateUserMutation.mutate({ id: user.id, updates: { role } })}
                         >
-                          <SelectTrigger className="w-28" data-testid={`select-role-${user.id}`}>
+                          <SelectTrigger className="w-28" aria-label={`Role for ${user.firstName || user.email || "user"} ${user.lastName || ""}`.trim()} data-testid={`select-role-${user.id}`}>
                             <SelectValue>{getRoleBadge(user.role)}</SelectValue>
                           </SelectTrigger>
                           <SelectContent>
@@ -345,8 +345,9 @@ export default function UserManagement() {
                               <Button
                                 size="icon"
                                 variant="ghost"
-                                className="text-green-500 hover:text-green-600 hover:bg-green-500/10"
+                                className="min-h-11 min-w-11 text-green-500 hover:text-green-600 hover:bg-green-500/10"
                                 onClick={() => updateUserMutation.mutate({ id: user.id, updates: { isAuthorized: "approved" } })}
+                                aria-label={`Approve ${user.firstName || user.email || "user"}`}
                                 data-testid={`button-approve-${user.id}`}
                               >
                                 <Check className="w-4 h-4" />
@@ -354,8 +355,9 @@ export default function UserManagement() {
                               <Button
                                 size="icon"
                                 variant="ghost"
-                                className="text-red-500 hover:text-red-600 hover:bg-red-500/10"
+                                className="min-h-11 min-w-11 text-red-500 hover:text-red-600 hover:bg-red-500/10"
                                 onClick={() => updateUserMutation.mutate({ id: user.id, updates: { isAuthorized: "rejected" } })}
+                                aria-label={`Reject ${user.firstName || user.email || "user"}`}
                                 data-testid={`button-reject-${user.id}`}
                               >
                                 <X className="w-4 h-4" />
@@ -400,15 +402,15 @@ export default function UserManagement() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="authorized" className="mt-4">
-          <Card>
+        <TabsContent value="authorized" className="min-w-0 mt-4">
+          <Card className="min-w-0">
             <CardHeader>
               <CardTitle>Pre-Authorized Emails</CardTitle>
               <CardDescription>
                 Users with these emails will be automatically approved when they register
               </CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="min-w-0">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -446,7 +448,9 @@ export default function UserManagement() {
                           <Button
                             size="icon"
                             variant="ghost"
+                            className="min-h-11 min-w-11"
                             onClick={() => openEditDialog(authUser)}
+                            aria-label={`Edit ${authUser.email}`}
                             data-testid={`button-edit-${authUser.id}`}
                           >
                             <Pencil className="w-4 h-4" />
@@ -454,8 +458,9 @@ export default function UserManagement() {
                           <Button
                             size="icon"
                             variant="ghost"
-                            className="text-red-500 hover:text-red-600 hover:bg-red-500/10"
+                            className="min-h-11 min-w-11 text-red-500 hover:text-red-600 hover:bg-red-500/10"
                             onClick={() => deleteAuthorizedUserMutation.mutate(authUser.id)}
+                            aria-label={`Delete ${authUser.email}`}
                             data-testid={`button-delete-${authUser.id}`}
                           >
                             <Trash2 className="w-4 h-4" />
@@ -526,7 +531,7 @@ export default function UserManagement() {
             <div className="space-y-2">
               <Label htmlFor="editRole">Role</Label>
               <Select value={editRole} onValueChange={setEditRole}>
-                <SelectTrigger data-testid="select-edit-role">
+                <SelectTrigger id="editRole" aria-label="Role" data-testid="select-edit-role">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>

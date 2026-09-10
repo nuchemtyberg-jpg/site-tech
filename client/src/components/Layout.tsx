@@ -11,14 +11,12 @@ import {
   Menu,
   X,
   User,
-  Shield,
   Receipt,
   Settings,
   ChevronRight,
   Files,
   BarChart3,
   ClipboardCheck,
-  Zap,
   Target
 } from "lucide-react";
 import { useState } from "react";
@@ -44,8 +42,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   ];
   
   const adminItems = [
-    { href: "/admin/users", label: "User Management", icon: Shield },
-    { href: "/admin/workflows", label: "Workflows", icon: Zap },
+    { href: "/admin/settings", label: "Admin Settings", icon: Settings },
     { href: "/admin/billing", label: "Billing", icon: Receipt },
     { href: "/admin/reports", label: "Reports", icon: BarChart3 },
     { href: "/admin/documents", label: "Documents", icon: Files },
@@ -84,7 +81,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
             <NotificationBell />
           </div>
 
-          <nav className="flex-1 px-4 py-4 space-y-1">
+          <nav className="flex-1 overflow-y-auto px-4 py-4 space-y-1">
             {navItems.map((item) => {
               const isActive = location === item.href || (item.href !== "/" && location.startsWith(item.href));
               return (
@@ -113,7 +110,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 {adminItems.map((item) => {
                   const isActive = location.startsWith(item.href);
                   return (
-                    <Link key={item.href} href={item.href}>
+                    <Link key={item.href} href={item.href} aria-current={isActive ? "page" : undefined} className="block rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
                       <div 
                         className={cn(
                           "flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all duration-200 cursor-pointer group min-h-[44px]",
@@ -121,7 +118,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                             ? "bg-primary text-primary-foreground shadow-lg shadow-primary/25" 
                             : "text-muted-foreground hover:bg-muted hover:text-foreground"
                         )}
-                        data-testid="link-user-management"
+                        data-testid={`link-admin-${item.href.split("/").pop()}`}
                       >
                         <item.icon className={cn("w-5 h-5 flex-shrink-0", isActive ? "text-primary-foreground" : "text-muted-foreground group-hover:text-foreground")} />
                         {item.label}
@@ -242,7 +239,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                   {adminItems.map((item) => {
                     const isActive = location.startsWith(item.href);
                     return (
-                      <Link key={item.href} href={item.href}>
+                      <Link key={item.href} href={item.href} aria-current={isActive ? "page" : undefined} className="block rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
                         <div 
                           className={cn(
                             "flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all duration-200 cursor-pointer min-h-[44px]",

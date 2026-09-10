@@ -24,9 +24,8 @@ import AuthPage from "@/pages/AuthPage";
 import PendingAccessPage from "@/pages/PendingAccessPage";
 import PDFViewerPage from "@/pages/PDFViewerPage";
 import DailyReportPage from "@/pages/DailyReportPage";
-import UserManagement from "@/pages/UserManagement";
 import MyWork from "@/pages/MyWork";
-import WorkflowRules from "@/pages/WorkflowRules";
+import AdminSettings, { AdminSettingsDetail, LegacyAdminSettingsRedirect } from "@/pages/AdminSettings";
 import EmailSetup from "@/pages/EmailSetup";
 import Billing from "@/pages/Billing";
 import Employees from "@/pages/Employees";
@@ -97,7 +96,7 @@ function LegacyOpportunityRedirect() {
   return null;
 }
 
-function Router() {
+export function Router() {
   return (
     <Switch>
       <Route path="/" component={() => <ProtectedRoute component={Projects} />} />
@@ -118,8 +117,10 @@ function Router() {
       <Route path="/equipment/:id" component={() => <ProtectedRoute component={EquipmentDetails} />} />
       <Route path="/employees" component={() => <ProtectedRoute component={Employees} />} />
       <Route path="/settings" component={() => <ProtectedRoute component={Settings} />} />
-      <Route path="/admin/users" component={() => <ProtectedRoute component={UserManagement} adminOnly />} />
-      <Route path="/admin/workflows" component={() => <ProtectedRoute component={WorkflowRules} adminOnly />} />
+      <Route path="/admin/settings" component={() => <ProtectedRoute component={AdminSettings} adminOnly />} />
+      <Route path="/admin/settings/:section" component={() => <ProtectedRoute component={AdminSettingsDetail} adminOnly />} />
+      <Route path="/admin/users" component={() => <ProtectedRoute component={LegacyAdminSettingsRedirect} adminOnly />} />
+      <Route path="/admin/workflows" component={() => <ProtectedRoute component={LegacyAdminSettingsRedirect} adminOnly />} />
       <Route path="/admin/email-setup" component={() => <ProtectedRoute component={EmailSetup} adminOnly />} />
       <Route path="/admin/billing" component={() => <ProtectedRoute component={Billing} adminOnly />} />
       <Route path="/admin/documents" component={() => <ProtectedRoute component={CompanyDocuments} adminOnly />} />
