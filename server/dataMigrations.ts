@@ -47,6 +47,10 @@ const MIGRATIONS: DataMigration[] = [
     key: "2026-09-15-migrate-pre-award-projects-to-opportunities",
     run: (tx) => migratePreAwardProjectsToOpportunities(tx),
   },
+  {
+    key: "2026-09-15-backfill-unassigned-customer-for-orphaned-pre-award-projects",
+    run: (tx) => backfillUnassignedCustomerForOrphanedPreAwardProjects(tx),
+  },
 ];
 
 /**
@@ -178,6 +182,72 @@ export async function migratePreAwardProjectsToOpportunities(tx: MigrationExecut
         `ids ${skippedNoCustomer.join(", ")}. Assign a customer and re-run to migrate them.`,
     );
   }
+}
+
+/**
+ * Product decision (2026-09-15, user-accepted): the pre-award projects that
+ * migratePreAwardProjectsToOpportunities skips for having no customer are all
+ * pre-existing stale/orphaned rows (auto-generated test-fixture names and
+ * emails, blank description/notes/address). Rather than leaving them stuck in
+ * the Projects tab forever or inventing a real customer identity for them,
+ * they are backfilled onto a single shared placeholder "Unassigned Customer"
+ * (created here if missing) so they satisfy opportunities.customer_id NOT
+ * NULL and can proceed through the normal migration. Then immediately
+ * re-invokes migratePreAwardProjectsToOpportunities on the same transaction
+ * so the now-fixed rows are picked up in this same run.
+ *
+ * This is a one-time backfill for existing orphaned rows: it does not change
+ * how NEW pre-award projects are created, so future customer-less projects
+ * still require a real customer assigned via the UI before they migrate
+ * (the primary, intended path) instead of silently defaulting to the
+ * placeholder.
+ */
+export async function backfillUnassignedCustomerForOrphanedPreAwardProjects(
+  tx: MigrationExecutor,
+): Promise<void> {
+  const orphaned = await tx.execute(sql`
+    SELECT id FROM projects
+    WHERE deleted_at IS NULL
+      AND customer_id IS NULL
+      AND status IN (${sql.raw(PRE_AWARD_PROJECT_STATUSES.map((s) => `'${s}'`).join(","))})
+  `);
+  if (orphaned.rows.length === 0) return;
+
+  const existing = (
+    await tx.execute(sql`SELECT id FROM customers WHERE name = 'Unassigned Customer' AND deleted_at IS NULL`)
+  ).rows as any[];
+
+  let placeholderCustomerId: number;
+  if (existing.length > 0) {
+    placeholderCustomerId = existing[0].id;
+  } else {
+    const [{ id }] = (
+      await tx.execute(sql`
+        INSERT INTO customers (name, status, notes, created_at, updated_at)
+        VALUES (
+          'Unassigned Customer', 'active',
+          'Placeholder customer for pre-award Projects that had no customer on file when migrated to Opportunities. Replace with the real customer when known.',
+          now(), now()
+        )
+        RETURNING id
+      `)
+    ).rows as any[];
+    placeholderCustomerId = id;
+  }
+
+  const ids = (orphaned.rows as any[]).map((r) => r.id);
+  await tx.execute(sql`
+    UPDATE projects SET customer_id = ${placeholderCustomerId}
+    WHERE id IN (${sql.raw(ids.join(","))})
+  `);
+  console.log(
+    `[data-migrations] backfilled placeholder "Unassigned Customer" (id ${placeholderCustomerId}) onto ` +
+      `${ids.length} orphaned pre-award project(s) with no customer: ids ${ids.join(", ")}`,
+  );
+
+  // Immediately re-run the migration on this same transaction so the
+  // now-fixed rows move to Opportunities within this same migration run.
+  await migratePreAwardProjectsToOpportunities(tx);
 }
 
 /**
