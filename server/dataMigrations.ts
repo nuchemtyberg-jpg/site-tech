@@ -43,7 +43,142 @@ const MIGRATIONS: DataMigration[] = [
     key: "2026-09-08-seed-scope-checklist-catalog-v3",
     run: (tx) => seedScopeChecklistCatalog(tx),
   },
+  {
+    key: "2026-09-15-migrate-pre-award-projects-to-opportunities",
+    run: (tx) => migratePreAwardProjectsToOpportunities(tx),
+  },
 ];
+
+/**
+ * Pre-award Project -> Opportunity mapping (spec: "Move pre-award Projects
+ * into Opportunities"). Historical `bid_lost`/`new`/etc. project rows map to
+ * the closest equivalent point in the Opportunity pipeline.
+ */
+const PRE_AWARD_PROJECT_STATUS_MAP: Record<string, string> = {
+  new: "new",
+  bidding: "estimating",
+  takeoff_done: "estimating",
+  takeoff_reviewed: "proposal_ready",
+  proposal_sent: "proposal_sent",
+  bid_lost: "lost",
+};
+const PRE_AWARD_PROJECT_STATUSES = Object.keys(PRE_AWARD_PROJECT_STATUS_MAP);
+
+/**
+ * Moves every non-deleted Project whose status is still pre-award (`new`,
+ * `bidding`, `takeoff_done`, `takeoff_reviewed`, `proposal_sent`, `bid_lost`)
+ * into the Opportunities table: creates a matching Opportunity (customer,
+ * name, address, scope/notes, expected value, mapped status), copies the
+ * project's contacts into `opportunity_contacts`, re-points the project's
+ * todos and files to the new Opportunity via their polymorphic
+ * relatedEntityType/relatedEntityId link, records an initial status-history
+ * row noting the migration origin, and soft-deletes the Project.
+ *
+ * Idempotent by construction: once a Project is migrated it is soft-deleted,
+ * so `deleted_at IS NULL` in the selection below excludes it on a re-run —
+ * no separate "already migrated" tracking is needed. Projects with no
+ * customer are skipped (opportunities.customer_id is NOT NULL) and left as
+ * Projects; this is logged so it can be resolved manually.
+ */
+export async function migratePreAwardProjectsToOpportunities(tx: MigrationExecutor): Promise<void> {
+  const candidates = await tx.execute(sql`
+    SELECT id, project_number, customer_id, name, street_address, city, state, zip,
+           description, notes, estimated_value, status
+    FROM projects
+    WHERE deleted_at IS NULL
+      AND status IN (${sql.raw(PRE_AWARD_PROJECT_STATUSES.map((s) => `'${s}'`).join(","))})
+    ORDER BY id
+  `);
+
+  const skippedNoCustomer: number[] = [];
+
+  for (const row of candidates.rows as any[]) {
+    if (row.customer_id === null || row.customer_id === undefined) {
+      skippedNoCustomer.push(row.id);
+      continue;
+    }
+
+    const mappedStatus = PRE_AWARD_PROJECT_STATUS_MAP[row.status as string];
+
+    // Allocate the next OPP-YYYY-NNNN number. Safe without a separate
+    // advisory lock: this whole migration already runs inside the single
+    // data-migrations transaction serialized by the pg_advisory_xact_lock
+    // taken in runDataMigrations, so no concurrent inserter can race it.
+    const year = new Date().getFullYear();
+    const prefix = `OPP-${year}-`;
+    const [{ maxseq }] = (
+      await tx.execute(sql`
+        SELECT coalesce(max((substring(opportunity_number from ${sql.raw(String(prefix.length + 1))}::int))::int), 0) AS maxseq
+        FROM opportunities
+        WHERE opportunity_number LIKE ${prefix + "%"}
+      `)
+    ).rows as any[];
+    const opportunityNumber = `${prefix}${String(Number(maxseq) + 1).padStart(4, "0")}`;
+
+    const [{ id: opportunityId }] = (
+      await tx.execute(sql`
+        INSERT INTO opportunities (
+          opportunity_number, name, customer_id, status,
+          street_address, city, state, zip,
+          scope_summary, internal_notes, expected_value,
+          migrated_from_project_id, migrated_from_project_number,
+          created_at, updated_at
+        )
+        VALUES (
+          ${opportunityNumber}, ${row.name}, ${row.customer_id}, ${mappedStatus},
+          ${row.street_address}, ${row.city}, ${row.state}, ${row.zip},
+          ${row.description}, ${row.notes}, ${row.estimated_value},
+          ${row.id}, ${row.project_number},
+          now(), now()
+        )
+        RETURNING id
+      `)
+    ).rows as any[];
+
+    // Copy the project's contacts into opportunity_contacts (role left unset —
+    // project_contacts uses a free-text roleLabel, opportunity roles are a
+    // distinct fixed enum, so there is no lossless mapping).
+    await tx.execute(sql`
+      INSERT INTO opportunity_contacts (opportunity_id, contact_id, is_primary, created_at)
+      SELECT ${opportunityId}, pc.contact_id, false, now()
+      FROM project_contacts pc
+      WHERE pc.project_id = ${row.id}
+      ON CONFLICT (opportunity_id, contact_id) DO NOTHING
+    `);
+
+    // Initial status history entry, so the bidding pipeline shows accurate history.
+    await tx.execute(sql`
+      INSERT INTO opportunity_status_history (opportunity_id, previous_status, new_status, changed_by_user_id, changed_by_name, changed_at)
+      VALUES (${opportunityId}, NULL, ${mappedStatus}, NULL, ${"System (migrated from Project " + (row.project_number || `#${row.id}`) + ")"}, now())
+    `);
+
+    // Re-point todos and files via their polymorphic related-entity link;
+    // clear projectId so they stop showing under the (soon soft-deleted) Project.
+    await tx.execute(sql`
+      UPDATE todos
+      SET related_entity_type = 'opportunity', related_entity_id = ${opportunityId}, project_id = NULL, updated_at = now()
+      WHERE deleted_at IS NULL
+        AND (project_id = ${row.id} OR (related_entity_type = 'project' AND related_entity_id = ${row.id}))
+    `);
+    await tx.execute(sql`
+      UPDATE files
+      SET related_entity_type = 'opportunity', related_entity_id = ${opportunityId}, project_id = NULL
+      WHERE deleted_at IS NULL
+        AND (project_id = ${row.id} OR (related_entity_type = 'project' AND related_entity_id = ${row.id}))
+    `);
+
+    // Soft-delete the migrated Project last, once everything else succeeded.
+    await tx.execute(sql`UPDATE projects SET deleted_at = now() WHERE id = ${row.id}`);
+  }
+
+  if (skippedNoCustomer.length > 0) {
+    console.warn(
+      `[data-migrations] migrate-pre-award-projects-to-opportunities: skipped ${skippedNoCustomer.length} ` +
+        `pre-award project(s) with no customer (cannot create an Opportunity without a customer): ` +
+        `ids ${skippedNoCustomer.join(", ")}. Assign a customer and re-run to migrate them.`,
+    );
+  }
+}
 
 /**
  * Customer Company & Contacts upgrade backfill. Converts legacy person-centric

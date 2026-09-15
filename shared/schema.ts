@@ -1327,6 +1327,10 @@ export const opportunities = pgTable("opportunities", {
   noBidReasonNotes: text("no_bid_reason_notes"),
   awardDate: date("award_date"),
   convertedProjectId: integer("converted_project_id"), // set when converted to a Project (future phase)
+  // Traceability for Opportunities created by the pre-award Project migration
+  // (see server/dataMigrations.ts). Null for Opportunities created normally.
+  migratedFromProjectId: integer("migrated_from_project_id"),
+  migratedFromProjectNumber: text("migrated_from_project_number"),
   // Archive is a visibility flag, distinct from business statuses (Lost/No Bid
   // remain searchable; archived records are just hidden from default views).
   isArchived: boolean("is_archived").notNull().default(false),
@@ -1347,6 +1351,7 @@ export const insertOpportunitySchema = createInsertSchema(opportunities).omit({
   id: true, opportunityNumber: true, createdByUserId: true,
   lostReason: true, lostReasonNotes: true, noBidReason: true, noBidReasonNotes: true,
   awardDate: true, convertedProjectId: true, // outcome fields are managed by the status change service
+  migratedFromProjectId: true, migratedFromProjectNumber: true, // set only by the Project migration
   createdAt: true, updatedAt: true, deletedAt: true,
 }).extend({
   name: z.string().trim().min(1, "Opportunity name is required"),
