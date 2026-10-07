@@ -40,6 +40,7 @@ import {
 } from "@shared/schema";
 import { DEFAULT_DOCUMENT_CATEGORIES } from "@shared/documentCategory";
 import { db } from "./db";
+import { ensureDefaultDocumentFolders } from "./defaultDocumentFolders";
 import { eq, desc, asc, and, or, isNull, isNotNull, sql, lt, gt, gte, lte, ne, ilike, inArray, notInArray, aliasedTable } from "drizzle-orm";
 import {
   OPPORTUNITY_DEADLINE_ELIGIBLE_STATUSES,
@@ -930,45 +931,7 @@ export class DatabaseStorage implements IStorage {
   }
   
   private async createDefaultFolders(projectId: number): Promise<void> {
-    // Office folder structure
-    const [officeFolder] = await db.insert(folders).values({
-      projectId,
-      name: "Office",
-      parentId: null
-    }).returning();
-    
-    await db.insert(folders).values([
-      { projectId, name: "Takeoffs", parentId: officeFolder.id },
-      { projectId, name: "Proposals", parentId: officeFolder.id },
-      { projectId, name: "Supplier Quotes", parentId: officeFolder.id }
-    ]);
-    
-    // Billing subfolder under Office
-    const [billingFolder] = await db.insert(folders).values({
-      projectId,
-      name: "Billing",
-      parentId: officeFolder.id
-    }).returning();
-    
-    await db.insert(folders).values([
-      { projectId, name: "Change Orders", parentId: billingFolder.id },
-      { projectId, name: "SOV", parentId: billingFolder.id },
-      { projectId, name: "REQs & Invoices", parentId: billingFolder.id }
-    ]);
-    
-    // Field folder structure
-    const [fieldFolder] = await db.insert(folders).values({
-      projectId,
-      name: "Field",
-      parentId: null
-    }).returning();
-    
-    await db.insert(folders).values([
-      { projectId, name: "Drawings", parentId: fieldFolder.id },
-      { projectId, name: "Permits & Legal", parentId: fieldFolder.id },
-      { projectId, name: "Submittals", parentId: fieldFolder.id },
-      { projectId, name: "RFI's", parentId: fieldFolder.id }
-    ]);
+    await db.transaction(tx => ensureDefaultDocumentFolders(tx, "project", projectId));
   }
   async updateProject(id: number, updates: Partial<InsertProject>): Promise<Project> {
     const [project] = await db.update(projects).set(updates).where(eq(projects.id, id)).returning();
@@ -1481,6 +1444,13 @@ export class DatabaseStorage implements IStorage {
   async createDocumentVersion(input: InsertFileMetadata & { supersedesId?: number | null }): Promise<FileMetadata> {
     const { supersedesId, ...fileInput } = input;
     return await db.transaction(async (tx) => {
+      // Match the shared tool's owner lock, including clients still using the
+      // original Bidding API, so metadata/deletion cannot race a revision.
+      if (fileInput.relatedEntityType === "opportunity" && fileInput.relatedEntityId) {
+        await tx.select().from(opportunities).where(eq(opportunities.id, fileInput.relatedEntityId)).for("update");
+      } else if (fileInput.projectId) {
+        await tx.select().from(projects).where(eq(projects.id, fileInput.projectId)).for("update");
+      }
       if (supersedesId) {
         // Lock the target row for the duration of the transaction so a
         // concurrent/stale "new version" request against the same document
@@ -1489,7 +1459,7 @@ export class DatabaseStorage implements IStorage {
         if (!target) {
           throw new Error("Document being superseded was not found");
         }
-        if (target.relatedEntityType !== fileInput.relatedEntityType || target.relatedEntityId !== fileInput.relatedEntityId) {
+        if (target.projectId !== (fileInput.projectId ?? null) || target.relatedEntityType !== fileInput.relatedEntityType || target.relatedEntityId !== fileInput.relatedEntityId) {
           throw new Error("New version must belong to the same document");
         }
         const groupId = target.documentGroupId ?? target.id;
@@ -1498,6 +1468,7 @@ export class DatabaseStorage implements IStorage {
         // numbering and the "exactly one current version" invariant hold
         // even if the request targets a version that is no longer current
         // (stale supersedesId).
+        if (!target.documentGroupId) await tx.update(files).set({ documentGroupId: groupId }).where(eq(files.id, target.id));
         const groupRows = await tx.select().from(files).where(eq(files.documentGroupId, groupId)).for("update");
         const current = groupRows.find(r => r.documentStatus === "current" && !r.deletedAt);
         if (!current || current.id !== target.id) {
@@ -1510,6 +1481,11 @@ export class DatabaseStorage implements IStorage {
         const [newVersion] = await tx.insert(files).values({
           ...fileInput,
           category: current.category,
+          description: current.description,
+          name: current.name,
+          folderId: current.folderId,
+          tags: current.tags,
+          starred: current.starred,
           documentGroupId: groupId,
           documentVersion: maxVersion + 1,
           documentStatus: "current",
@@ -1529,6 +1505,12 @@ export class DatabaseStorage implements IStorage {
 
   async deleteDocumentVersion(id: number): Promise<void> {
     await db.transaction(async (tx) => {
+      const [owner] = await tx.select().from(files).where(eq(files.id, id));
+      if (owner?.relatedEntityType === "opportunity" && owner.relatedEntityId) {
+        await tx.select().from(opportunities).where(eq(opportunities.id, owner.relatedEntityId)).for("update");
+      } else if (owner?.projectId) {
+        await tx.select().from(projects).where(eq(projects.id, owner.projectId)).for("update");
+      }
       const [target] = await tx.select().from(files).where(and(eq(files.id, id), isNull(files.deletedAt))).for("update");
       if (!target) return;
       await tx.update(files).set({ deletedAt: new Date() }).where(eq(files.id, id));
@@ -2933,6 +2915,7 @@ export class DatabaseStorage implements IStorage {
       const next = (row?.maxSeq ?? 0) + 1;
       const opportunityNumber = `${prefix}${String(next).padStart(4, "0")}`;
       const [result] = await tx.insert(opportunities).values({ ...opportunity, opportunityNumber }).returning();
+      await ensureDefaultDocumentFolders(tx, "opportunity", result.id);
       const templates = await tx.select({ template: scopeItemTemplates }).from(scopeItemTemplates)
         .innerJoin(scopeCategories, eq(scopeItemTemplates.categoryId, scopeCategories.id))
         .where(and(eq(scopeItemTemplates.isActive, true), eq(scopeCategories.isActive, true)));

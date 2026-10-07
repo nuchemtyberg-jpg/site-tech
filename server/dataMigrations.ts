@@ -1,6 +1,7 @@
 import { db } from "./db";
 import { sql } from "drizzle-orm";
 import { SCOPE_CATEGORY_SEEDS } from "../shared/scopeChecklist";
+import { ensureDefaultDocumentFolders } from "./defaultDocumentFolders";
 
 /**
  * Tracked, one-time data migrations. Runs at server startup (all environments)
@@ -19,6 +20,14 @@ export type MigrationExecutor = Pick<typeof db, "execute">;
 export type DataMigration = { key: string; run: (tx: MigrationExecutor) => Promise<void> };
 
 const MIGRATIONS: DataMigration[] = [
+  {
+    key: "2026-10-07-document-folders-opportunity-ownership",
+    run: async tx => {
+      // Additive ownership change: retain every existing folder and file.
+      await tx.execute(sql`ALTER TABLE folders ADD COLUMN IF NOT EXISTS opportunity_id integer`);
+      await tx.execute(sql`ALTER TABLE folders ALTER COLUMN project_id DROP NOT NULL`);
+    },
+  },
   {
     key: "2026-08-10-customer-company-contacts-backfill",
     run: (tx) => backfillCustomerContacts(tx),
@@ -50,6 +59,27 @@ const MIGRATIONS: DataMigration[] = [
   {
     key: "2026-09-15-backfill-unassigned-customer-for-orphaned-pre-award-projects",
     run: (tx) => backfillUnassignedCustomerForOrphanedPreAwardProjects(tx),
+  },
+  {
+    key: "2026-10-07-preserve-migrated-bidding-folder-trees",
+    run: async tx => {
+      // The earlier pre-award migration repointed files but left their folder
+      // trees on the retired Project. Keep IDs/parents/names unchanged; only
+      // finish ownership for these explicitly recorded historical migrations.
+      await tx.execute(sql`
+        UPDATE folders d SET opportunity_id = o.id, project_id = NULL
+        FROM opportunities o JOIN projects p ON p.id = o.migrated_from_project_id
+        WHERE d.project_id = p.id AND d.opportunity_id IS NULL
+          AND p.deleted_at IS NOT NULL
+      `);
+    },
+  },
+  {
+    key: "2026-10-07-preload-existing-bidding-document-folders",
+    run: async tx => {
+      const existing = await tx.execute(sql`SELECT id FROM opportunities WHERE deleted_at IS NULL ORDER BY id`);
+      for (const row of existing.rows) await ensureDefaultDocumentFolders(tx, "opportunity", Number(row.id));
+    },
   },
 ];
 

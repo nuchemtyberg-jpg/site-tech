@@ -788,7 +788,8 @@ export type InsertAllocation = z.infer<typeof insertAllocationSchema>;
 // Folders (for file organization)
 export const folders = pgTable("folders", {
   id: serial("id").primaryKey(),
-  projectId: integer("project_id").notNull(),
+  projectId: integer("project_id"),
+  opportunityId: integer("opportunity_id"),
   parentId: integer("parent_id"),
   name: text("name").notNull(),
   createdAt: timestamp("created_at").defaultNow(),

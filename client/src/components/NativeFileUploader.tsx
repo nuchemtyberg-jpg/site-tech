@@ -25,7 +25,10 @@ interface UploadedFile {
   status: 'pending' | 'uploading' | 'success' | 'error';
   progress: number;
   error?: string;
+  uploadedResult?: UploadResult;
 }
+
+export type UploadResult = { name: string; cloudinaryPublicId: string; cloudinaryUrl: string; objectPath?: string; size: number; type: string; width?: number; height?: number; takenAt?: Date; relativePath?: string; mediaType?: string };
 
 interface NativeFileUploaderProps {
   maxNumberOfFiles?: number;
@@ -33,7 +36,9 @@ interface NativeFileUploaderProps {
   accept?: string;
   allowFolders?: boolean;
   uploadTarget?: 'cloudinary' | 'object-storage';
-  onUploadComplete?: (files: Array<{ name: string; cloudinaryPublicId: string; cloudinaryUrl: string; objectPath?: string; size: number; type: string; width?: number; height?: number; takenAt?: Date; relativePath?: string; mediaType?: string }>) => void;
+  onUploadComplete?: (files: UploadResult[]) => void | Promise<void>;
+  /** Opt in only when the consumer registers each file independently. */
+  registrationMode?: "batch" | "per-file";
   buttonClassName?: string;
   buttonVariant?: "default" | "destructive" | "outline" | "secondary" | "ghost" | "link";
   buttonSize?: "default" | "sm" | "lg" | "icon";
@@ -110,6 +115,7 @@ export function NativeFileUploader({
   allowFolders = false,
   uploadTarget = 'cloudinary',
   onUploadComplete,
+  registrationMode = "batch",
   buttonClassName,
   buttonVariant = "default",
   buttonSize = "default",
@@ -118,8 +124,10 @@ export function NativeFileUploader({
   const [isOpen, setIsOpen] = useState(false);
   const [files, setFiles] = useState<UploadedFile[]>([]);
   const [isUploading, setIsUploading] = useState(false);
+  const [selectionError, setSelectionError] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
+  const uploadingRef = useRef(false);
 
   // Handler to click folder input and ensure webkitdirectory is set
   const handleFolderInputClick = useCallback(() => {
@@ -140,7 +148,11 @@ export function NativeFileUploader({
   };
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (uploadingRef.current) return;
     const selectedFiles = Array.from(e.target.files || []);
+    const oversized = selectedFiles.filter(file => file.size > maxFileSize).length;
+    const remaining = Math.max(0, maxNumberOfFiles - files.length);
+    setSelectionError(oversized ? `${oversized} file(s) exceed the ${formatFileSize(maxFileSize)} limit.` : selectedFiles.length > remaining ? `You can add ${remaining} more file(s). Extra files were not selected.` : "");
     
     const validFiles = selectedFiles
       .filter(file => file.size <= maxFileSize)
@@ -186,6 +198,7 @@ export function NativeFileUploader({
   const uploadToObjectStorage = useCallback(async (uploadFile: UploadedFile): Promise<{ objectPath: string }> => {
     const res = await fetch("/api/uploads/request-url", {
       method: "POST",
+      credentials: "include",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         name: uploadFile.name,
@@ -209,36 +222,14 @@ export function NativeFileUploader({
   }, []);
 
   const uploadFiles = useCallback(async () => {
-    if (files.length === 0) return;
+    if (files.length === 0 || uploadingRef.current) return;
 
+    uploadingRef.current = true;
     setIsUploading(true);
-    const uploadedFiles: Array<{ name: string; cloudinaryPublicId: string; cloudinaryUrl: string; objectPath?: string; size: number; type: string; width?: number; height?: number; takenAt?: Date; relativePath?: string; mediaType?: string }> = [];
+    const batchResults: Array<{ id: string; result: UploadResult }> = [];
 
     for (const uploadFile of files) {
       if (uploadFile.status === 'success') {
-        if (uploadTarget === 'object-storage' && uploadFile.objectPath) {
-          uploadedFiles.push({
-            name: uploadFile.name,
-            cloudinaryPublicId: '',
-            cloudinaryUrl: '',
-            objectPath: uploadFile.objectPath,
-            size: uploadFile.size,
-            type: uploadFile.type,
-            takenAt: uploadFile.takenAt,
-            relativePath: uploadFile.relativePath,
-          });
-        } else if (uploadFile.cloudinaryPublicId && uploadFile.cloudinaryUrl) {
-          uploadedFiles.push({
-            name: uploadFile.name,
-            cloudinaryPublicId: uploadFile.cloudinaryPublicId,
-            cloudinaryUrl: uploadFile.cloudinaryUrl,
-            size: uploadFile.size,
-            type: uploadFile.type,
-            takenAt: uploadFile.takenAt,
-            relativePath: uploadFile.relativePath,
-            mediaType: uploadFile.type.startsWith('video/') ? 'video' : uploadFile.type.startsWith('image/') ? 'image' : 'raw',
-          });
-        }
         continue;
       }
 
@@ -247,18 +238,17 @@ export function NativeFileUploader({
       ));
 
       try {
-        if (uploadTarget === 'object-storage') {
+        let result = uploadFile.uploadedResult;
+        if (result) {
+          // Storage already succeeded. Retry registration only.
+        } else if (uploadTarget === 'object-storage') {
           setFiles(prev => prev.map(f => 
             f.id === uploadFile.id ? { ...f, progress: 30 } : f
           ));
 
           const { objectPath } = await uploadToObjectStorage(uploadFile);
 
-          setFiles(prev => prev.map(f => 
-            f.id === uploadFile.id ? { ...f, status: 'success' as const, progress: 100, objectPath } : f
-          ));
-
-          uploadedFiles.push({
+          result = {
             name: uploadFile.name,
             cloudinaryPublicId: '',
             cloudinaryUrl: '',
@@ -267,7 +257,7 @@ export function NativeFileUploader({
             type: uploadFile.type,
             takenAt: uploadFile.takenAt,
             relativePath: uploadFile.relativePath,
-          });
+          };
         } else {
           const isVideo = uploadFile.type.startsWith('video/');
           const isImage = uploadFile.type.startsWith('image/');
@@ -275,6 +265,7 @@ export function NativeFileUploader({
 
           const signatureRes = await fetch("/api/cloudinary/signature", {
             method: "POST",
+            credentials: "include",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ folder: 'sitetech/photos', resourceType }),
           });
@@ -313,11 +304,7 @@ export function NativeFileUploader({
           const width = cloudinaryResult.width;
           const height = cloudinaryResult.height;
 
-          setFiles(prev => prev.map(f => 
-            f.id === uploadFile.id ? { ...f, status: 'success' as const, progress: 100, cloudinaryPublicId, cloudinaryUrl } : f
-          ));
-
-          uploadedFiles.push({
+          result = {
             name: uploadFile.name,
             cloudinaryPublicId,
             cloudinaryUrl,
@@ -328,7 +315,15 @@ export function NativeFileUploader({
             takenAt: uploadFile.takenAt,
             relativePath: uploadFile.relativePath,
             mediaType: isVideo ? 'video' : isImage ? 'image' : 'raw',
-          });
+          };
+        }
+        const uploadedResult = result!;
+        setFiles(prev => prev.map(f => f.id === uploadFile.id ? { ...f, uploadedResult, progress: 90 } : f));
+        if (registrationMode === "per-file") {
+          await onUploadComplete?.([uploadedResult]);
+          setFiles(prev => prev.map(f => f.id === uploadFile.id ? { ...f, status: 'success' as const, progress: 100, error: undefined } : f));
+        } else {
+          batchResults.push({ id: uploadFile.id, result: uploadedResult });
         }
       } catch (error) {
         setFiles(prev => prev.map(f => 
@@ -341,17 +336,26 @@ export function NativeFileUploader({
       }
     }
 
-    setIsUploading(false);
-
-    if (uploadedFiles.length > 0) {
-      onUploadComplete?.(uploadedFiles);
+    if (batchResults.length) {
+      const ids = new Set(batchResults.map(item => item.id));
+      try {
+        // Existing consumers (including Company Documents) resolve folder
+        // paths once for the complete batch, not independently per file.
+        await onUploadComplete?.(batchResults.map(item => item.result));
+        setFiles(prev => prev.map(f => ids.has(f.id) ? { ...f, status: "success", progress: 100, error: undefined } : f));
+      } catch (error) {
+        setFiles(prev => prev.map(f => ids.has(f.id) ? { ...f, status: "error", error: error instanceof Error ? error.message : "Registration failed" } : f));
+      }
     }
-  }, [files, onUploadComplete, uploadTarget, uploadToObjectStorage]);
+    setIsUploading(false);
+    uploadingRef.current = false;
+  }, [files, onUploadComplete, registrationMode, uploadTarget, uploadToObjectStorage]);
 
   const handleClose = () => {
     if (!isUploading) {
       setIsOpen(false);
       setFiles([]);
+      setSelectionError("");
     }
   };
 
@@ -378,6 +382,7 @@ export function NativeFileUploader({
           </DialogHeader>
 
           <div className="space-y-4">
+            {selectionError && <p className="text-sm text-destructive" role="alert">{selectionError}</p>}
             <div className="flex gap-2">
               <div 
                 className="flex-1 border-2 border-dashed rounded-lg p-6 text-center cursor-pointer hover-elevate transition-colors"
@@ -388,6 +393,7 @@ export function NativeFileUploader({
                   ref={fileInputRef}
                   type="file"
                   multiple={maxNumberOfFiles > 1}
+                  disabled={isUploading}
                   accept={accept}
                   onChange={handleFileSelect}
                   className="hidden"
@@ -409,6 +415,7 @@ export function NativeFileUploader({
                   <input
                     ref={folderInputRef}
                     type="file"
+                    disabled={isUploading}
                     onChange={handleFileSelect}
                     className="hidden"
                     data-testid="input-folder-native"
@@ -449,6 +456,7 @@ export function NativeFileUploader({
                         size="icon"
                         variant="ghost"
                         className="h-6 w-6 shrink-0"
+                        disabled={isUploading}
                         onClick={() => removeFile(file.id)}
                         data-testid={`button-remove-file-${file.id}`}
                       >

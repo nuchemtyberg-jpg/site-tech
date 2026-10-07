@@ -1,4 +1,5 @@
 import type { Express } from "express";
+import { registerDocumentTools } from "./documentTools";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { api } from "@shared/routes";
@@ -97,6 +98,7 @@ export async function registerRoutes(
   
   // Object Storage Setup
   registerObjectStorageRoutes(app);
+  registerDocumentTools(app);
 
   // AI Reporting (admin only) - natural language → SQL → results
   app.post("/api/reports/query", isAuthenticated, isAdmin, async (req, res) => {

@@ -5,3 +5,5 @@
 - [Derived status from checklist items](derived-checklist-readiness.md) — compute a workflow-stage indicator from item statuses instead of storing it, to avoid a second source of truth that can drift.
 - [Parent-child creation failures](parent-child-creation-failures.md) — after the parent record succeeds, treat a child failure as partial success; never retry by recreating the parent.
 - [Recognizing test fixture debris in dev DB](test-fixture-debris-signatures.md) — random-suffix names/emails plus blank business fields flag stale test rows; a shared placeholder record is a valid product decision for backlog that shouldn't be faked as real.
+- [Shared Documents preservation](shared-documents.md) — keep explicit versions and one shared manager; preserve folder trees left behind by historical pre-award migration.
+- [Bidding contract lifecycle](bidding-contract-lifecycle.md) — Bidding stays editable after award; additional bids add contracts to one Project; change orders come later.
