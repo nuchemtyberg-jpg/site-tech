@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { ProjectView } from './schema';
 import { 
   insertProjectSchema, insertTaskSchema, insertEquipmentSchema, insertAllocationSchema,
   insertCustomerSchema, insertDailyReportSchema, insertMaintenanceLogSchema, insertCommunicationSchema,
@@ -180,14 +181,14 @@ export const api = {
       method: 'GET' as const,
       path: '/api/projects',
       responses: {
-        200: z.array(z.custom<typeof projects.$inferSelect>()),
+        200: z.array(z.custom<ProjectView>()),
       },
     },
     get: {
       method: 'GET' as const,
       path: '/api/projects/:id',
       responses: {
-        200: z.custom<typeof projects.$inferSelect>(),
+        200: z.custom<ProjectView>(),
         404: errorSchemas.notFound,
       },
     },
@@ -196,7 +197,7 @@ export const api = {
       path: '/api/projects',
       input: insertProjectSchema,
       responses: {
-        201: z.custom<typeof projects.$inferSelect>(),
+        201: z.custom<ProjectView>(),
         400: errorSchemas.validation,
       },
     },
@@ -205,7 +206,7 @@ export const api = {
       path: '/api/projects/:id',
       input: insertProjectSchema.partial(),
       responses: {
-        200: z.custom<typeof projects.$inferSelect>(),
+        200: z.custom<ProjectView>(),
         400: errorSchemas.validation,
         404: errorSchemas.notFound,
       },

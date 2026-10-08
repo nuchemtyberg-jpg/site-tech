@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { and, eq, isNull, sql, getTableColumns } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "./db";
-import { files, folders, projects, opportunities, users, activityLogs } from "@shared/schema";
+import { files, folders, projects, opportunities, projectContracts, users, activityLogs } from "@shared/schema";
 import { isAuthenticated } from "./replit_integrations/auth";
 import { isAuthorizedUser } from "./middleware/auth";
 
@@ -28,12 +28,31 @@ export function registerDocumentTools(app: Express) {
   const handle = (operation: (ctx: any, req: any) => Promise<any>, status = 200) =>
     async (req: any, res: any) => {
       try {
-        const type = z.enum(["project", "opportunity"]).parse(req.params.entityType);
-        const entityId = id.parse(req.params.entityId);
+         let type = z.enum(["project", "opportunity"]).parse(req.params.entityType);
+         let entityId = id.parse(req.params.entityId);
         const result = await db.transaction(async tx => {
+           // Resolve alias BEFORE the owner lock. Awards lock bid then Project,
+           // so taking a Project lock first here would introduce a deadlock.
+           const contextProjectId = type === "project" ? entityId : req.query.projectId ? id.parse(req.query.projectId) : null;
+           if (contextProjectId) {
+             const [project] = await tx.select().from(projects).where(and(eq(projects.id, contextProjectId), isNull(projects.deletedAt)));
+             if (!project) throw new DocumentError(404, "Project not found");
+             if (type === "project" && req.query.native !== "true") {
+               const [original] = await tx.select().from(projectContracts)
+                 .where(and(eq(projectContracts.projectId, contextProjectId), sql`${projectContracts.snapshot}->>'targetProjectId' is null`))
+                 .orderBy(projectContracts.id).limit(1);
+               if (original) { type = "opportunity"; entityId = original.opportunityId; }
+             }
+           }
           const table = type === "project" ? projects : opportunities;
           const [owner] = await tx.select().from(table).where(and(eq(table.id, entityId), isNull(table.deletedAt))).for("update");
           if (!owner) throw new DocumentError(404, "Owner not found");
+           if (contextProjectId && type === "opportunity") {
+             const bid = owner as typeof opportunities.$inferSelect;
+             if (bid.convertedProjectId !== contextProjectId && bid.targetProjectId !== contextProjectId) {
+               throw new DocumentError(403, "This bid is not linked to the requested Project");
+             }
+           }
           const fileScope = type === "project"
             ? and(eq(files.projectId, entityId), sql`(${files.relatedEntityType} is null or ${files.relatedEntityType} = 'project')`)
             : and(isNull(files.projectId), eq(files.relatedEntityType, "opportunity"), eq(files.relatedEntityId, entityId));
@@ -75,7 +94,7 @@ export function registerDocumentTools(app: Express) {
               ? req.body.supersedesId ? "document_version_added" : "document_uploaded"
               : req.method === "DELETE" ? "document_deleted" : "documents_organized";
             await tx.insert(activityLogs).values({
-              projectId: type === "project" ? entityId : null,
+               projectId: contextProjectId ?? (type === "project" ? entityId : (owner as any).convertedProjectId ?? null),
               entityType: `${type}_document`, entityId: result?.id ?? target?.id ?? entityId,
               action, actorUserId: userId ?? null, actorName,
               description: `${actorName} ${action === "document_uploaded" ? "uploaded" : action === "document_version_added" ? "uploaded a new version of" : action === "document_deleted" ? "deleted" : "organized"} "${label}".`,

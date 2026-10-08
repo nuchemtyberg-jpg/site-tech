@@ -290,6 +290,8 @@ async function main() {
     check("lost record searchable", searchLost.body?.some((o: any) => o.id === oppId), searchLost.body?.length);
 
     console.log("== Awarded ==");
+    const reopen = await j(await fetch(`${BASE}/api/opportunities/${opp2Id}/status`, { method: "POST", headers: H, body: JSON.stringify({ status: "new" }) }));
+    check("No Bid must reopen before valid award", reopen.status === 200, reopen);
     const award = await j(await fetch(`${BASE}/api/opportunities/${opp2Id}/status`, { method: "POST", headers: H, body: JSON.stringify({ status: "awarded" }) }));
     check("awarded sets award date", award.status === 200 && !!award.body?.awardDate, award.body?.awardDate);
 
@@ -370,6 +372,11 @@ async function main() {
       if (ruleId) await db.execute(sql`DELETE FROM workflow_rules WHERE id = ${ruleId}`);
       await db.execute(sql`DELETE FROM workflow_rules WHERE name LIKE '__OPP%'`);
       await db.execute(sql`DELETE FROM opportunity_status_history WHERE opportunity_id IN (SELECT id FROM opportunities WHERE name LIKE '__OPP%')`);
+      // Awards now create Projects/contracts; clean only those fixture outputs.
+      await db.execute(sql`DELETE FROM project_status_history WHERE project_id IN (SELECT converted_project_id FROM opportunities WHERE name LIKE '__OPP%')`);
+      await db.execute(sql`DELETE FROM activity_logs WHERE project_id IN (SELECT converted_project_id FROM opportunities WHERE name LIKE '__OPP%')`);
+      await db.execute(sql`DELETE FROM project_contracts WHERE opportunity_id IN (SELECT id FROM opportunities WHERE name LIKE '__OPP%')`);
+      await db.execute(sql`DELETE FROM projects WHERE id IN (SELECT converted_project_id FROM opportunities WHERE name LIKE '__OPP%')`);
       await db.execute(sql`DELETE FROM opportunity_contacts WHERE opportunity_id IN (SELECT id FROM opportunities WHERE name LIKE '__OPP%')`);
       await db.execute(sql`DELETE FROM opportunity_scope_items WHERE opportunity_id IN (SELECT id FROM opportunities WHERE name LIKE '__OPP%')`);
       await db.execute(sql`DELETE FROM activity_logs WHERE (entity_type = 'opportunity' AND entity_id IN (SELECT id FROM opportunities WHERE name LIKE '__OPP%')) OR description LIKE '%__OPP%'`);

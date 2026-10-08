@@ -47,9 +47,11 @@ export async function uploadDroppedFile(item: DroppedFile): Promise<UploadResult
 // A session keeps folder resolution and successful registrations stable across
 // per-file callbacks and retries. Filenames never establish version relationships.
 export function createRegistrationSession({
-  base, folderId, supersedesId, getFolders, createFolder, createFile,
+  base, folderId, supersedesId, projectContextId, nativeProjectTree, getFolders, createFolder, createFile,
 }: {
   base: string; folderId: number | null; supersedesId?: number;
+  projectContextId?: number;
+  nativeProjectTree?: boolean;
   getFolders: () => Folder[];
   createFolder: (data: { name: string; parentId: number | null }) => Promise<Folder>;
   createFile: (data: CreateDocument) => Promise<unknown>;
@@ -67,7 +69,10 @@ export function createRegistrationSession({
       if (!folder) {
         try { folder = await createFolder({ name, parentId }); }
         catch (error) {
-          const response = await apiRequest("GET", `${base}/folders`);
+          const params = new URLSearchParams();
+          if (projectContextId) params.set("projectId", String(projectContextId));
+          if (nativeProjectTree) params.set("native", "true");
+          const response = await apiRequest("GET", `${base}/folders${params.size ? `?${params}` : ""}`);
           const fresh: Folder[] = await response.json();
           folder = fresh.find(f => f.parentId === parentId && f.name === name);
           if (!folder) throw error;

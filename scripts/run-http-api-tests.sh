@@ -49,3 +49,4 @@ TEST_BASE_URL="$BASE" npx tsx scripts/test-opportunities-api.ts
 TEST_BASE_URL="$BASE" npx tsx scripts/test-opportunity-documents-api.ts
 TEST_BASE_URL="$BASE" npx tsx scripts/test-document-categories-api.ts
 TEST_BASE_URL="$BASE" npx tsx scripts/test-opportunity-scope-api.ts
+TEST_BASE_URL="$BASE" npx tsx scripts/test-award-lifecycle.ts

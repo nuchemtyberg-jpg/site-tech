@@ -17,14 +17,14 @@ import { OPPORTUNITY_PROJECT_TYPES, OPPORTUNITY_SOURCES } from "@shared/opportun
 import type { Customer, OpportunityWithDetails } from "@shared/schema";
 
 type FormState = {
-  name: string; customerId: string; status: string; responsibleUserId: string;
-  streetAddress: string; city: string; state: string; zip: string;
+  name: string; customerId: string; targetProjectId: string; status: string; responsibleUserId: string;
+  streetAddress: string; address2: string; city: string; state: string; zip: string;
   rfpReceivedDate: string; bidDueDate: string; bidDueTime: string; estimatedStartDate: string;
   source: string; projectType: string; scopeSummary: string; internalNotes: string;
   expectedValue: string; probability: string;
 };
 const empty: FormState = {
-  name: "", customerId: "", status: "new", responsibleUserId: "", streetAddress: "", city: "", state: "", zip: "",
+  name: "", customerId: "", targetProjectId: "", status: "new", responsibleUserId: "", streetAddress: "", address2: "", city: "", state: "", zip: "",
   rfpReceivedDate: "", bidDueDate: "", bidDueTime: "", estimatedStartDate: "", source: "", projectType: "",
   scopeSummary: "", internalNotes: "", expectedValue: "", probability: "",
 };
@@ -36,9 +36,11 @@ const addressFields = [
 ] as const;
 type AddressField = typeof addressFields[number][0];
 
-export function OpportunityFormDialog({ open, onOpenChange, opportunity, onSaved }: {
+export function OpportunityFormDialog({ open, onOpenChange, opportunity, onSaved, defaultProjectId, defaultCustomerId, defaultProjectName, defaultAddress }: {
   open: boolean; onOpenChange: (open: boolean) => void; opportunity?: OpportunityWithDetails | null;
   onSaved?: (id: number) => void;
+  defaultProjectId?: number; defaultCustomerId?: number; defaultProjectName?: string;
+  defaultAddress?: { streetAddress?: string | null; address2?: string | null; city?: string | null; state?: string | null; zip?: string | null };
 }) {
   const { toast } = useToast();
   const { isAdmin } = useAuth();
@@ -47,9 +49,11 @@ export function OpportunityFormDialog({ open, onOpenChange, opportunity, onSaved
   const [addingCustomer, setAddingCustomer] = useState(false);
   const [newlySelectedCustomer, setNewlySelectedCustomer] = useState<Pick<Customer, "id" | "name"> | null>(null);
   const { data: customers = [] } = useQuery<Customer[]>({ queryKey: ["/api/customers"] });
+  const { data: projects = [] } = useQuery<any[]>({ queryKey: ["/api/projects"] });
   const { data: users = [] } = useAppUsers();
   const create = useCreateOpportunity();
   const update = useUpdateOpportunity();
+  const awarded = opportunity?.status === "awarded";
   useEffect(() => {
     setAddressValidationAttempted(false);
     if (!open) {
@@ -58,8 +62,9 @@ export function OpportunityFormDialog({ open, onOpenChange, opportunity, onSaved
       return;
     }
     setForm(opportunity ? {
-      name: opportunity.name, customerId: String(opportunity.customerId), status: opportunity.status,
+      name: opportunity.name, customerId: String(opportunity.customerId), targetProjectId: String((opportunity as any).targetProjectId || ""), status: opportunity.status,
       responsibleUserId: opportunity.responsibleUserId || "", streetAddress: opportunity.streetAddress || "",
+      address2: (opportunity as any).address2 || "",
       city: opportunity.city || "", state: opportunity.state || "", zip: opportunity.zip || "",
       rfpReceivedDate: opportunity.rfpReceivedDate || "", bidDueDate: opportunity.bidDueDate || "",
       bidDueTime: opportunity.bidDueTime || "", estimatedStartDate: opportunity.estimatedStartDate || "",
@@ -67,8 +72,14 @@ export function OpportunityFormDialog({ open, onOpenChange, opportunity, onSaved
       scopeSummary: opportunity.scopeSummary || "", internalNotes: opportunity.internalNotes || "",
       expectedValue: opportunity.expectedValue == null ? "" : String(opportunity.expectedValue),
       probability: opportunity.probability == null ? "" : String(opportunity.probability),
-    } : empty);
-  }, [open, opportunity]);
+    } : {
+      ...empty, name: defaultProjectName ? `${defaultProjectName} — additional scope` : "",
+      customerId: defaultCustomerId ? String(defaultCustomerId) : "",
+      targetProjectId: defaultProjectId ? String(defaultProjectId) : "",
+      streetAddress: defaultAddress?.streetAddress || "", address2: defaultAddress?.address2 || "", city: defaultAddress?.city || "",
+      state: defaultAddress?.state || "", zip: defaultAddress?.zip || "",
+    });
+  }, [open, opportunity, defaultProjectId, defaultCustomerId, defaultProjectName, defaultAddress?.streetAddress, defaultAddress?.address2, defaultAddress?.city, defaultAddress?.state, defaultAddress?.zip]);
 
   const field = (key: keyof FormState) => (value: string) => setForm(current => ({ ...current, [key]: value }));
   const customerOptions = newlySelectedCustomer && !customers.some(customer => customer.id === newlySelectedCustomer.id)
@@ -76,7 +87,7 @@ export function OpportunityFormDialog({ open, onOpenChange, opportunity, onSaved
     : customers;
   const selectNewCustomer = (customer: Pick<Customer, "id" | "name">) => {
     setNewlySelectedCustomer(customer);
-    setForm(current => ({ ...current, customerId: String(customer.id) }));
+    setForm(current => ({ ...current, customerId: String(customer.id), targetProjectId: "" }));
   };
   const save = (confirmRemoveContacts = false) => {
     if (!opportunity) {
@@ -92,8 +103,13 @@ export function OpportunityFormDialog({ open, onOpenChange, opportunity, onSaved
       toast({ title: "Name and customer are required", variant: "destructive" }); return;
     }
     const common = {
-      name: form.name.trim(), customerId: Number(form.customerId),
+      name: form.name.trim(),
+      ...(!awarded ? {
+        customerId: Number(form.customerId),
+        targetProjectId: form.targetProjectId ? Number(form.targetProjectId) : null,
+      } : {}),
       responsibleUserId: form.responsibleUserId || null, streetAddress: form.streetAddress || null,
+      address2: form.address2 || null,
       city: form.city || null, state: form.state || null, zip: form.zip || null,
       rfpReceivedDate: form.rfpReceivedDate || null, bidDueDate: form.bidDueDate || null,
       bidDueTime: form.bidDueTime || null, estimatedStartDate: form.estimatedStartDate || null,
@@ -113,12 +129,12 @@ export function OpportunityFormDialog({ open, onOpenChange, opportunity, onSaved
       if (opportunity && error instanceof Error && error.message.startsWith("409") && window.confirm(message)) save(true);
       else toast({ title: "Couldn't save opportunity", description: message, variant: "destructive" });
     };
-    if (opportunity) update.mutate({ id: opportunity.id, ...common, confirmRemoveContacts }, { onSuccess: success, onError: failure });
+    if (opportunity) update.mutate({ id: opportunity.id, ...common, confirmRemoveContacts } as any, { onSuccess: success, onError: failure });
     else create.mutate({
       ...common, status: "new",
       streetAddress: form.streetAddress.trim(), city: form.city.trim(),
       state: form.state.trim(), zip: form.zip.trim(),
-    }, { onSuccess: success, onError: failure });
+    } as any, { onSuccess: success, onError: failure });
   };
   const pending = create.isPending || update.isPending;
   const addressInput = (key: AddressField) => {
@@ -138,10 +154,13 @@ export function OpportunityFormDialog({ open, onOpenChange, opportunity, onSaved
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[92vh] overflow-y-auto">
         <DialogHeader><DialogTitle>{opportunity ? `Edit ${opportunity.opportunityNumber}` : "New Bid Opportunity"}</DialogTitle>
-          <DialogDescription>Start with the essentials. Fields marked with * are required.</DialogDescription></DialogHeader>
+          <DialogDescription>{awarded
+            ? "The bid remains editable, but its awarded contract snapshot is immutable. Customer and project association are locked."
+            : "Start with the essentials. Fields marked with * are required."}</DialogDescription></DialogHeader>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="sm:col-span-2"><Label>Name *</Label><Input className="min-h-11" value={form.name} onChange={e => field("name")(e.target.value)} data-testid="input-opportunity-name" /></div>
-            <div><Label>Customer *</Label><Select value={form.customerId} onValueChange={field("customerId")}><SelectTrigger className="min-h-11" data-testid="select-opp-customer"><SelectValue placeholder="Choose customer" /></SelectTrigger><SelectContent>{customerOptions.map(c => <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>)}</SelectContent></Select><Button type="button" variant="link" className="px-0 min-h-11" onClick={() => setAddingCustomer(true)} data-testid="button-add-inline-customer"><Plus className="w-4 h-4 mr-1" />Add new customer</Button></div>
+            <div><Label>Customer *</Label><Select disabled={awarded} value={form.customerId} onValueChange={value => setForm(current => ({ ...current, customerId: value, targetProjectId: "" }))}><SelectTrigger className="min-h-11" data-testid="select-opp-customer"><SelectValue placeholder="Choose customer" /></SelectTrigger><SelectContent>{customerOptions.map(c => <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>)}</SelectContent></Select>{!awarded && <Button type="button" variant="link" className="px-0 min-h-11" onClick={() => setAddingCustomer(true)} data-testid="button-add-inline-customer"><Plus className="w-4 h-4 mr-1" />Add new customer</Button>}</div>
+           <div className="sm:col-span-2"><Label>Link to project (optional)</Label><Select disabled={awarded} value={form.targetProjectId || "none"} onValueChange={v => field("targetProjectId")(v === "none" ? "" : v)}><SelectTrigger className="min-h-11"><SelectValue placeholder="Create a new project if awarded" /></SelectTrigger><SelectContent><SelectItem value="none">Create a new project if awarded</SelectItem>{projects.filter(p => Number(p.customerId) === Number(form.customerId)).map(p => <SelectItem key={p.id} value={String(p.id)}>{p.projectNumber ? `${p.projectNumber} · ` : ""}{p.name}</SelectItem>)}</SelectContent></Select><p className="text-xs text-muted-foreground mt-1">{awarded ? "Awarded bids cannot be retargeted." : "Only projects for the selected customer are shown. The project is validated again when saved."}</p></div>
           <div><Label>Responsible</Label><Select value={form.responsibleUserId || "none"} onValueChange={v => field("responsibleUserId")(v === "none" ? "" : v)}><SelectTrigger className="min-h-11"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="none">Unassigned</SelectItem>{users.map(u => <SelectItem key={u.id} value={u.id}>{userDisplayName(u)}</SelectItem>)}</SelectContent></Select></div>
           <div><Label>Bid due</Label><div className="flex gap-2"><Input className="min-h-11 min-w-0" type="date" value={form.bidDueDate} onChange={e => field("bidDueDate")(e.target.value)} /><Input className="min-h-11 w-28" type="time" value={form.bidDueTime} onChange={e => field("bidDueTime")(e.target.value)} /></div></div>
           <div><Label>Source</Label><Select value={form.source || "none"} onValueChange={v => field("source")(v === "none" ? "" : v)}><SelectTrigger className="min-h-11"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="none">Not set</SelectItem>{OPPORTUNITY_SOURCES.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}</SelectContent></Select></div>
@@ -152,7 +171,7 @@ export function OpportunityFormDialog({ open, onOpenChange, opportunity, onSaved
             <Label htmlFor="opportunity-address-search">Search Address</Label>
             <AddressAutocomplete key={opportunity?.id ?? "new"} id="opportunity-address-search"
               aria-describedby="opportunity-address-guidance"
-              initialValue={opportunity ? [opportunity.streetAddress, opportunity.city, opportunity.state, opportunity.zip].filter(Boolean).join(", ") : ""}
+              initialValue={opportunity ? [opportunity.streetAddress, (opportunity as any).address2, opportunity.city, opportunity.state, opportunity.zip].filter(Boolean).join(", ") : ""}
               onAddressSelect={address => setForm(current => ({
                 ...current, streetAddress: address.streetAddress, city: address.city,
                 state: address.state, zip: address.zipCode,
@@ -160,6 +179,7 @@ export function OpportunityFormDialog({ open, onOpenChange, opportunity, onSaved
             <p id="opportunity-address-guidance" className="text-xs text-muted-foreground">Type to search, or fill in the fields below manually</p>
           </div>
           {addressInput("streetAddress")}
+          <div className="sm:col-span-2"><Label htmlFor="opportunity-address2">Address line 2</Label><Input id="opportunity-address2" className="min-h-11" value={form.address2} onChange={e => field("address2")(e.target.value)} /></div>
           {addressInput("city")}
           <div className="grid grid-cols-2 gap-2">{addressInput("state")}{addressInput("zip")}</div>
           <div><Label>RFP received</Label><Input className="min-h-11" type="date" value={form.rfpReceivedDate} onChange={e => field("rfpReceivedDate")(e.target.value)} /></div>

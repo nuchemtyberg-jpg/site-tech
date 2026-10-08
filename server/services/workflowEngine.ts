@@ -24,7 +24,7 @@ function addDays(dateStr: string, days: number): string {
   return `${yyyy}-${mm}-${dd}`;
 }
 
-function computeDueDate(rule: WorkflowRule, todayStr: string): string | null {
+export function computeDueDate(rule: WorkflowRule, todayStr: string): string | null {
   switch (rule.dueOffsetType) {
     case "immediately":
       return todayStr;

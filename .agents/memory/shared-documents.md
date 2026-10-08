@@ -25,4 +25,10 @@ All Bidding jobs should start with the same preset folders as Projects, while al
 
 **Why:** The user described the intended lifecycle: create in Bidding, organize documents, then automatically move the awarded job to Projects with all data, versions and the entire folder tree preserved.
 
-**How to apply:** Seed presets at creation and backfill existing Bidding jobs without resetting content. Future conversion must be automatic on award, not a second manual creation step; conversion remains separate work.
+**How to apply:** Seed presets only at bid creation, never on award. Preserve root files, empty/custom/nested folders and renamed/moved presets; award is automatic, not a second manual creation step.
+
+Keep award linking additive rather than transferring document or related-work ownership.
+
+**Why:** The user requires both Bidding and Projects to keep using the exact same records, including stale tabs and uploads started before award. Moving ownership would strand those writes and break reminder/workflow references.
+
+**How to apply:** Resolve the linked bid tree from the Project and serialize mutations on its original owner. Keep additional bid trees labeled and independent; matching names never justify merging them.

@@ -9,6 +9,8 @@ import {
   labelFor,
 } from "@shared/opportunityStatus";
 import type { Opportunity, OpportunityStatusChangeInput } from "@shared/schema";
+import { awardBid, OpportunityStatusError } from "./awardService";
+export { OpportunityStatusError } from "./awardService";
 
 // Centralized Opportunity status change service (spec §48).
 //
@@ -23,14 +25,6 @@ import type { Opportunity, OpportunityStatusChangeInput } from "@shared/schema";
 //   6. records activity,
 //   7. fires workflow rules exactly once per real transition.
 
-export class OpportunityStatusError extends Error {
-  status: number;
-  constructor(message: string, status = 400) {
-    super(message);
-    this.status = status;
-  }
-}
-
 export async function changeOpportunityStatus(params: {
   opportunityId: number;
   input: OpportunityStatusChangeInput;
@@ -44,9 +38,15 @@ export async function changeOpportunityStatus(params: {
   if (!OPPORTUNITY_STATUS_VALUES.includes(newStatus)) {
     throw new OpportunityStatusError(`Invalid opportunity status: ${newStatus}`);
   }
+  if (newStatus === "awarded") return awardBid({
+    opportunityId, actor, awardDate: input.awardDate, today: todayStr, expectedTargetProjectId: input.expectedTargetProjectId,
+  });
 
   const existing = await storage.getOpportunity(opportunityId);
   if (!existing) throw new OpportunityStatusError("Opportunity not found", 404);
+  if (existing.convertedProjectId || existing.status === "awarded") {
+    if (newStatus !== "awarded") throw new OpportunityStatusError("Award reversal requires a separate future workflow; Project status does not reverse an award", 409);
+  }
 
   // Fast no-op path (the row-locked update below re-checks atomically)
   if (existing.status === newStatus) {

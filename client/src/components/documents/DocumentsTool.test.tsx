@@ -49,7 +49,7 @@ describe.each(["project", "opportunity"] as const)("%s shared Documents", entity
   }
   it("shows only current entries with Project controls, without categories", () => {
     mount();
-    expect(mock.useTools).toHaveBeenCalledWith(entityType, 1);
+    expect(mock.useTools).toHaveBeenCalledWith(entityType, 1, undefined, false);
     expect(screen.getByText("site-plan.pdf")).toBeInTheDocument();
     expect(screen.queryByText("old-plan.pdf")).not.toBeInTheDocument();
     expect(screen.getByText("Version 2")).toBeInTheDocument();

@@ -229,6 +229,7 @@ export const insertProjectSchema = createInsertSchema(projects).omit({ id: true,
   status: z.enum(PROJECT_STATUS_VALUES).optional(),
 });
 export type Project = typeof projects.$inferSelect;
+export type ProjectView = Project & { financialValuesRestricted: boolean };
 export type InsertProject = z.infer<typeof insertProjectSchema>;
 
 // Tasks
@@ -1328,6 +1329,7 @@ export const opportunities = pgTable("opportunities", {
   noBidReasonNotes: text("no_bid_reason_notes"),
   awardDate: date("award_date"),
   convertedProjectId: integer("converted_project_id"), // set when converted to a Project (future phase)
+  targetProjectId: integer("target_project_id"), // explicit additional-scope target, never inferred
   // Traceability for Opportunities created by the pre-award Project migration
   // (see server/dataMigrations.ts). Null for Opportunities created normally.
   migratedFromProjectId: integer("migrated_from_project_id"),
@@ -1370,6 +1372,23 @@ export const insertOpportunitySchema = createInsertSchema(opportunities).omit({
 });
 export type Opportunity = typeof opportunities.$inferSelect;
 export type InsertOpportunity = z.infer<typeof insertOpportunitySchema>;
+
+// Contract terms are captured once. No update/delete API is provided; amendments
+// and award reversals require a separate lifecycle, not a bid edit.
+export const projectContracts = pgTable("project_contracts", {
+  id: serial("id").primaryKey(),
+  projectId: integer("project_id").notNull(),
+  opportunityId: integer("opportunity_id").notNull(),
+  awardDate: date("award_date").notNull(),
+  amount: integer("amount"), // dollars, like Opportunity.expectedValue
+  snapshot: jsonb("snapshot").$type<Opportunity & { scopeItems?: OpportunityScopeItem[] }>().notNull(),
+  createdByUserId: varchar("created_by_user_id"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, table => [
+  uniqueIndex("uq_contract_opportunity").on(table.opportunityId),
+  index("idx_contract_project").on(table.projectId),
+]);
+export type ProjectContract = typeof projectContracts.$inferSelect;
 
 // Opportunity enriched for lists/detail (server joins customers/users)
 export type OpportunityWithDetails = Opportunity & {
@@ -1469,6 +1488,7 @@ export const opportunityStatusChangeSchema = z.object({
   noBidReason: z.enum(OPPORTUNITY_NO_BID_REASON_VALUES).nullable().optional(),
   noBidReasonNotes: z.string().max(2000).nullable().optional(),
   awardDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+  expectedTargetProjectId: z.number().int().positive().nullable().optional(),
 });
 export type OpportunityStatusChangeInput = z.infer<typeof opportunityStatusChangeSchema>;
 

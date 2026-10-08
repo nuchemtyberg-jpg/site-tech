@@ -141,6 +141,12 @@ function useInvalidateOpportunities() {
   return (id?: number) => {
     queryClient.invalidateQueries({ queryKey: [api.opportunities.list.path] });
     queryClient.invalidateQueries({ queryKey: [api.opportunities.dashboard.path] });
+    // Opportunity edits and awards affect customer rollups, project bid lists,
+    // document sources, and the reconciliation preview as well as bidding counts.
+    queryClient.invalidateQueries({ queryKey: ["/api/customers"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/document-tools"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/opportunities/award-catch-up"] });
     if (id !== undefined) {
       queryClient.invalidateQueries({ queryKey: [api.opportunities.get.path, id] });
       queryClient.invalidateQueries({ queryKey: [api.opportunities.statusHistory.path, id] });

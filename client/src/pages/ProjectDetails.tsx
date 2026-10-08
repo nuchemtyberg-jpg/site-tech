@@ -1,6 +1,8 @@
 import { useParams, Link, useLocation, useSearch } from "wouter";
-import { DocumentsTool } from "@/components/documents/DocumentsTool";
+import { ProjectBidsContracts } from "@/components/projects/ProjectBidsContracts";
+import { ProjectDocumentSources } from "@/components/projects/ProjectDocumentSources";
 import { useProject, useDeleteProject, useUpdateProject } from "@/hooks/use-projects";
+import { useAuth } from "@/hooks/use-auth";
 import { useProjectTasks, useCreateTask, useDeleteTask, useUpdateTask, useTaskStatusHistory } from "@/hooks/use-tasks";
 import { lazy, Suspense } from "react";
 
@@ -151,6 +153,7 @@ const editProjectSchema = z.object({
 type EditProjectFormData = z.infer<typeof editProjectSchema>;
 
 export default function ProjectDetails() {
+  const { isAdmin } = useAuth();
   const { id } = useParams();
   const projectId = Number(id);
   const [, setLocation] = useLocation();
@@ -439,7 +442,7 @@ export default function ProjectDetails() {
   const activeTab = useMemo(() => {
     const params = new URLSearchParams(search);
     const tab = params.get("tab");
-    return tab && ["tasks", "todos", "documents", "photos", "daily-reports", "communications", "rfis", "activity", "settings"].includes(tab) ? tab : "documents";
+    return tab && ["tasks", "todos", "documents", "bids", "photos", "daily-reports", "communications", "rfis", "activity", "settings"].includes(tab) ? tab : "documents";
   }, [search]);
 
   // Update URL when tab changes using wouter navigation
@@ -680,8 +683,8 @@ export default function ProjectDetails() {
                 )}
                 
                 {/* Estimated Value */}
-                {project.estimatedValue && (
-                  <div className="flex items-start gap-3">
+                {project.estimatedValue != null && (isAdmin || !project.financialValuesRestricted) && (
+                  <div className="flex items-start gap-3" data-testid="project-estimated-value">
                     <DollarSign className="w-4 h-4 text-primary mt-0.5 shrink-0" />
                     <div>
                       <span className="text-muted-foreground block text-xs uppercase tracking-wide">Estimated Value</span>
@@ -1392,9 +1395,8 @@ export default function ProjectDetails() {
           )}
         </TabsContent>
 
-        <TabsContent value="documents">
-          <DocumentsTool entityType="project" entityId={projectId} />
-        </TabsContent>
+        <TabsContent value="documents"><ProjectDocumentSources projectId={projectId} /></TabsContent>
+        <TabsContent value="bids"><ProjectBidsContracts projectId={projectId} project={project} /></TabsContent>
 
         {activeTab === "photos" && (
           <TabsContent value="photos" className="space-y-4 overflow-x-hidden" forceMount>

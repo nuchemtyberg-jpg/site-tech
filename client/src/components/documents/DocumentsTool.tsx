@@ -26,14 +26,14 @@ const sizeLabel = (size: number | null) => size == null ? "—" : size < 1024 ? 
 const dateLabel = (date: string | Date | null) => date ? format(new Date(date), "MMM d, yyyy h:mm a") : "Unknown date";
 
 /** The Project file manager, scoped to either document owner. */
-export function DocumentsTool({ entityType, entityId }: { entityType: DocumentEntity; entityId: number }) {
+export function DocumentsTool({ entityType, entityId, projectContextId, nativeProjectTree = false }: { entityType: DocumentEntity; entityId: number; projectContextId?: number; nativeProjectTree?: boolean }) {
   // Keying the inner tool prevents selections, dialogs and upload sessions leaking
   // when routing between two owners that happen to have the same numeric ID.
-  return <DocumentsManager key={`${entityType}:${entityId}`} entityType={entityType} entityId={entityId} />;
+  return <DocumentsManager key={`${entityType}:${entityId}:${projectContextId ?? ""}:${nativeProjectTree}`} entityType={entityType} entityId={entityId} projectContextId={projectContextId} nativeProjectTree={nativeProjectTree} />;
 }
 
-function DocumentsManager({ entityType, entityId }: { entityType: DocumentEntity; entityId: number }) {
-  const tools = useDocumentTools(entityType, entityId);
+function DocumentsManager({ entityType, entityId, projectContextId, nativeProjectTree }: { entityType: DocumentEntity; entityId: number; projectContextId?: number; nativeProjectTree: boolean }) {
+  const tools = useDocumentTools(entityType, entityId, projectContextId, nativeProjectTree);
   const { toast } = useToast();
   const folders = tools.folders.data ?? [];
   const groups = useMemo(() => groupDocuments((tools.files.data ?? []).filter(file => !file.albumId)), [tools.files.data]);
@@ -86,7 +86,7 @@ function DocumentsManager({ entityType, entityId }: { entityType: DocumentEntity
   }, [search]);
 
   const session = (folderId: number | null, supersedesId?: number) => createRegistrationSession({
-    base, folderId, supersedesId,
+    base, folderId, supersedesId, projectContextId, nativeProjectTree,
     getFolders: () => foldersRef.current,
     createFolder: data => toolsRef.current.createFolder.mutateAsync(data),
     createFile: data => toolsRef.current.createFile.mutateAsync(data),

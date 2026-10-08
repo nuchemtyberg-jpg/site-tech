@@ -13,6 +13,8 @@ import { isAdmin, isAuthorizedUser } from "./middleware/auth";
 import { sendInviteEmail } from "./services/email";
 import { handleProjectStatusChange } from "./services/workflowEngine";
 import { changeOpportunityStatus, OpportunityStatusError } from "./services/opportunityService";
+import { registerAwardRoutes } from "./awardRoutes";
+import { awardDerivedProjectIds, projectViewForUser, projectViewsForUser } from "./services/projectFinancialAccess";
 import { logActivity, actorFromUser } from "./services/activityLog";
 import {
   getOpportunityStatusLabel, OPPORTUNITY_STATUS_VALUES, OPPORTUNITY_SOURCE_VALUES,
@@ -99,6 +101,7 @@ export async function registerRoutes(
   // Object Storage Setup
   registerObjectStorageRoutes(app);
   registerDocumentTools(app);
+  registerAwardRoutes(app);
 
   // AI Reporting (admin only) - natural language → SQL → results
   app.post("/api/reports/query", isAuthenticated, isAdmin, async (req, res) => {
@@ -724,13 +727,13 @@ export async function registerRoutes(
   });
 
   // Projects belonging to a customer (drives the Projects tab and communication project select)
-  app.get("/api/customers/:customerId/projects", isAuthenticated, isAuthorizedUser, async (req, res) => {
+  app.get("/api/customers/:customerId/projects", isAuthenticated, isAuthorizedUser, async (req: any, res) => {
     const customerId = Number(req.params.customerId);
     if (isNaN(customerId)) return res.status(400).json({ message: "Invalid customer id" });
     const customer = await storage.getCustomer(customerId);
     if (!customer) return res.status(404).json({ message: "Customer not found" });
     const list = await storage.getProjectsByCustomer(customerId);
-    res.json(list);
+    res.json(await projectViewsForUser(await storage.getUser(req.user.claims.sub), list));
   });
 
   // Contacts
@@ -955,9 +958,9 @@ export async function registerRoutes(
   });
 
   // Projects - all routes protected by authorization
-  app.get(api.projects.list.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
+  app.get(api.projects.list.path, isAuthenticated, isAuthorizedUser, async (req: any, res) => {
     const projects = await storage.getProjects();
-    res.json(projects);
+    res.json(await projectViewsForUser(await storage.getUser(req.user.claims.sub), projects));
   });
   
   app.get("/api/projects/next-number", isAuthenticated, isAuthorizedUser, async (req, res) => {
@@ -965,13 +968,13 @@ export async function registerRoutes(
     res.json({ projectNumber: nextNumber });
   });
 
-  app.get(api.projects.get.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
+  app.get(api.projects.get.path, isAuthenticated, isAuthorizedUser, async (req: any, res) => {
     const project = await storage.getProject(Number(req.params.id));
     if (!project) return res.status(404).json({ message: "Project not found" });
-    res.json(project);
+    res.json(await projectViewForUser(await storage.getUser(req.user.claims.sub), project));
   });
 
-  app.post(api.projects.create.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
+  app.post(api.projects.create.path, isAuthenticated, isAuthorizedUser, async (req: any, res) => {
     try {
       const input = api.projects.create.input.parse(req.body);
       const project = await storage.createProject(input);
@@ -979,7 +982,7 @@ export async function registerRoutes(
       // Auto-create default albums for the new project
       await storage.ensureDefaultAlbums(project.id);
       
-      res.status(201).json(project);
+      res.status(201).json(await projectViewForUser(await storage.getUser(req.user.claims.sub), project));
     } catch (err) {
       if (err instanceof z.ZodError) {
         return res.status(400).json({ message: err.errors[0].message });
@@ -988,12 +991,17 @@ export async function registerRoutes(
     }
   });
 
-  app.put(api.projects.update.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
+  app.put(api.projects.update.path, isAuthenticated, isAuthorizedUser, async (req: any, res) => {
     let project;
     let previousStatus: string | null = null;
     let input;
     try {
       input = api.projects.update.input.parse(req.body);
+      const user = await storage.getUser(req.user.claims.sub);
+      if (input.estimatedValue !== undefined && user?.role !== "admin" &&
+          (await awardDerivedProjectIds([Number(req.params.id)])).has(Number(req.params.id))) {
+        return res.status(403).json({ message: "Award-derived Project financial values are available only to admins" });
+      }
       // Captures the prior status atomically (row lock) so concurrent duplicate
       // requests cannot both observe the same status transition.
       const result = await storage.updateProjectWithStatusTracking(Number(req.params.id), input);
@@ -1024,12 +1032,17 @@ export async function registerRoutes(
       }
     }
 
-    res.json(project);
+    res.json(await projectViewForUser(await storage.getUser(req.user.claims.sub), project));
   });
 
   app.delete(api.projects.delete.path, isAuthenticated, isAuthorizedUser, async (req, res) => {
-    await storage.deleteProject(Number(req.params.id));
-    res.status(204).send();
+    try {
+      await storage.deleteProject(Number(req.params.id));
+      res.status(204).send();
+    } catch (err) {
+      if (err instanceof OpportunityStatusError) return res.status(err.status).json({ message: err.message });
+      throw err;
+    }
   });
 
   // ============================================================
@@ -1189,6 +1202,7 @@ export async function registerRoutes(
 
       res.status(201).json(opportunityForUser(user, opportunity));
     } catch (err) {
+      if (err instanceof OpportunityStatusError) return res.status(err.status).json({ message: err.message });
       if (err instanceof z.ZodError) {
         return res.status(400).json({ message: err.errors[0].message });
       }
@@ -1229,11 +1243,11 @@ export async function registerRoutes(
           });
         }
         if (linkedContacts.length > 0) {
-          removedContacts = await storage.deleteOpportunityContactsForOpportunity(existing.id);
+          removedContacts = linkedContacts.length; // removal commits with the guarded bid edit
         }
       }
 
-      const opportunity = await storage.updateOpportunity(existing.id, input);
+      const opportunity = await storage.updateOpportunity(existing.id, { ...input, confirmRemoveContacts }, actor);
 
       if (customerChanging) {
         const newCustomer = await storage.getCustomer(opportunity.customerId);
@@ -1272,6 +1286,7 @@ export async function registerRoutes(
 
       res.json(opportunityForUser(user, opportunity));
     } catch (err) {
+      if (err instanceof OpportunityStatusError) return res.status(err.status).json({ message: err.message });
       if (err instanceof z.ZodError) {
         return res.status(400).json({ message: err.errors[0].message });
       }

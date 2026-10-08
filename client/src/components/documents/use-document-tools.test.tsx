@@ -46,6 +46,20 @@ describe("entity-scoped document API", () => {
     expect(request).toHaveBeenCalledWith("DELETE", "/api/document-tools/opportunity/1/folders/3");
     expect(request).toHaveBeenCalledWith("POST", "/api/document-tools/opportunity/1/batch", { fileIds: [7], folderIds: [3], action: "move", folderId: null });
   });
+  it("passes project context on all bid-tree calls and native=true for a project's native tree", async () => {
+    request.mockImplementation(async (_method, url) => ({ json: async () => url.includes("/files") ? [] : [] }));
+    const { wrapper } = setup();
+    const bidTools = renderHook(() => useDocumentTools("opportunity", 31, 8), { wrapper });
+    const nativeTools = renderHook(() => useDocumentTools("project", 8, undefined, true), { wrapper });
+    await waitFor(() => expect(request).toHaveBeenCalledWith("GET", "/api/document-tools/opportunity/31/files?projectId=8"));
+    await waitFor(() => expect(request).toHaveBeenCalledWith("GET", "/api/document-tools/project/8/files?native=true"));
+    await act(async () => {
+      await bidTools.result.current.deleteFile.mutateAsync({ id: 4, scope: "document" });
+      await nativeTools.result.current.batch.mutateAsync({ fileIds: [], folderIds: [], action: "delete" });
+    });
+    expect(request).toHaveBeenCalledWith("DELETE", "/api/document-tools/opportunity/31/files/4?scope=document&projectId=8");
+    expect(request).toHaveBeenCalledWith("POST", "/api/document-tools/project/8/batch?native=true", { fileIds: [], folderIds: [], action: "delete" });
+  });
 });
 it("groups legacy documents without mutating input and promotes the latest remaining version in listings", () => {
   const files = [

@@ -21,6 +21,8 @@ import {
 import type { OpportunityWithDetails } from "@shared/schema";
 import type { Customer } from "@shared/schema";
 import { useQuery } from "@tanstack/react-query";
+import { useAuth } from "@/hooks/use-auth";
+import { AwardCatchUpPanel } from "@/components/opportunities/AwardCatchUpPanel";
 
 const ACTIVE = OPPORTUNITY_STATUSES.filter(s => OPPORTUNITY_ACTIVE_STATUS_SET.has(s.value));
 const ACTIVE_STATUS_PARAM = OPPORTUNITY_ACTIVE_STATUSES.join(",");
@@ -66,6 +68,7 @@ function BidCard({ opportunity, compact = false, canViewValues = false, backQuer
 }
 
 export default function Opportunities() {
+  const { isAdmin } = useAuth();
   const searchString = useSearch();
   const [, navigate] = useLocation();
   const params = useMemo(() => new URLSearchParams(searchString), [searchString]);
@@ -120,6 +123,7 @@ export default function Opportunities() {
         <Button className="min-h-11 w-full sm:w-auto" onClick={() => setFormOpen(true)}><Plus className="w-4 h-4 mr-2" />New opportunity</Button>
       </header>
 
+      {isAdmin && <AwardCatchUpPanel />}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
         {summaryCards.map(card => <button key={card.label} className="text-left min-h-[84px]" onClick={() => updateParams(card.params)} data-testid={`button-bidding-summary-${card.label.toLowerCase().replaceAll(" ", "-")}`}><Card className="h-full hover:border-primary/60"><CardContent className="p-4"><div className="flex justify-between"><p className="text-xs text-muted-foreground">{card.label}</p><card.icon className="w-4 h-4 text-muted-foreground" /></div><p className="text-2xl font-bold mt-1">{card.value}</p></CardContent></Card></button>)}
       </div>

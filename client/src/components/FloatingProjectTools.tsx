@@ -17,7 +17,8 @@ import {
   MessageSquareText,
   Settings,
   Wrench,
-  X
+  X,
+  ReceiptText
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -28,6 +29,7 @@ interface FloatingProjectToolsProps {
 }
 
 const toolItems = [
+  { value: "bids", label: "Bids & Contracts", icon: ReceiptText },
   { value: "documents", label: "Documents", icon: FileText },
   { value: "daily-reports", label: "Daily Reports", icon: Calendar },
   { value: "photos", label: "Photos", icon: Camera },

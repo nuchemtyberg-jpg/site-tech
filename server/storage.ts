@@ -8,7 +8,7 @@ import {
   rfis, rfiResponses, userOutlookConnections, projectDailyReportRecipients, companyFolders, companyFiles,
   payApplications, payApplicationItems,
   todos, todoUpdates, workflowRules, workflowExecutions, notifications, activityLogs, projectStatusHistory,
-  opportunities, opportunityContacts, opportunityStatusHistory,
+  opportunities, opportunityContacts, opportunityStatusHistory, projectContracts,
   scopeCategories, scopeItemTemplates, opportunityScopeItems, documentCategories,
   type Opportunity, type InsertOpportunity, type OpportunityWithDetails, type OpportunityDashboardResult,
   type OpportunityContact, type InsertOpportunityContact, type OpportunityContactWithDetails,
@@ -40,6 +40,7 @@ import {
 } from "@shared/schema";
 import { DEFAULT_DOCUMENT_CATEGORIES } from "@shared/documentCategory";
 import { db } from "./db";
+import { allocateProjectNumber, projectEmail, validateBidTarget, OpportunityStatusError } from "./services/awardService";
 import { ensureDefaultDocumentFolders } from "./defaultDocumentFolders";
 import { eq, desc, asc, and, or, isNull, isNotNull, sql, lt, gt, gte, lte, ne, ilike, inArray, notInArray, aliasedTable } from "drizzle-orm";
 import {
@@ -449,7 +450,7 @@ export interface IStorage {
   getOpportunityWithDetails(id: number): Promise<OpportunityWithDetails | undefined>;
   getOpportunitiesByCustomer(customerId: number, includeArchived?: boolean): Promise<OpportunityWithDetails[]>;
   createOpportunity(opportunity: InsertOpportunity & { createdByUserId?: string | null }): Promise<Opportunity>;
-  updateOpportunity(id: number, updates: Partial<InsertOpportunity>): Promise<Opportunity>;
+  updateOpportunity(id: number, updates: Partial<InsertOpportunity>, actor?: { id: string | null; name: string }): Promise<Opportunity>;
   updateOpportunityWithStatusTracking(id: number, updates: Record<string, unknown> & { status: string }, changedBy: { userId: string | null; name: string | null }): Promise<{ opportunity: Opportunity; previousStatus: string | null; changed: boolean; history: OpportunityStatusHistory | null }>;
 
   // Opportunity Contacts
@@ -896,38 +897,19 @@ export class DatabaseStorage implements IStorage {
   }
   
   async getNextProjectNumber(): Promise<string> {
-    // Get the highest project number and increment
-    const result = await db.select({ projectNumber: projects.projectNumber })
-      .from(projects)
-      .orderBy(desc(projects.projectNumber))
-      .limit(1);
-    
-    if (result.length === 0) {
-      return "S-1000"; // Starting number
-    }
-    
-    const lastNumber = result[0].projectNumber || "S-999";
-    const numPart = parseInt(lastNumber.replace("S-", ""), 10);
-    return `S-${numPart + 1}`;
+    // A preview only; both creation paths allocate under a common lock.
+    const result = await db.execute(sql`select coalesce(max(substring(project_number from '^S-([0-9]+)$')::bigint),999) as seq from projects`);
+    return `S-${Number(result.rows[0].seq) + 1}`;
   }
   
   async createProject(insertProject: InsertProject): Promise<Project> {
-    const projectNumber = await this.getNextProjectNumber();
-    
-    const [project] = await db.insert(projects).values({
-      ...insertProject,
-      projectNumber
-    }).returning();
-    
-    const projectEmail = generateProjectEmailSlug(project.name, project.id);
-    const [updated] = await db.update(projects)
-      .set({ projectEmail })
-      .where(eq(projects.id, project.id))
-      .returning();
-    
-    await this.createDefaultFolders(project.id);
-    
-    return updated;
+    return db.transaction(async tx => {
+      const projectNumber = await allocateProjectNumber(tx);
+      const [project] = await tx.insert(projects).values({ ...insertProject, projectNumber }).returning();
+      const [updated] = await tx.update(projects).set({ projectEmail: projectEmail(project.name, project.id) }).where(eq(projects.id, project.id)).returning();
+      await ensureDefaultDocumentFolders(tx, "project", project.id);
+      return updated;
+    });
   }
   
   private async createDefaultFolders(projectId: number): Promise<void> {
@@ -938,7 +920,13 @@ export class DatabaseStorage implements IStorage {
     return project;
   }
   async deleteProject(id: number): Promise<void> {
-    await db.update(projects).set({ deletedAt: new Date() }).where(eq(projects.id, id));
+    await db.transaction(async tx => {
+      const [project] = await tx.select().from(projects).where(eq(projects.id, id)).for("update");
+      if (!project) return;
+      const [contract] = await tx.select().from(projectContracts).where(eq(projectContracts.projectId, id)).limit(1);
+      if (contract) throw new OpportunityStatusError("This Project has awarded contracts; deletion requires a separate award reversal workflow", 409);
+      await tx.update(projects).set({ deletedAt: new Date() }).where(eq(projects.id, id));
+    });
   }
 
   async getProjectByEmail(email: string): Promise<Project | undefined> {
@@ -2904,6 +2892,7 @@ export class DatabaseStorage implements IStorage {
   // number is decoupled from the primary key so the format can change later.
   async createOpportunity(opportunity: InsertOpportunity & { createdByUserId?: string | null }): Promise<Opportunity> {
     return await db.transaction(async (tx) => {
+      await validateBidTarget(tx, opportunity.targetProjectId, opportunity.customerId);
       await tx.execute(sql`select pg_advisory_xact_lock(hashtext('opportunity_number'))`);
       const year = new Date().getFullYear();
       const prefix = `OPP-${year}-`;
@@ -2937,13 +2926,32 @@ export class DatabaseStorage implements IStorage {
     });
   }
 
-  async updateOpportunity(id: number, updates: Record<string, unknown>): Promise<Opportunity> {
-    const [result] = await db
-      .update(opportunities)
-      .set({ ...updates, updatedAt: new Date() })
-      .where(and(eq(opportunities.id, id), isNull(opportunities.deletedAt)))
-      .returning();
-    return result;
+  async updateOpportunity(id: number, updates: Record<string, unknown>, actor?: { id: string | null; name: string }): Promise<Opportunity> {
+    return db.transaction(async tx => {
+      const [bid] = await tx.select().from(opportunities).where(and(eq(opportunities.id, id), isNull(opportunities.deletedAt))).for("update");
+      if (!bid) throw new OpportunityStatusError("Opportunity not found", 404);
+      if ("status" in updates || "convertedProjectId" in updates || "awardDate" in updates) throw new OpportunityStatusError("Outcome and award links are managed by the status service", 409);
+      const target = updates.targetProjectId === undefined ? bid.targetProjectId : updates.targetProjectId as number | null;
+      const customerId = updates.customerId === undefined ? bid.customerId : updates.customerId as number;
+      if (bid.status === "awarded" || bid.convertedProjectId) {
+        if (target !== bid.targetProjectId || customerId !== bid.customerId) throw new OpportunityStatusError("An awarded bid cannot change customer or target Project; reversal requires a separate future workflow", 409);
+      }
+      await validateBidTarget(tx, target, customerId);
+      const { confirmRemoveContacts, ...fields } = updates;
+      if (customerId !== bid.customerId) {
+        const links = await tx.select().from(opportunityContacts).where(eq(opportunityContacts.opportunityId, id));
+        if (links.length && !confirmRemoveContacts) throw new OpportunityStatusError("Confirm removal of the current customer's bid contacts before changing customer", 409);
+        await tx.delete(opportunityContacts).where(eq(opportunityContacts.opportunityId, id));
+      }
+      const [result] = await tx.update(opportunities).set({ ...fields, updatedAt: new Date() }).where(eq(opportunities.id, id)).returning();
+      if (bid.convertedProjectId) await tx.insert(activityLogs).values({
+        projectId: bid.convertedProjectId, entityType: "opportunity", entityId: id,
+        action: "awarded_bid_edited", actorName: actor?.name ?? "Staff", actorUserId: actor?.id ?? null,
+        description: "Awarded bid updated. Original contract scope and amount are unchanged; amendments require change orders.",
+        metadata: { opportunityId: id, customerId, fields: Object.keys(fields) },
+      });
+      return result;
+    });
   }
 
   // Atomic status transition detection under a row lock (mirrors
@@ -2963,6 +2971,12 @@ export class DatabaseStorage implements IStorage {
         .where(and(eq(opportunities.id, id), isNull(opportunities.deletedAt)))
         .for("update");
       if (!existing) throw new Error("Opportunity not found");
+      if ((existing.convertedProjectId || existing.status === "awarded") && updates.status !== existing.status) {
+        throw new OpportunityStatusError("Award reversal requires a separate future workflow", 409);
+      }
+      if (updates.status === "awarded" && existing.status !== "awarded") {
+        throw new OpportunityStatusError("Award must use the centralized award service", 409);
+      }
       if (existing.status === updates.status) {
         return { opportunity: existing, previousStatus: existing.status, changed: false, history: null };
       }
@@ -3143,28 +3157,40 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createOpportunityScopeItem(item: InsertOpportunityScopeItem): Promise<OpportunityScopeItem> {
-    const [result] = await db.insert(opportunityScopeItems).values({ ...item, description: null }).returning();
-    return result;
+    return db.transaction(async tx => {
+      await tx.select().from(opportunities).where(eq(opportunities.id, item.opportunityId)).for("update");
+      const [result] = await tx.insert(opportunityScopeItems).values({ ...item, description: null }).returning();
+      return result;
+    });
   }
 
   async updateOpportunityScopeItem(id: number, updates: Partial<Pick<OpportunityScopeItem, "status" | "notes" | "name" | "linkedTodoId">>): Promise<OpportunityScopeItem> {
-    const [result] = await db.update(opportunityScopeItems)
+    return db.transaction(async tx => {
+      const [item] = await tx.select().from(opportunityScopeItems).where(eq(opportunityScopeItems.id, id));
+      if (item) await tx.select().from(opportunities).where(eq(opportunities.id, item.opportunityId)).for("update");
+      const [result] = await tx.update(opportunityScopeItems)
       .set({ ...updates, updatedAt: new Date() })
       .where(eq(opportunityScopeItems.id, id))
       .returning();
-    return result;
+      return result;
+    });
   }
 
   // Soft delete: keeps the row (with its templateId) so applyScopeTemplate
   // never resurrects an item the user intentionally removed.
   async deleteOpportunityScopeItem(id: number): Promise<void> {
-    await db.update(opportunityScopeItems)
+    await db.transaction(async tx => {
+      const [item] = await tx.select().from(opportunityScopeItems).where(eq(opportunityScopeItems.id, id));
+      if (item) await tx.select().from(opportunities).where(eq(opportunities.id, item.opportunityId)).for("update");
+      await tx.update(opportunityScopeItems)
       .set({ deletedAt: new Date(), updatedAt: new Date() })
       .where(eq(opportunityScopeItems.id, id));
+    });
   }
 
   async reorderOpportunityScopeItems(opportunityId: number, orderedIds: number[]): Promise<void> {
     await db.transaction(async (tx) => {
+      await tx.select().from(opportunities).where(eq(opportunities.id, opportunityId)).for("update");
       for (let i = 0; i < orderedIds.length; i++) {
         await tx.update(opportunityScopeItems)
           .set({ displayOrder: (i + 1) * 10, updatedAt: new Date() })
@@ -3189,7 +3215,9 @@ export class DatabaseStorage implements IStorage {
       .where(and(eq(scopeItemTemplates.isActive, true), eq(scopeCategories.isActive, true)))
       .orderBy(asc(scopeCategories.displayOrder), asc(scopeItemTemplates.displayOrder), asc(scopeItemTemplates.id));
     if (templates.length === 0) return [];
-    const inserted = await db.insert(opportunityScopeItems).values(templates.map(t => ({
+    const inserted = await db.transaction(async tx => {
+      await tx.select().from(opportunities).where(eq(opportunities.id, opportunityId)).for("update");
+      return tx.insert(opportunityScopeItems).values(templates.map(t => ({
       opportunityId,
       categoryId: t.template.categoryId,
       templateId: t.template.id,
@@ -3203,6 +3231,7 @@ export class DatabaseStorage implements IStorage {
     })))
       .onConflictDoNothing({ target: [opportunityScopeItems.opportunityId, opportunityScopeItems.templateId] })
       .returning();
+    });
     const categoryById = new Map(templates.map(t => [t.template.id, t]));
     return inserted.map(row => {
       const match = row.templateId ? categoryById.get(row.templateId) : undefined;

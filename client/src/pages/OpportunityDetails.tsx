@@ -1,9 +1,9 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { DocumentsTool } from "@/components/documents/DocumentsTool";
 import { groupDocuments as groupSharedDocuments, useDocumentTools } from "@/components/documents/use-document-tools";
 import { Link, useParams, useSearch } from "wouter";
 import { format } from "date-fns";
-import { Archive, ArchiveRestore, ArrowLeft, Calendar, CheckCircle2, Loader2, Mail, MapPin, Pencil, Phone, Plus, Star, Target, Trash2, User } from "lucide-react";
+import { ArrowLeft, Calendar, CheckCircle2, Loader2, Mail, MapPin, Phone, Plus, Star, Target, Trash2, User } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -25,9 +25,15 @@ import {
 import { extractApiError, useAppUsers, useCompleteTodo, userDisplayName } from "@/hooks/use-todos";
 import { useOpportunityScope } from "@/hooks/use-opportunity-scope";
 import OpportunityScopeTab, { ReadinessBadge } from "@/components/opportunities/OpportunityScopeTab";
+import { OpportunityMigrationHistory } from "@/components/opportunities/OpportunityMigrationHistory";
+import { OpportunityHeaderActions } from "@/components/opportunities/OpportunityHeaderActions";
 import { IncludedScopeItems } from "@/components/opportunities/IncludedScopeItems";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
+import { useLocation } from "wouter";
+import { useProject } from "@/hooks/use-projects";
+import { invalidateAwardQueries } from "@/hooks/use-project-bids";
+import { awardDestination, awardStatusPayload, canChangeOpportunityStatus } from "@/lib/award-workflow";
 import {
   getOpportunityStatusLabel, labelFor, OPPORTUNITY_CONTACT_ROLES, OPPORTUNITY_LOST_REASONS,
   OPPORTUNITY_NO_BID_REASONS, OPPORTUNITY_PROJECT_TYPES, OPPORTUNITY_SOURCES, OPPORTUNITY_STATUSES,
@@ -60,14 +66,20 @@ export default function OpportunityDetails() {
 
   if (isLoading) return <div className="py-20 text-center"><Loader2 className="w-7 h-7 animate-spin mx-auto" /></div>;
   if (!opportunity) return <div className="py-20 text-center"><p className="font-semibold">Opportunity not found</p><Link href={backHref}><Button className="mt-4" variant="outline">Back to Bidding</Button></Link></div>;
-  const address = [opportunity.streetAddress, opportunity.city, opportunity.state, opportunity.zip].filter(Boolean).join(", ");
+  const address = [opportunity.streetAddress, (opportunity as any).address2, opportunity.city, opportunity.state, opportunity.zip].filter(Boolean).join(", ");
 
   return (
     <div className="space-y-5 pt-14 md:pt-0 min-w-0">
       <Link href={backHref} className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground min-h-11" data-testid="link-back-to-bidding"><ArrowLeft className="w-4 h-4 mr-1" />Back to Bidding</Link>
       <header className="flex flex-col lg:flex-row justify-between gap-4">
         <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><Target className="w-6 h-6 text-primary" /><span className="text-sm font-mono text-muted-foreground">{opportunity.opportunityNumber}</span><Badge>{getOpportunityStatusLabel(opportunity.status)}</Badge>{opportunity.isArchived && <Badge variant="outline">Archived</Badge>}{scope && !scopeQuery.isError && <ReadinessBadge readiness={scope.readiness} />}</div><h1 className="text-2xl sm:text-3xl font-bold mt-2 break-words">{opportunity.name}</h1><Link href={`/customers/${opportunity.customerId}`} className="text-sm text-primary hover:underline">{opportunity.customerName}</Link></div>
-        <div className="flex flex-wrap gap-2"><Button className="min-h-11" variant="outline" onClick={() => setEditOpen(true)}><Pencil className="w-4 h-4 mr-2" />Edit</Button><Button className="min-h-11" variant="outline" onClick={() => setStatusOpen(true)}>Change status</Button><Button className="min-h-11" variant="outline" disabled={archive.isPending} onClick={() => archive.mutate({ id: opportunity.id, archived: !opportunity.isArchived }, { onSuccess: () => toast({ title: opportunity.isArchived ? "Opportunity restored" : "Opportunity archived" }) })}>{opportunity.isArchived ? <ArchiveRestore className="w-4 h-4 mr-2" /> : <Archive className="w-4 h-4 mr-2" />}{opportunity.isArchived ? "Restore" : "Archive"}</Button></div>
+        <OpportunityHeaderActions
+          opportunity={opportunity as any}
+          onEdit={() => setEditOpen(true)}
+          onChangeStatus={() => setStatusOpen(true)}
+          archivePending={archive.isPending}
+          onToggleArchive={() => archive.mutate({ id: opportunity.id, archived: !opportunity.isArchived }, { onSuccess: () => toast({ title: opportunity.isArchived ? "Opportunity restored" : "Opportunity archived" }) })}
+        />
       </header>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
@@ -77,9 +89,10 @@ export default function OpportunityDetails() {
         {isAdmin && <Info label="Probability" value={opportunity.probability == null ? "Not set" : `${opportunity.probability}%`} icon={CheckCircle2} />}
       </div>
 
+      {opportunity.status === "awarded" && <div className="rounded-lg border border-primary/25 bg-primary/[0.04] p-4 text-sm"><p className="font-medium">Contract snapshot · immutable</p><p className="text-muted-foreground mt-1">Bid planning remains editable; edits do not alter the awarded contract snapshot. Amendments require future project change orders, which are not available here.</p></div>}
       <Tabs defaultValue="overview" className="min-w-0">
         <TabsList className="w-full justify-start h-auto min-h-11 overflow-x-auto">
-          {["overview", "scope", "documents", "contacts", "todos", "communications", "activity"].map(tab => <TabsTrigger key={tab} value={tab} className="min-h-10 capitalize shrink-0">{tab}{tab === "scope" && scope && !scopeQuery.isError ? ` (${scope.items.length})` : tab === "documents" ? ` (${documentCount})` : tab === "contacts" ? ` (${contacts.length})` : tab === "todos" ? ` (${todos.length})` : tab === "communications" ? ` (${communications.length})` : ""}</TabsTrigger>)}
+          {["overview", "scope", "documents", "contacts", "todos", "communications", "activity", "migration"].map(tab => <TabsTrigger key={tab} value={tab} className="min-h-10 capitalize shrink-0">{tab === "migration" ? "Migration history" : tab}{tab === "scope" && scope && !scopeQuery.isError ? ` (${scope.items.length})` : tab === "documents" ? ` (${documentCount})` : tab === "contacts" ? ` (${contacts.length})` : tab === "todos" ? ` (${todos.length})` : tab === "communications" ? ` (${communications.length})` : ""}</TabsTrigger>)}
         </TabsList>
         <TabsContent value="scope"><OpportunityScopeTab opportunityId={opportunity.id} /></TabsContent>
         <TabsContent value="overview" className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -92,6 +105,7 @@ export default function OpportunityDetails() {
         <TabsContent value="todos"><TodosTab opportunityId={opportunity.id} todos={todos} onAdd={() => setTodoOpen(true)} /></TabsContent>
         <TabsContent value="communications"><CommunicationsTab communications={communications} onAdd={() => setCommunicationOpen(true)} /></TabsContent>
         <TabsContent value="activity"><Card><CardContent className="p-4 divide-y">{activity.length === 0 && history.length === 0 ? <Empty text="No activity recorded yet." /> : <>{activity.map(entry => <div key={`a${entry.id}`} className="py-3 first:pt-0"><p className="text-sm">{entry.description}</p><p className="text-xs text-muted-foreground mt-1">{entry.actorName} · {entry.createdAt ? format(new Date(entry.createdAt), "MMM d, yyyy h:mm a") : ""}</p></div>)}{history.map(entry => <div key={`h${entry.id}`} className="py-3 first:pt-0"><p className="text-sm">{entry.previousStatus ? `${getOpportunityStatusLabel(entry.previousStatus)} → ` : ""}{getOpportunityStatusLabel(entry.newStatus)}</p><p className="text-xs text-muted-foreground mt-1">{entry.changedByName || "System"} · {entry.changedAt ? format(new Date(entry.changedAt), "MMM d, yyyy h:mm a") : ""}</p></div>)}</>}</CardContent></Card></TabsContent>
+        <TabsContent value="migration"><OpportunityMigrationHistory opportunityId={opportunity.id} /></TabsContent>
       </Tabs>
       <OpportunityFormDialog open={editOpen} onOpenChange={setEditOpen} opportunity={opportunity} />
       <OpportunityStatusDialog open={statusOpen} onOpenChange={setStatusOpen} id={opportunity.id} current={opportunity.status} />
@@ -106,16 +120,26 @@ function Detail({ label, value }: { label: string; value: string | null | undefi
 function Empty({ text }: { text: string }) { return <div className="py-12 text-center text-sm text-muted-foreground">{text}</div>; }
 
 export function OpportunityStatusDialog({ open, onOpenChange, id, current }: { open: boolean; onOpenChange: (v: boolean) => void; id: number; current: string }) {
-  const { toast } = useToast(); const mutation = useChangeOpportunityStatus();
+  const { toast } = useToast(); const mutation = useChangeOpportunityStatus(); const [, setLocation] = useLocation();
+  const { data: opportunity, isLoading: opportunityLoading, isError: opportunityError } = useOpportunity(id);
+  const targetProjectId = (opportunity as any)?.targetProjectId as number | null | undefined;
+  const { data: targetProject, isLoading: targetProjectLoading, isError: targetProjectError } = useProject(targetProjectId || 0);
   const [status, setStatus] = useState(current); const [reason, setReason] = useState(""); const [notes, setNotes] = useState(""); const [awardDate, setAwardDate] = useState(new Date().toISOString().slice(0, 10));
+  useEffect(() => { if (open) { setStatus(current); setReason(""); setNotes(""); } }, [open, current]);
   const reasonList = status === "lost" ? OPPORTUNITY_LOST_REASONS : status === "no_bid" ? OPPORTUNITY_NO_BID_REASONS : [];
+  const awardConfirmationReady = Boolean(opportunity) && !opportunityLoading && !opportunityError &&
+    (!targetProjectId || (!!targetProject && !targetProjectLoading && !targetProjectError));
   const submit = () => {
+    if (!canChangeOpportunityStatus(current, status)) { toast({ title: current === "awarded" ? "Awarded bids cannot be reversed" : "Reopen this bid first", description: current === "awarded" ? "The awarded contract and project association are immutable." : "Lost and No Bid opportunities must be reopened before award.", variant: "destructive" }); return; }
     if (reasonList.length && !reason) { toast({ title: "A reason is required", variant: "destructive" }); return; }
-    mutation.mutate({ id, status: status as any, ...(status === "lost" ? { lostReason: reason as any, lostReasonNotes: notes || null } : {}), ...(status === "no_bid" ? { noBidReason: reason as any, noBidReasonNotes: notes || null } : {}), ...(status === "awarded" ? { awardDate } : {}) }, { onSuccess: () => { toast({ title: "Status updated" }); onOpenChange(false); }, onError: e => toast({ title: "Couldn't change status", description: extractApiError(e, "Try again."), variant: "destructive" }) });
+    mutation.mutate({ id, status: status as any, ...(status === "lost" ? { lostReason: reason as any, lostReasonNotes: notes || null } : {}), ...(status === "no_bid" ? { noBidReason: reason as any, noBidReasonNotes: notes || null } : {}), ...(status === "awarded" ? awardStatusPayload(awardDate, targetProjectId) : {}) } as any, { onSuccess: result => { toast({ title: status === "awarded" ? "Bid awarded" : "Status updated" }); onOpenChange(false); if (status === "awarded") { const projectId = (result as any).convertedProjectId || targetProjectId || undefined; invalidateAwardQueries(projectId, id); if (projectId) setLocation(`/projects/${projectId}?tab=bids`); } }, onError: e => toast({ title: "Couldn't change status", description: extractApiError(e, "Try again."), variant: "destructive" }) });
   };
-  return <Dialog open={open} onOpenChange={onOpenChange}><DialogContent><DialogHeader><DialogTitle>Change Status</DialogTitle></DialogHeader><div className="space-y-4"><div><Label>New status</Label><Select value={status} onValueChange={v => { setStatus(v); setReason(""); }}><SelectTrigger className="min-h-11"><SelectValue /></SelectTrigger><SelectContent>{OPPORTUNITY_STATUSES.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}</SelectContent></Select></div>{reasonList.length > 0 && <><div><Label>Reason *</Label><Select value={reason} onValueChange={setReason}><SelectTrigger className="min-h-11"><SelectValue placeholder="Select reason" /></SelectTrigger><SelectContent>{reasonList.map(r => <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>)}</SelectContent></Select></div><div><Label>Notes</Label><Textarea value={notes} onChange={e => setNotes(e.target.value)} /></div></>}{status === "awarded" && <div><Label>Award date *</Label><Input className="min-h-11" type="date" value={awardDate} onChange={e => setAwardDate(e.target.value)} /></div>}</div><DialogFooter><Button className="min-h-11" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button><Button className="min-h-11" onClick={submit} disabled={mutation.isPending || status === current}>{mutation.isPending && <Loader2 className="w-4 h-4 animate-spin mr-2" />}Update status</Button></DialogFooter></DialogContent></Dialog>;
+  return <Dialog open={open} onOpenChange={onOpenChange}><DialogContent><DialogHeader><DialogTitle>{current === "awarded" ? "Award is final" : "Change Status"}</DialogTitle></DialogHeader><div className="space-y-4"><div><Label>New status</Label><Select disabled={current === "awarded"} value={status} onValueChange={value => { setStatus(value); setReason(""); }}><SelectTrigger className="min-h-11"><SelectValue /></SelectTrigger><SelectContent>{OPPORTUNITY_STATUSES.map(option => <SelectItem key={option.value} value={option.value} disabled={current === "awarded"}>{option.label}</SelectItem>)}</SelectContent></Select></div>{reasonList.length > 0 && <><div><Label>Reason *</Label><Select value={reason} onValueChange={setReason}><SelectTrigger className="min-h-11"><SelectValue placeholder="Select reason" /></SelectTrigger><SelectContent>{reasonList.map(item => <SelectItem key={item.value} value={item.value}>{item.label}</SelectItem>)}</SelectContent></Select></div><div><Label>Notes</Label><Textarea value={notes} onChange={event => setNotes(event.target.value)} /></div></>}{status === "awarded" && <div className="rounded-lg border border-primary/25 bg-primary/[0.04] p-4 space-y-2"><Label>Award date</Label><Input className="min-h-11" type="date" value={awardDate} onChange={event => setAwardDate(event.target.value)} /><p className="text-xs text-muted-foreground">Award date is not the project work/start date.</p><p className="text-sm">{awardDestination(targetProjectId, targetProject?.name)}</p><p className="text-sm text-muted-foreground">Bid planning remains editable; the contract snapshot does not. Amendments require future change orders, which are not implemented.</p>{opportunityError && <p className="text-sm text-destructive">Couldn’t load the opportunity.</p>}{targetProjectId && targetProjectLoading && <p className="text-xs">Loading selected project…</p>}{targetProjectId && (targetProjectError || (!targetProjectLoading && !targetProject)) && <p className="text-sm text-destructive">The selected project could not be loaded.</p>}</div>}</div><DialogFooter><Button variant="outline" className="min-h-11" onClick={() => onOpenChange(false)}>Cancel</Button><Button className="min-h-11" onClick={submit} disabled={mutation.isPending || status === current || !canChangeOpportunityStatus(current, status) || (status === "awarded" && !awardConfirmationReady)}>{status === "awarded" ? "Confirm award" : "Update status"}</Button></DialogFooter></DialogContent></Dialog>;
+  /*
+  return <Dialog open={open} onOpenChange={onOpenChange}><DialogContent><DialogHeader><DialogTitle>{current === "awarded" ? "Award is final" : "Change Status"}</DialogTitle></DialogHeader><div className="space-y-4"><div><Label>New status</Label><Select disabled={current === "awarded"} value={status} onValueChange={v => { setStatus(v); setReason(""); }}><SelectTrigger className="min-h-11"><SelectValue /></SelectTrigger><SelectContent>{OPPORTUNITY_STATUSES.map(s => <SelectItem key={s.value} value={s.value} disabled={current === "awarded"}>{s.label}</SelectItem>)}</SelectContent></Select></div>{reasonList.length > 0 && <><div><Label>Reason *</Label><Select value={reason} onValueChange={setReason}><SelectTrigger className="min-h-11"><SelectValue placeholder="Select reason" /></SelectTrigger><SelectContent>{reasonList.map(r => <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>)}</Select></Select></div><div><Label>Notes</Label><Textarea value={notes} onChange={e => setNotes(e.target.value)} /></div></>}{status === "awarded" && <><div><Label>Award date</Label><Input className="min-h-11" type="date" value={awardDate} onChange={e => setAwardDate(e.target.value)} /><p className="text-xs text-muted-foreground mt-1">This is the date the bid was awarded, not the project work/start date.</p></div><div className="rounded-lg border border-primary/25 bg-primary/[0.04] p-4 space-y-2"><p className="font-medium">{awardDestination(targetProjectId, targetProject?.name)}</p><p className="text-sm text-muted-foreground">This award captures the current bid scope and amount ({opportunity?.expectedValue == null ? "amount not recorded" : `$${Number(opportunity.expectedValue).toLocaleString()}`}) as an immutable contract snapshot. Bid planning can remain editable; amendments require future project change orders, which are not available here.</p>{opportunityError && <p className="text-sm text-destructive">The opportunity could not be loaded; retry before confirming.</p>}{targetProjectId && targetProjectLoading && <p className="text-xs text-muted-foreground">Loading the selected project before confirming…</p>}{targetProjectId && targetProjectError && <p className="text-sm text-destructive">The selected project could not be loaded; retry before awarding.</p>}{targetProjectId && !targetProjectLoading && !targetProjectError && !targetProject && <p className="text-sm text-destructive">The selected project could not be found; choose a valid project before awarding.</p>}{(current === "lost" || current === "no_bid") && <p className="text-sm text-destructive">Reopen this opportunity before awarding it.</p>}</div></>}</div><DialogFooter><Button className="min-h-11" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button><Button className="min-h-11" onClick={submit} disabled={mutation.isPending || status === current || !canChangeOpportunityStatus(current, status) || (status === "awarded" && !awardConfirmationReady)}>{mutation.isPending && <Loader2 className="w-4 h-4 animate-spin mr-2" />}{status === "awarded" ? "Confirm award" : "Update status"}</Button></DialogFooter></DialogContent></Dialog>;
 }
 
+*/}
 function ContactsTab({ opportunityId, customerId, contacts }: { opportunityId: number; customerId: number; contacts: OpportunityContactWithDetails[] }) {
   const { data: customerContacts = [] } = useQuery<Contact[]>({ queryKey: [`/api/customers/${customerId}/contacts`] });
   const add = useAddOpportunityContact(opportunityId); const update = useUpdateOpportunityContact(opportunityId); const remove = useRemoveOpportunityContact(opportunityId);
