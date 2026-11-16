@@ -7,3 +7,4 @@
 - [Recognizing test fixture debris in dev DB](test-fixture-debris-signatures.md) — random-suffix names/emails plus blank business fields flag stale test rows; a shared placeholder record is a valid product decision for backlog that shouldn't be faked as real.
 - [Shared Documents preservation](shared-documents.md) — keep explicit versions and one shared manager; preserve folder trees left behind by historical pre-award migration.
 - [Bidding contract lifecycle](bidding-contract-lifecycle.md) — Bidding stays editable after award; additional bids add contracts to one Project; change orders come later.
+- [Estimating compatibility](estimating-compatibility.md) — estimates are separate from scope; preserve form precision and imported zero-default markups.
