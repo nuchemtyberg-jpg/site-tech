@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react";
+import { EstimateTab } from "@/components/estimating/EstimateTab";
+import { discardEstimate } from "@/components/estimating/use-unsaved-estimate";
 import { DocumentsTool } from "@/components/documents/DocumentsTool";
 import { groupDocuments as groupSharedDocuments, useDocumentTools } from "@/components/documents/use-document-tools";
 import { Link, useParams, useSearch } from "wouter";
@@ -47,7 +49,9 @@ export default function OpportunityDetails() {
   const backQuery = new URLSearchParams(search).get("from");
   const backHref = `/bidding${backQuery ? `?${backQuery}` : ""}`;
   const { toast } = useToast();
-  const { isAdmin } = useAuth();
+  const { canEstimate } = useAuth();
+  const [activeTab, setActiveTab] = useState("overview");
+  const [estimateDirty, setEstimateDirty] = useState(false);
   const { data: opportunity, isLoading } = useOpportunity(Number.isFinite(opportunityId) ? opportunityId : undefined);
   const { data: contacts = [] } = useOpportunityContacts(opportunityId);
   const { data: todos = [] } = useOpportunityTodos(opportunityId);
@@ -85,15 +89,17 @@ export default function OpportunityDetails() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <Info label="Bid due" value={opportunity.bidDueDate ? `${opportunity.bidDueDate}${opportunity.bidDueTime ? ` · ${opportunity.bidDueTime}` : ""}` : "Not set"} icon={Calendar} />
         <Info label="Responsible" value={opportunity.responsibleUserName || "Unassigned"} icon={User} />
-        {isAdmin && <Info label="Expected value" value={opportunity.expectedValue == null ? "Not set" : `$${opportunity.expectedValue.toLocaleString()}`} icon={Target} />}
-        {isAdmin && <Info label="Probability" value={opportunity.probability == null ? "Not set" : `${opportunity.probability}%`} icon={CheckCircle2} />}
+        {canEstimate && <Info label={`Expected value${opportunity.expectedValueEstimateRevision != null ? ` · from estimate Rev ${opportunity.expectedValueEstimateRevision}` : " · Manual"}`} value={opportunity.expectedValue == null ? "Not set" : `$${opportunity.expectedValue.toLocaleString()}`} icon={Target} />}
+        {canEstimate && <Info label="Probability" value={opportunity.probability == null ? "Not set" : `${opportunity.probability}%`} icon={CheckCircle2} />}
       </div>
 
       {opportunity.status === "awarded" && <div className="rounded-lg border border-primary/25 bg-primary/[0.04] p-4 text-sm"><p className="font-medium">Contract snapshot · immutable</p><p className="text-muted-foreground mt-1">Bid planning remains editable; edits do not alter the awarded contract snapshot. Amendments require future project change orders, which are not available here.</p></div>}
-      <Tabs defaultValue="overview" className="min-w-0">
+      <Tabs value={activeTab} onValueChange={value => { if (!estimateDirty || value === activeTab || discardEstimate()) { setEstimateDirty(false); setActiveTab(value); } }} className="min-w-0">
         <TabsList className="w-full justify-start h-auto min-h-11 overflow-x-auto">
+          {canEstimate && <TabsTrigger value="estimate" className="min-h-10 shrink-0">Estimate</TabsTrigger>}
           {["overview", "scope", "documents", "contacts", "todos", "communications", "activity", "migration"].map(tab => <TabsTrigger key={tab} value={tab} className="min-h-10 capitalize shrink-0">{tab === "migration" ? "Migration history" : tab}{tab === "scope" && scope && !scopeQuery.isError ? ` (${scope.items.length})` : tab === "documents" ? ` (${documentCount})` : tab === "contacts" ? ` (${contacts.length})` : tab === "todos" ? ` (${todos.length})` : tab === "communications" ? ` (${communications.length})` : ""}</TabsTrigger>)}
         </TabsList>
+        {canEstimate && <TabsContent value="estimate"><EstimateTab key={opportunity.id} opportunityId={opportunity.id} onDirtyChange={setEstimateDirty} /></TabsContent>}
         <TabsContent value="scope"><OpportunityScopeTab opportunityId={opportunity.id} /></TabsContent>
         <TabsContent value="overview" className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <Card><CardHeader><CardTitle className="text-base">Bid details</CardTitle></CardHeader><CardContent className="text-sm space-y-3"><Detail label="RFP received" value={opportunity.rfpReceivedDate} /><Detail label="Estimated start" value={opportunity.estimatedStartDate} /><Detail label="Source" value={labelFor(OPPORTUNITY_SOURCES, opportunity.source)} /><Detail label="Project type" value={labelFor(OPPORTUNITY_PROJECT_TYPES, opportunity.projectType)} />{address && <p className="flex gap-2"><MapPin className="w-4 h-4 shrink-0 text-muted-foreground" />{address}</p>}</CardContent></Card>

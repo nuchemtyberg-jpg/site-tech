@@ -1,0 +1,24 @@
+.estimate-workspace { --estimate-tint: 195 28% 95%; font-size: 13px; }
+.estimate-workspace .estimate-toolbar { display:flex; flex-wrap:wrap; align-items:center; gap:.5rem; padding:.75rem; border:1px solid hsl(var(--border)); border-radius:.5rem; background:hsl(var(--card)); }
+.estimate-workspace .estimate-panel { border:1px solid hsl(var(--border)); border-radius:.5rem; background:hsl(var(--card)); overflow:hidden; }
+.estimate-workspace .estimate-section { background:hsl(var(--primary)/.065); border-bottom:1px solid hsl(var(--border)); padding:.65rem .75rem; }
+.estimate-workspace .estimate-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(125px,1fr)); gap:.5rem; }
+.estimate-workspace .estimate-field { display:flex; flex-direction:column; min-width:0; gap:.2rem; font-size:11px; color:hsl(var(--muted-foreground)); }
+.estimate-workspace input:not([type=checkbox]), .estimate-workspace select, .estimate-workspace textarea { min-width:0; width:100%; border:1px solid hsl(var(--border)); border-radius:4px; padding:.4rem .5rem; color:hsl(var(--foreground)); background:hsl(var(--background)); font-size:12px; }
+.estimate-workspace textarea { resize:vertical; min-height:38px; white-space:pre-wrap; overflow-wrap:anywhere; }
+.estimate-workspace input:focus-visible,.estimate-workspace textarea:focus-visible,.estimate-workspace select:focus-visible { outline:2px solid hsl(var(--ring)); outline-offset:1px; }
+.estimate-workspace input[aria-invalid=true] { border-color:hsl(var(--destructive)); }
+.estimate-workspace .estimate-error { color:hsl(var(--destructive)); font-size:11px; overflow-wrap:anywhere; }
+.estimate-workspace .estimate-number { font-variant-numeric:tabular-nums; font-family:ui-monospace,monospace; }
+.estimate-workspace .estimate-summary { display:grid; grid-template-columns:2rem minmax(160px,1fr) repeat(5,minmax(65px,auto)); align-items:start; gap:.65rem; padding:.65rem .75rem; }
+.estimate-workspace .estimate-description,.estimate-workspace .estimate-description span { min-width:0; overflow-wrap:anywhere; }
+.estimate-workspace .estimate-scroll { overflow-x:auto; }
+.estimate-workspace table { width:100%; border-collapse:collapse; font-size:12px; }
+.estimate-workspace th { text-align:left; font-weight:500; color:hsl(var(--muted-foreground)); background:hsl(var(--primary)/.035); }
+.estimate-workspace td,.estimate-workspace th { padding:.4rem .5rem; border-bottom:1px solid hsl(var(--border)); vertical-align:top; }
+.estimate-workspace .estimate-totals { display:flex; flex-wrap:wrap; gap:.5rem 1.4rem; padding:.85rem; border-top:1px solid hsl(var(--border)); background:hsl(var(--primary)/.035); }
+.estimate-workspace .estimate-totals small { display:block; color:hsl(var(--muted-foreground)); font-size:10px; text-transform:uppercase; letter-spacing:.045em; }
+.estimate-workspace .estimate-excluded { color:hsl(var(--muted-foreground)); background:hsl(var(--muted)/.4); }
+.estimate-workspace .estimate-excluded .estimate-number { color:hsl(var(--muted-foreground)); }
+.estimate-workspace .estimate-drop { border-top:2px solid hsl(var(--primary)); }
+@media(max-width:767px) { .estimate-workspace .estimate-grid { grid-template-columns:1fr; } .estimate-workspace .estimate-summary { grid-template-columns:2rem 1fr 1fr; } .estimate-workspace .estimate-summary .estimate-description { grid-column:span 2; } .estimate-workspace button { min-height:36px; } }

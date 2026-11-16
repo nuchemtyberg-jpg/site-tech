@@ -3,6 +3,8 @@ import pg from "pg";
 const { Client } = pg;
 
 const requiredTables = [
+  "estimate_revisions",
+  "estimating_company_rates",
   "project_contracts",
   "project_contacts",
   "opportunities",
@@ -44,6 +46,10 @@ async function main() {
       "SELECT column_name FROM information_schema.columns WHERE table_schema='public' AND table_name='opportunities' AND column_name='target_project_id'",
     );
     if (!targetColumn.rows.length) columnErrors.push("opportunities.target_project_id is missing");
+    const estimateColumn = await client.query(
+      "SELECT column_name FROM information_schema.columns WHERE table_schema='public' AND table_name='opportunities' AND column_name='expected_value_estimate_revision'",
+    );
+    if (!estimateColumn.rows.length) columnErrors.push("opportunities.expected_value_estimate_revision is missing");
 
     for (const column of ["project_id", "opportunity_id"]) {
       if (!columns.has(column)) {

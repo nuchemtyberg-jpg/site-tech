@@ -14,6 +14,9 @@ import { sendInviteEmail } from "./services/email";
 import { handleProjectStatusChange } from "./services/workflowEngine";
 import { changeOpportunityStatus, OpportunityStatusError } from "./services/opportunityService";
 import { registerAwardRoutes } from "./awardRoutes";
+import { registerEstimatingRoutes } from "./estimatingRoutes";
+import { canEstimate } from "@shared/estimating/model";
+import { USER_ROLES } from "@shared/models/auth";
 import { awardDerivedProjectIds, projectViewForUser, projectViewsForUser } from "./services/projectFinancialAccess";
 import { logActivity, actorFromUser } from "./services/activityLog";
 import {
@@ -97,6 +100,7 @@ export async function registerRoutes(
   // Auth Setup
   await setupAuth(app);
   registerAuthRoutes(app);
+  registerEstimatingRoutes(app);
   
   // Object Storage Setup
   registerObjectStorageRoutes(app);
@@ -130,6 +134,7 @@ export async function registerRoutes(
   app.put("/api/admin/users/:id", isAuthenticated, isAdmin, async (req, res) => {
     try {
       const { role, isAuthorized } = req.body;
+      if (role !== undefined && !z.enum(USER_ROLES).safeParse(role).success) return res.status(400).json({ message: "Invalid user role" });
       const updates: any = {};
       if (role) updates.role = role;
       if (isAuthorized) updates.isAuthorized = isAuthorized;
@@ -203,6 +208,7 @@ export async function registerRoutes(
   app.patch("/api/admin/authorized-users/:id", isAuthenticated, isAdmin, async (req, res) => {
     try {
       const updates = req.body;
+      if (updates.role !== undefined && !z.enum(USER_ROLES).safeParse(updates.role).success) return res.status(400).json({ message: "Invalid user role" });
       const updated = await storage.updateAuthorizedUser(String(req.params.id), updates);
       if (!updated) {
         return res.status(404).json({ message: "Authorized user not found" });
@@ -1053,9 +1059,9 @@ export async function registerRoutes(
   const opportunityForUser = <T extends { expectedValue: number | null; probability: number | null }>(
     user: { role: string | null },
     opportunity: T,
-  ): T => user.role === "admin"
+  ): T => canEstimate(user.role)
     ? opportunity
-    : { ...opportunity, expectedValue: null, probability: null };
+    : { ...opportunity, expectedValue: null, expectedValueEstimateRevision: null, probability: null };
 
   const csv = (value: unknown) => typeof value === "string"
     ? value.split(",").map(v => v.trim()).filter(Boolean)
@@ -1129,7 +1135,7 @@ export async function registerRoutes(
       pageSize,
       // Expected/probability figures are preliminary bidding values. Existing
       // role convention gives the admin role access to sensitive financials.
-      canViewValues: user.role === "admin",
+      canViewValues: canEstimate(user.role),
     }));
   });
 
@@ -1173,8 +1179,8 @@ export async function registerRoutes(
       const input = api.opportunities.create.input.parse(req.body);
       const user = await getCurrentUser(req);
       if (!user) return res.status(401).json({ message: "User not found" });
-      if (user.role !== "admin" && ("expectedValue" in input || "probability" in input)) {
-        return res.status(403).json({ message: "Only admins can set preliminary opportunity values" });
+      if (!canEstimate(user.role) && ("expectedValue" in input || "probability" in input)) {
+        return res.status(403).json({ message: "Estimating access is required to set opportunity values" });
       }
       if (input.status && input.status !== "new") {
         return res.status(400).json({ message: "New opportunities must start in New status; use Change Status after creation" });
@@ -1217,8 +1223,8 @@ export async function registerRoutes(
       if (!existing) return res.status(404).json({ message: "Opportunity not found" });
       const user = await getCurrentUser(req);
       if (!user) return res.status(401).json({ message: "User not found" });
-      if (user.role !== "admin" && ("expectedValue" in input || "probability" in input)) {
-        return res.status(403).json({ message: "Only admins can set preliminary opportunity values" });
+      if (!canEstimate(user.role) && ("expectedValue" in input || "probability" in input)) {
+        return res.status(403).json({ message: "Estimating access is required to set opportunity values" });
       }
       const actor = actorFromUser(user);
 

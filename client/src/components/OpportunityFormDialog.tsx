@@ -43,7 +43,7 @@ export function OpportunityFormDialog({ open, onOpenChange, opportunity, onSaved
   defaultAddress?: { streetAddress?: string | null; address2?: string | null; city?: string | null; state?: string | null; zip?: string | null };
 }) {
   const { toast } = useToast();
-  const { isAdmin } = useAuth();
+  const { canEstimate: isAdmin } = useAuth();
   const [form, setForm] = useState(empty);
   const [addressValidationAttempted, setAddressValidationAttempted] = useState(false);
   const [addingCustomer, setAddingCustomer] = useState(false);

@@ -2845,6 +2845,7 @@ export class DatabaseStorage implements IStorage {
       const item = { ...this.mapOpportunityDetails(r), lastActivityAt: r.lastActivityAt };
       if (!canViewValues) {
         item.expectedValue = null;
+        item.expectedValueEstimateRevision = null;
         item.probability = null;
       }
       return item;
@@ -2938,6 +2939,7 @@ export class DatabaseStorage implements IStorage {
       }
       await validateBidTarget(tx, target, customerId);
       const { confirmRemoveContacts, ...fields } = updates;
+      if (fields.expectedValue !== undefined && fields.expectedValue !== bid.expectedValue) fields.expectedValueEstimateRevision = null;
       if (customerId !== bid.customerId) {
         const links = await tx.select().from(opportunityContacts).where(eq(opportunityContacts.opportunityId, id));
         if (links.length && !confirmRemoveContacts) throw new OpportunityStatusError("Confirm removal of the current customer's bid contacts before changing customer", 409);

@@ -6,9 +6,20 @@ import { ScopeCatalogSettings } from "@/components/settings/ScopeCatalogSettings
 import UserManagement from "@/pages/UserManagement";
 import WorkflowRules from "@/pages/WorkflowRules";
 import NotFound from "@/pages/not-found";
+import EstimatingRates from "@/pages/EstimatingRates";
+import { useAuth } from "@/hooks/use-auth";
 
 // One directory definition drives the landing page, child pages, and legacy links.
 export const adminSettingsOptions = [
+  {
+    slug: "estimating-rates",
+    title: "Estimating Rates",
+    description: "Company formula rates, labor, equipment and estimating markups.",
+    icon: Settings2,
+    component: EstimatingRates,
+    hasPageHeading: true,
+    legacyPath: null,
+  },
   {
     slug: "document-categories",
     title: "Document Categories",
@@ -50,6 +61,8 @@ export const adminSettingsOptions = [
 export const adminSettingsPath = (slug: string) => `/admin/settings/${slug}`;
 
 export default function AdminSettings() {
+  const { isAdmin, canEstimate } = useAuth();
+  if (!isAdmin && !canEstimate) return <NotFound />;
   return (
     <div className="w-full max-w-3xl space-y-6 pt-14 md:pt-0">
       <header>
@@ -63,7 +76,7 @@ export default function AdminSettings() {
       </header>
       <nav aria-label="Available admin settings" className="overflow-hidden rounded-xl border bg-card shadow-sm">
         <ul className="divide-y divide-border">
-          {adminSettingsOptions.map(option => (
+          {adminSettingsOptions.filter(option => isAdmin || option.slug === "estimating-rates").map(option => (
             <li key={option.slug}>
               <Link
                 href={adminSettingsPath(option.slug)}
@@ -90,8 +103,9 @@ export default function AdminSettings() {
 
 export function AdminSettingsDetail() {
   const { section } = useParams<{ section: string }>();
+  const { isAdmin, canEstimate } = useAuth();
   const option = adminSettingsOptions.find(entry => entry.slug === section);
-  if (!option) return <NotFound />;
+  if (!option || (!isAdmin && !(canEstimate && section === "estimating-rates"))) return <NotFound />;
   const Component = option.component;
 
   return (

@@ -157,6 +157,8 @@ export default function UserManagement() {
         return <Badge className="bg-purple-500/10 text-purple-500 border-purple-500/20">Admin</Badge>;
       case "manager":
         return <Badge className="bg-blue-500/10 text-blue-500 border-blue-500/20">Manager</Badge>;
+      case "estimator":
+        return <Badge className="bg-primary/10 text-primary border-primary/20">Estimator</Badge>;
       default:
         return <Badge variant="outline">User</Badge>;
     }
@@ -255,6 +257,7 @@ export default function UserManagement() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="user">User</SelectItem>
+                    <SelectItem value="estimator">Estimator</SelectItem>
                     <SelectItem value="manager">Manager</SelectItem>
                     <SelectItem value="admin">Admin</SelectItem>
                   </SelectContent>
@@ -332,6 +335,7 @@ export default function UserManagement() {
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="user">User</SelectItem>
+                            <SelectItem value="estimator">Estimator</SelectItem>
                             <SelectItem value="manager">Manager</SelectItem>
                             <SelectItem value="admin">Admin</SelectItem>
                           </SelectContent>
@@ -536,6 +540,7 @@ export default function UserManagement() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="user">User</SelectItem>
+                  <SelectItem value="estimator">Estimator</SelectItem>
                   <SelectItem value="manager">Manager</SelectItem>
                   <SelectItem value="admin">Admin</SelectItem>
                 </SelectContent>

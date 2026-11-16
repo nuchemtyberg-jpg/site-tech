@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { index, jsonb, pgTable, timestamp, varchar } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
+export const USER_ROLES = ["admin", "manager", "estimator", "user"] as const;
 
 // Session storage table.
 // (IMPORTANT) This table is mandatory for Replit Auth, don't drop it.
@@ -45,6 +46,8 @@ export const authorizedUsers = pgTable("authorized_users", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-export const insertAuthorizedUserSchema = createInsertSchema(authorizedUsers).omit({ id: true, createdAt: true });
+export const insertAuthorizedUserSchema = createInsertSchema(authorizedUsers).omit({ id: true, createdAt: true }).extend({
+  role: z.enum(USER_ROLES).default("user"),
+});
 export type AuthorizedUser = typeof authorizedUsers.$inferSelect;
 export type InsertAuthorizedUser = z.infer<typeof insertAuthorizedUserSchema>;

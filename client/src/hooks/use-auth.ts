@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { User } from "@shared/models/auth";
+import { canEstimate } from "@shared/estimating/model";
 
 async function fetchUser(): Promise<User | null> {
   const response = await fetch("/api/auth/user", {
@@ -52,6 +53,7 @@ export function useAuth() {
     isRejected,
     isAdmin,
     isManager,
+    canEstimate: canEstimate(user?.role),
     logout: logoutMutation.mutate,
     isLoggingOut: logoutMutation.isPending,
   };

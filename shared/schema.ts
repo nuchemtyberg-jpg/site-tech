@@ -14,6 +14,7 @@ import {
   WORKFLOW_TRIGGER_TYPE_VALUES,
 } from "./opportunityStatus";
 import { SCOPE_ITEM_STATUS_VALUES } from "./scopeChecklist";
+import type { EstimateJob, EstimateRates, EstimateRevision } from "./estimating/model";
 
 export * from "./models/auth";
 export * from "./projectStatus";
@@ -1321,6 +1322,7 @@ export const opportunities = pgTable("opportunities", {
   internalNotes: text("internal_notes"),
   // Value / confidence
   expectedValue: integer("expected_value"), // dollars, optional
+  expectedValueEstimateRevision: integer("expected_value_estimate_revision"),
   probability: integer("probability"), // 0-100, optional
   // Outcome capture (set by the status change service)
   lostReason: text("lost_reason"), // see OPPORTUNITY_LOST_REASONS
@@ -1352,6 +1354,7 @@ export const opportunities = pgTable("opportunities", {
 
 export const insertOpportunitySchema = createInsertSchema(opportunities).omit({
   id: true, opportunityNumber: true, createdByUserId: true,
+  expectedValueEstimateRevision: true,
   lostReason: true, lostReasonNotes: true, noBidReason: true, noBidReasonNotes: true,
   awardDate: true, convertedProjectId: true, // outcome fields are managed by the status change service
   migratedFromProjectId: true, migratedFromProjectNumber: true, // set only by the Project migration
@@ -1580,3 +1583,29 @@ export type OpportunityScopeItemWithDetails = OpportunityScopeItem & {
   categoryKey: string;
   categoryName: string;
 };
+
+export const estimatingCompanyRates = pgTable("estimating_company_rates", {
+  id: integer("id").primaryKey(),
+  rates: jsonb("rates").$type<EstimateRates>().notNull(),
+  version: integer("version").notNull().default(1),
+  savedBy: varchar("saved_by").notNull(),
+  savedAt: timestamp("saved_at").notNull().defaultNow(),
+});
+
+export const estimateRevisions = pgTable("estimate_revisions", {
+  id: serial("id").primaryKey(),
+  opportunityId: integer("opportunity_id").notNull().references(() => opportunities.id),
+  revisionNumber: integer("revision_number").notNull(),
+  name: text("name"),
+  job: jsonb("job").$type<EstimateJob>().notNull(),
+  summary: jsonb("summary").$type<EstimateRevision["summary"]>().notNull(),
+  version: integer("version").notNull().default(1),
+  locked: boolean("locked").notNull().default(false),
+  lockReason: text("lock_reason"),
+  createdBy: varchar("created_by").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  savedBy: varchar("saved_by").notNull(),
+  savedAt: timestamp("saved_at").notNull().defaultNow(),
+}, table => [
+  uniqueIndex("estimate_revisions_opportunity_number").on(table.opportunityId, table.revisionNumber),
+]);

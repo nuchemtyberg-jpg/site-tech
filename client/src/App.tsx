@@ -117,8 +117,8 @@ export function Router() {
       <Route path="/equipment/:id" component={() => <ProtectedRoute component={EquipmentDetails} />} />
       <Route path="/employees" component={() => <ProtectedRoute component={Employees} />} />
       <Route path="/settings" component={() => <ProtectedRoute component={Settings} />} />
-      <Route path="/admin/settings" component={() => <ProtectedRoute component={AdminSettings} adminOnly />} />
-      <Route path="/admin/settings/:section" component={() => <ProtectedRoute component={AdminSettingsDetail} adminOnly />} />
+      <Route path="/admin/settings" component={() => <ProtectedRoute component={AdminSettings} />} />
+      <Route path="/admin/settings/:section" component={() => <ProtectedRoute component={AdminSettingsDetail} />} />
       <Route path="/admin/users" component={() => <ProtectedRoute component={LegacyAdminSettingsRedirect} adminOnly />} />
       <Route path="/admin/workflows" component={() => <ProtectedRoute component={LegacyAdminSettingsRedirect} adminOnly />} />
       <Route path="/admin/email-setup" component={() => <ProtectedRoute component={EmailSetup} adminOnly />} />

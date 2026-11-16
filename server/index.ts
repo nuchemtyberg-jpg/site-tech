@@ -14,6 +14,9 @@ declare module "http" {
   }
 }
 
+// Large takeoff imports are bounded separately; keep the default limit for
+// unrelated endpoints rather than broadening the entire application's parser.
+app.use(["/api/estimating-rates", "/api/opportunities/:opportunityId/estimates"], express.json({ limit: "5mb" }));
 app.use(
   express.json({
     verify: (req, _res, buf) => {
@@ -50,7 +53,7 @@ app.use((req, res, next) => {
     const duration = Date.now() - start;
     if (path.startsWith("/api")) {
       let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
-      if (capturedJsonResponse) {
+      if (capturedJsonResponse && !path.includes("/estimates") && path !== "/api/estimating-rates") {
         logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
       }
 

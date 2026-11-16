@@ -29,6 +29,11 @@ const ACTIVE_STATUS_PARAM = OPPORTUNITY_ACTIVE_STATUSES.join(",");
 const ALL_STATUS_PARAM = OPPORTUNITY_STATUSES.map(s => s.value).join(",");
 type View = "pipeline" | "list";
 
+function ValueSource({ opportunity }: { opportunity: OpportunityWithDetails }) {
+  const revision = opportunity.expectedValueEstimateRevision;
+  return <small className="block text-[10px] font-normal text-muted-foreground">{revision == null ? "Manual value" : `from estimate Rev ${revision}`}</small>;
+}
+
 function dueState(opportunity: OpportunityWithDetails) {
   if (!OPPORTUNITY_DEADLINE_ELIGIBLE_STATUS_SET.has(opportunity.status)) return null;
   switch (getOpportunityDeadlineUrgency(opportunity.bidDueDate, localToday())) {
@@ -49,7 +54,7 @@ function BidCard({ opportunity, compact = false, canViewValues = false, backQuer
       <Card className={cn("hover:border-primary/50 transition-colors min-w-0", opportunity.isArchived && "opacity-65")}>
         <CardContent className={cn("p-4 space-y-2", compact && "p-3")}>
           <Link href={`/bidding/${opportunity.id}${backQuery ? `?from=${encodeURIComponent(backQuery)}` : ""}`} className="block min-w-0">
-          <div className="flex justify-between gap-2 min-w-0"><span className="font-semibold text-sm break-words">{opportunity.name}</span>{canViewValues && opportunity.expectedValue != null && <span className="text-xs font-medium shrink-0">${opportunity.expectedValue.toLocaleString()}</span>}</div>
+          <div className="flex justify-between gap-2 min-w-0"><span className="font-semibold text-sm break-words">{opportunity.name}</span>{canViewValues && opportunity.expectedValue != null && <span className="text-xs font-medium shrink-0 text-right">${opportunity.expectedValue.toLocaleString()}<ValueSource opportunity={opportunity} /></span>}</div>
           <p className="text-xs text-muted-foreground truncate">{opportunity.opportunityNumber} · {opportunity.customerName || "Unknown customer"}</p>
           <div className="flex flex-wrap gap-1.5 items-center">
             {!compact && <Badge variant="secondary">{getOpportunityStatusLabel(opportunity.status)}</Badge>}
@@ -68,7 +73,7 @@ function BidCard({ opportunity, compact = false, canViewValues = false, backQuer
 }
 
 export default function Opportunities() {
-  const { isAdmin } = useAuth();
+  const { isAdmin, canEstimate } = useAuth();
   const searchString = useSearch();
   const [, navigate] = useLocation();
   const params = useMemo(() => new URLSearchParams(searchString), [searchString]);
@@ -158,13 +163,13 @@ export default function Opportunities() {
         <div className="hidden md:grid grid-cols-2 xl:grid-cols-4 gap-4 items-start">
           {(get("outcome") ? OPPORTUNITY_STATUSES.filter(s => get("outcome").split(",").includes(s.value)) : status ? OPPORTUNITY_STATUSES.filter(s => status.split(",").includes(s.value)) : ACTIVE).map(status => {
             const bids = items.filter(o => o.status === status.value);
-            return <Card key={status.value} className="min-w-0"><CardHeader className="p-3"><CardTitle className="text-sm flex justify-between"><span className="flex items-center gap-2"><span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: status.color }} />{status.label}</span><Badge variant="secondary">{data?.statusCounts?.[status.value] ?? bids.length}</Badge></CardTitle></CardHeader><CardContent className="p-2 pt-0 space-y-2">{bids.length ? bids.map(o => <BidCard key={o.id} opportunity={o} compact canViewValues={data?.canViewValues} backQuery={searchString} />) : <p className="text-xs text-muted-foreground text-center py-6">No bids</p>}</CardContent></Card>;
+            return <Card key={status.value} className="min-w-0"><CardHeader className="p-3"><CardTitle className="text-sm flex justify-between"><span className="flex items-center gap-2"><span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: status.color }} />{status.label}</span><Badge variant="secondary">{data?.statusCounts?.[status.value] ?? bids.length}</Badge></CardTitle></CardHeader><CardContent className="p-2 pt-0 space-y-2">{bids.length ? bids.map(o => <BidCard key={o.id} opportunity={o} compact canViewValues={canEstimate} backQuery={searchString} />) : <p className="text-xs text-muted-foreground text-center py-6">No bids</p>}</CardContent></Card>;
           })}
         </div>
       ) : (
-        <BidList items={items} sort={sort || "bidDueDate"} direction={direction} canViewValues={data?.canViewValues || false} backQuery={searchString} onSort={(key) => updateParams({ sort: key, direction: sort === key && direction === "asc" ? "desc" : "asc" })} />
+        <BidList items={items} sort={sort || "bidDueDate"} direction={direction} canViewValues={canEstimate} backQuery={searchString} onSort={(key) => updateParams({ sort: key, direction: sort === key && direction === "asc" ? "desc" : "asc" })} />
       )}
-      {view === "pipeline" && <div className="md:hidden space-y-3">{items.map(o => <BidCard key={o.id} opportunity={o} canViewValues={data?.canViewValues} backQuery={searchString} />)}</div>}
+      {view === "pipeline" && <div className="md:hidden space-y-3">{items.map(o => <BidCard key={o.id} opportunity={o} canViewValues={canEstimate} backQuery={searchString} />)}</div>}
 
       {(data?.pageCount || 1) > 1 && <div className="flex items-center justify-between gap-3"><p className="text-sm text-muted-foreground">Page {data?.page} of {data?.pageCount} · {data?.total} bids</p><div className="flex gap-2"><Button variant="outline" className="min-h-11 min-w-11" disabled={page <= 1} onClick={() => updateParams({ page: String(page - 1) }, false)}><ChevronLeft className="w-4 h-4" /></Button><Button variant="outline" className="min-h-11 min-w-11" disabled={page >= (data?.pageCount || 1)} onClick={() => updateParams({ page: String(page + 1) }, false)}><ChevronRight className="w-4 h-4" /></Button></div></div>}
       <OpportunityFormDialog open={formOpen} onOpenChange={setFormOpen} onSaved={id => navigate(`/bidding/${id}`)} />
@@ -175,5 +180,23 @@ export default function Opportunities() {
 function BidList({ items, sort, direction, canViewValues, backQuery, onSort }: { items: OpportunityWithDetails[]; sort: string; direction: string; canViewValues: boolean; backQuery: string; onSort: (key: string) => void }) {
   const [statusOpportunity, setStatusOpportunity] = useState<OpportunityWithDetails | null>(null);
   const SortHead = ({ field, children }: { field: string; children: React.ReactNode }) => <TableHead><button className="flex items-center min-h-11" onClick={() => onSort(field)}>{children}{sort === field && (direction === "asc" ? <ArrowUp className="w-3 h-3 ml-1" /> : <ArrowDown className="w-3 h-3 ml-1" />)}</button></TableHead>;
-  return <><div className="hidden md:block border rounded-lg overflow-hidden"><Table><TableHeader><TableRow><SortHead field="name">Opportunity</SortHead><SortHead field="customer">Customer</SortHead><SortHead field="status">Status</SortHead><SortHead field="bidDueDate">Bid due</SortHead>{canViewValues && <SortHead field="expectedValue">Value</SortHead>}<SortHead field="responsible">Responsible</SortHead><TableHead>Actions</TableHead></TableRow></TableHeader><TableBody>{items.map(o => { const urgency = dueState(o); return <TableRow key={o.id}><TableCell><Link href={`/bidding/${o.id}?from=${encodeURIComponent(backQuery)}`} className="block font-medium">{o.name}<span className="block text-xs text-muted-foreground font-mono">{o.opportunityNumber}</span></Link></TableCell><TableCell>{o.customerName}</TableCell><TableCell><Badge variant="outline" style={{ borderColor: getOpportunityStatusColor(o.status) }}>{getOpportunityStatusLabel(o.status)}</Badge></TableCell><TableCell>{o.bidDueDate || "—"}{urgency && <span className={cn("block text-xs", urgency.className.split(" ")[0])}>{urgency.label}</span>}</TableCell>{canViewValues && <TableCell>{o.expectedValue == null ? "—" : `$${o.expectedValue.toLocaleString()}`}</TableCell>}<TableCell>{o.responsibleUserName || "Unassigned"}</TableCell><TableCell><Button size="sm" variant="outline" className="min-h-11" onClick={() => setStatusOpportunity(o)} data-testid={`button-quick-status-row-${o.id}`}>Change status</Button></TableCell></TableRow>})}</TableBody></Table></div><div className="md:hidden space-y-3">{items.map(o => <BidCard key={o.id} opportunity={o} canViewValues={canViewValues} backQuery={backQuery} />)}</div>{statusOpportunity && <OpportunityStatusDialog open={!!statusOpportunity} onOpenChange={open => !open && setStatusOpportunity(null)} id={statusOpportunity.id} current={statusOpportunity.status} />}</>;
+  return <>
+    <div className="hidden md:block border rounded-lg overflow-hidden"><Table>
+      <TableHeader><TableRow><SortHead field="name">Opportunity</SortHead><SortHead field="customer">Customer</SortHead><SortHead field="status">Status</SortHead><SortHead field="bidDueDate">Bid due</SortHead>{canViewValues && <SortHead field="expectedValue">Value</SortHead>}<SortHead field="responsible">Responsible</SortHead><TableHead>Actions</TableHead></TableRow></TableHeader>
+      <TableBody>{items.map(o => {
+        const urgency = dueState(o);
+        return <TableRow key={o.id}>
+          <TableCell><Link href={`/bidding/${o.id}?from=${encodeURIComponent(backQuery)}`} className="block font-medium">{o.name}<span className="block text-xs text-muted-foreground font-mono">{o.opportunityNumber}</span></Link></TableCell>
+          <TableCell>{o.customerName}</TableCell>
+          <TableCell><Badge variant="outline" style={{ borderColor: getOpportunityStatusColor(o.status) }}>{getOpportunityStatusLabel(o.status)}</Badge></TableCell>
+          <TableCell>{o.bidDueDate || "—"}{urgency && <span className={cn("block text-xs", urgency.className.split(" ")[0])}>{urgency.label}</span>}</TableCell>
+          {canViewValues && <TableCell>{o.expectedValue == null ? "—" : <>{`$${o.expectedValue.toLocaleString()}`}<ValueSource opportunity={o} /></>}</TableCell>}
+          <TableCell>{o.responsibleUserName || "Unassigned"}</TableCell>
+          <TableCell><Button size="sm" variant="outline" className="min-h-11" onClick={() => setStatusOpportunity(o)} data-testid={`button-quick-status-row-${o.id}`}>Change status</Button></TableCell>
+        </TableRow>;
+      })}</TableBody>
+    </Table></div>
+    <div className="md:hidden space-y-3">{items.map(o => <BidCard key={o.id} opportunity={o} canViewValues={canViewValues} backQuery={backQuery} />)}</div>
+    {statusOpportunity && <OpportunityStatusDialog open={!!statusOpportunity} onOpenChange={open => !open && setStatusOpportunity(null)} id={statusOpportunity.id} current={statusOpportunity.status} />}
+  </>;
 }

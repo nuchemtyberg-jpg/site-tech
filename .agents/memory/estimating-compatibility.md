@@ -14,3 +14,9 @@ Calculations retain full precision at every intermediate step. Round to cents on
 **Why:** The owner explicitly clarified the form's rounding and markup inheritance behavior to require cent-for-cent compatibility.
 
 **How to apply:** Test imports against the supplied form's calculation result, not sums of displayed rounded row amounts. Do not silently substitute missing labor or equipment references to force a total.
+
+Use the written requirements over the form source for SF/SY/CY count multiplication and nearest-filled equipment-rate derivation.
+
+**Why:** The owner selected the written rules after being told the source omits area/volume counts and sometimes derives from a farther rate.
+
+**How to apply:** Apply these rules consistently to new estimates and imports; retain visible missing-rate warnings rather than inventing rates.

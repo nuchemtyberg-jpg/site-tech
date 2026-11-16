@@ -28,7 +28,7 @@ import siteTechLogo from "@assets/Logo_1770600587313.png";
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
-  const { user, logout, isAdmin } = useAuth();
+  const { user, logout, isAdmin, canEstimate } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const navItems = [
@@ -39,6 +39,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     { href: "/customers", label: "Customers", icon: Users },
     { href: "/schedule", label: "Schedule", icon: Calendar },
     { href: "/equipment", label: "Equipment", icon: Truck },
+    ...(!isAdmin && canEstimate ? [{ href: "/admin/settings", label: "Admin Settings", icon: Settings }] : []),
   ];
   
   const adminItems = [
