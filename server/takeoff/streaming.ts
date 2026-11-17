@@ -27,7 +27,8 @@ export async function streamGeneration(client:Anthropic,request:any,signal:Abort
       const body=response.body.pipeThrough(new TransformStream({transform(chunk,out){reset();out.enqueue(chunk);}}));
       return new Response(body,{status:response.status,statusText:response.statusText,headers:response.headers});
     }}):client;
-    stream=transport.messages.stream(request,{signal:controller.signal,timeout:limits.overall});
+    const api=request.context_management?(transport.beta?.messages||transport.messages):transport.messages;
+    stream=api.stream(request,{signal:controller.signal,timeout:limits.overall});
     stream.on("streamEvent",(event:any)=>{
       reset();
       if(Date.now()-lastUpdate<10000)return;

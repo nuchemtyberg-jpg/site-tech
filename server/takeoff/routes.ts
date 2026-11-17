@@ -103,7 +103,7 @@ export function registerTakeoffRoutes(app:Express) {
       delete state.checkpointTurnStep;
       if(!state.systemSnapshot || /invalid signature|thinking block|bound to a different conversation|system prompt differs/i.test(run.error||"")) {
         freshCheckpointConversation(state,"Retry recovered a non-replayable conversation from its checkpoint.");
-        state.systemSnapshot ||= JSON.stringify(takeoffSystem(state));
+        delete state.systemSnapshot;delete state.contextProtocol;delete state.toolsSnapshot;delete state.truncatedResponses;
       }
       // Keep pendingCall: interrupted generation must retain its conservative reservation.
       progress(state,"Estimator requested retry from the last checkpoint. Existing documents, rates, settings, spend and approved limits are unchanged.");

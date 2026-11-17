@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { loadImage, createCanvas } from "@napi-rs/canvas";
-import { jobSchema, MARKUPS } from "@shared/estimating/model";
+import { jobSchema, categorySchema, MARKUPS } from "@shared/estimating/model";
 import { computeJob, makeResolver, summarize } from "@shared/estimating/engine";
 import type { TakeoffState } from "@shared/estimating/takeoff";
 import { readObject, readSpreadsheet } from "./documents";
@@ -33,7 +33,8 @@ export const TAKEOFF_TOOLS=[
   tool("read_spreadsheet","Read uploaded XLSX/CSV rows; formulas include cached values, never execute spreadsheet code.",{document:num},["document"]),
   tool("evaluate","Use the exact SiteTech formula evaluator with named rates, feet-inches and optional line qty.",{formula:str,qty:num},["formula"]),
   tool("checkpoint_takeoff","Persist partial estimate work after each category so it survives a cap or restart. Same job shape as submit_takeoff; unfinished lines must be flagged NOT QUANTIFIED. Existing rates are immutable; only append new unique named material rates with id,key,desc,unit,value and optional category/notes.",{job:{type:"object"}},["job"]),
-  tool("submit_takeoff","Submit full Phase1 job with NO totals. Supply summary and questions separately. SiteTech validates and calculates totals, creates new revision only. All line/category markups blank, priceOverride blank; every line cites sheet + method + arithmetic. Preserve existing material rates, IDs, labor/equipment tables and defaults. May append unique named material rates with description, unit and valid value/formula; never rewrite previous additions.",{job:{type:"object"},summary:str,questions:{type:"array",items:str}},["job","summary","questions"]),
+  tool("checkpoint_category","Save ONE completed category without repeating job rates. Supply a Phase1 category with id,name,tax,oh,ins,profit,excluded,items. Updates the category with that id, or appends it. Full job remains server-side. Then submit_takeoff with use_checkpoint:true.",{category:{type:"object"}},["category"]),
+  tool("submit_takeoff","Finalize the saved job using use_checkpoint:true (preferred after checkpoint_category). Alternatively provide a full Phase1 job with NO totals. Supply summary and questions. Existing rates are immutable. Never repeat a large job if output was truncated: save individual categories, then submit the checkpoint.",{job:{type:"object"},use_checkpoint:{type:"boolean"},summary:str,questions:{type:"array",items:str}},["summary","questions"]),
 ];
 export function validateSubmission(raw: unknown,state:TakeoffState) {
   if(raw && typeof raw==="object" && ["total","totals","summary","sell","cost"].some(k=>k in raw))
@@ -61,10 +62,18 @@ export async function executeTool(name:string,raw:unknown,state:TakeoffState):Pr
     const a=z.object({formula:z.string().max(500),qty:z.number().finite().optional()}).parse(raw);
     return {result:makeResolver(state.job).ev(a.formula,a.qty===undefined?undefined:{qty:a.qty})};
   }
+  if(name==="checkpoint_category") {
+    const {category}=z.object({category:categorySchema}).parse(raw);
+    const candidate=structuredClone(state.job),index=candidate.categories.findIndex(c=>c.id===category.id);
+    if(index<0)candidate.categories.push(category);else candidate.categories[index]=category;
+    ensureRateSnapshot(state);const valid=validateSubmission(candidate,state);state.job=valid.job;
+    return {result:{accepted:true,category:category.id,totals:valid.summary}};
+  }
   if(name==="submit_takeoff"||name==="checkpoint_takeoff") {
-    const a=z.object({job:z.unknown(),summary:z.string().max(12000).default(""),questions:z.array(z.string().max(2000)).max(200).default([])}).parse(raw);
+    const a=z.object({job:z.unknown(),use_checkpoint:z.boolean().optional(),summary:z.string().max(12000).default(""),questions:z.array(z.string().max(2000)).max(200).default([])}).parse(raw);
     ensureRateSnapshot(state);
-    const valid=validateSubmission(a.job,state); state.job=valid.job;
+    if(!a.job && !a.use_checkpoint)throw new Error("Supply job, or use_checkpoint:true after checkpoint_category. If output was truncated, save individual categories instead of repeating full rates.");
+    const valid=validateSubmission(a.use_checkpoint?state.job:a.job,state); state.job=valid.job;
     return {result:{accepted:true,totals:valid.summary},...(name==="submit_takeoff"?{submitted:{summary:a.summary,questions:a.questions}}:{})};
   }
   const documentId=z.object({document:z.number().int().positive()}).parse(raw).document;

@@ -3,6 +3,13 @@ import type { TakeoffState } from "@shared/estimating/takeoff";
 export const REMOVED_RESULT = "[older result removed to save context — call the tool again if needed]";
 export const MAX_INPUT_TOKENS = 600000;
 export const RECENT_TOOL_RESULTS = 12;
+export const CONTEXT_BETA="context-management-2025-06-27";
+export function defaultContextManagement() {
+  return {edits:[
+    {type:"clear_thinking_20251015",keep:"all"},
+    {type:"clear_tool_uses_20250919",trigger:{type:"input_tokens",value:400000},keep:{type:"tool_uses",value:12},clear_at_least:{type:"input_tokens",value:50000},exclude_tools:["checkpoint_category","checkpoint_takeoff","submit_takeoff"]},
+  ]};
+}
 
 /** Only changes outbound copies. Raw durable history remains available for recovery/chat. */
 export function pruneToolResults(history: unknown[], keep = RECENT_TOOL_RESULTS): any[] {
@@ -60,12 +67,12 @@ export function safeModelLimits(info?: { max_input_tokens?: number | null; max_t
 
 export class TakeoffContextLimitError extends Error {
   constructor() {
-    super("Takeoff context is too large after pruning user tool results. Assistant content was preserved. No generation request was sent; the checkpoint is retained.");
+    super("Takeoff context is too large after server-side context editing. Client history was not rewritten. No generation request was sent; the checkpoint is retained.");
   }
 }
 export async function prepareContext(history: unknown[], count: (messages: any[]) => Promise<number>, inputLimit = MAX_INPUT_TOKENS,pruneAt=Math.min(400000,inputLimit*.8)) {
   const limit = Math.min(MAX_INPUT_TOKENS, inputLimit);
-  for (const keep of [Infinity, 12, 6, 0]) {
+  for (const keep of [Infinity]) {
     const messages = keep===Infinity?structuredClone(history) as any[]:pruneToolResults(history, keep);
     // Repeated full-job tool inputs can exceed the HTTP request size before
     // token counting succeeds. Skip directly toward the compact checkpoint.
@@ -77,7 +84,7 @@ export async function prepareContext(history: unknown[], count: (messages: any[]
       throw error;
     }
     if (!Number.isFinite(inputTokens) || inputTokens < 0) throw new Error("Anthropic returned an invalid input token count.");
-    if (inputTokens <= limit && (keep!==Infinity||inputTokens<=pruneAt)) return { messages, inputTokens, resultsKept: keep, historyReset: false };
+    if (inputTokens <= limit) return { messages, inputTokens, resultsKept: keep, historyReset: false };
   }
   throw new TakeoffContextLimitError();
 }

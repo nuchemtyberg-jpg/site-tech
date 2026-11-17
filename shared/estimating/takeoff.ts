@@ -52,6 +52,11 @@ export interface TakeoffState {
   systemSnapshot?: string;
   toolsSnapshot?:string;
   cacheVersion?:number;
+  contextProtocol?:number;
+  contextManagement?:{edits:any[]};
+  contextEdits?:{step:number;originalTokens?:number;effectiveTokens?:number;appliedEdits?:unknown[]}[];
+  toolTimings?:{step:number;tool:string;durationMs:number;ok:boolean}[];
+  truncatedResponses?:number;
   cacheMessages?:string;
   cacheSourceCount?:number;
   cacheBatches?:number;
