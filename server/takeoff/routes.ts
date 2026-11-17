@@ -99,6 +99,7 @@ export function registerTakeoffRoutes(app:Express) {
       const state=structuredClone(run.state);
       if(state.cost>=state.budget||state.steps>=state.stepLimit) throw new EstimateError(409,"This run has exhausted its approved limits. Retry cannot increase them.");
       delete state.retryAt;delete state.retries;
+      delete state.networkRetries;
       delete state.checkpointTurnStep;
       if(!state.systemSnapshot || /invalid signature|thinking block|bound to a different conversation|system prompt differs/i.test(run.error||"")) {
         freshCheckpointConversation(state,"Retry recovered a non-replayable conversation from its checkpoint.");

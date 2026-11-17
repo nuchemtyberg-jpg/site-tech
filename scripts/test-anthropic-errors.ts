@@ -1,9 +1,17 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import Anthropic from "@anthropic-ai/sdk";
 import { observedAnthropicCall, RecordedAnthropicError, sanitizeAnthropicError } from "../server/takeoff/anthropic-errors";
 import type { TakeoffState } from "../shared/estimating/takeoff";
 import { emptyJob } from "../shared/estimating/model";
 const state=()=>({job:emptyJob(),messages:[],documents:[],instructions:"Confidential drawing instructions",playbook:{markdown:"Private playbook contents"},rules:[],progress:[]} as unknown as TakeoffState);
+test("real SDK timeout and connection errors retain safe classifications",()=>{
+  const timeout=sanitizeAnthropicError(new Anthropic.APIConnectionTimeoutError(),"messages.create",state());
+  assert.equal(timeout.type,"APIConnectionTimeoutError");
+  const reset=sanitizeAnthropicError(new Anthropic.APIConnectionError({cause:Object.assign(new Error("secret raw transport text"),{code:"ECONNRESET"})}),"messages.create",state());
+  assert.equal(reset.type,"APIConnectionError");assert.equal(reset.code,"ECONNRESET");
+  assert.doesNotMatch(reset.message,/secret raw/);
+});
 for(const operation of ["models.retrieve","messages.countTokens","messages.create"] as const) {
   test(`${operation} retains sanitized structured error and persists before throwing`,async()=>{
     const s=state();let saved=false;const logs:string[]=[];const previous=console.error;

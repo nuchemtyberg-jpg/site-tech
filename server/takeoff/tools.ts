@@ -13,7 +13,7 @@ const region=z.tuple([z.number().nonnegative(),z.number().nonnegative(),z.number
   .refine(r=>r[2]>r[0]&&r[3]>r[1],"Region must be [left,top,right,bottom] in page points.");
 const pageArgs=z.object({document:z.number().int().positive(),page:z.number().int().positive(),region:region.optional()});
 const filters=pageArgs.extend({layer:z.string().optional(),color:z.string().optional(),weight:z.number().nonnegative().optional(),
-  offset:z.number().int().nonnegative().default(0),limit:z.number().int().min(1).max(500).default(100)});
+  offset:z.number().int().nonnegative().default(0),limit:z.number().int().min(1).max(500).default(25)});
 const str={type:"string"},num={type:"number"};
 const regionJSON={type:"array",items:num,minItems:4,maxItems:4,description:"[left,top,right,bottom], top-left page points (72 points/inch)"};
 const pageProperties={document:{type:"integer",description:"Selected file ID"},page:{type:"integer",minimum:1},region:regionJSON};
@@ -82,7 +82,7 @@ export async function executeTool(name:string,raw:unknown,state:TakeoffState):Pr
       return {result};
     }
     if(name!=="view_page") throw new Error("This is not a vector PDF. Use view_page and flag image-based measurements as approximate.");
-    const a=pageArgs.extend({zoom:z.number().min(.1).max(4).default(1)}).parse(raw);
+    const a=pageArgs.extend({zoom:z.number().min(.1).max(4).default(.5)}).parse(raw);
     if(!file.pages.includes(a.page)) throw new Error("Page not selected.");
     const image=await loadImage(bytes),box=a.region||[0,0,image.width,image.height],w=box[2]-box[0],h=box[3]-box[1],s=Math.min(a.zoom,2000/Math.max(w,h));
     const canvas=createCanvas(Math.ceil(w*s),Math.ceil(h*s));canvas.getContext("2d").drawImage(image,box[0],box[1],w,h,0,0,canvas.width,canvas.height);
@@ -120,7 +120,7 @@ export async function executeTool(name:string,raw:unknown,state:TakeoffState):Pr
     if(!file.pages.includes(a.page)) throw new Error("Page not selected.");
     const key=`${documentId}:${a.page}`;
     if(name==="page_text") return {result:(await readText(a.page)).filter(t=>!a.region||(t.x>=a.region[0]&&t.y>=a.region[1]&&t.x<=a.region[2]&&t.y<=a.region[3]))};
-    if(name==="view_page") return {result:{page:a.page},image:(await isolatedRender(file,a.page,z.object({zoom:z.number().min(.1).max(4).default(1)}).parse(raw).zoom,a.region)).toString("base64")};
+    if(name==="view_page") return {result:{page:a.page,note:"Overview defaults to zoom 0.5. Request zoom and/or a region for detail; use vector tools for measurements."},image:(await isolatedRender(file,a.page,z.object({zoom:z.number().min(.1).max(4).default(.5)}).parse(raw).zoom,a.region)).toString("base64")};
     if(name==="set_scale"||name==="calibrate") {
       const source=z.object({source:z.string().trim().min(1).max(2000)}).parse(raw).source;
       let feetPerPoint:number;

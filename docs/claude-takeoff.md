@@ -133,6 +133,35 @@ memory-profiled and these figures are not a universal maximum.
 
 ## Conversation context management
 
+### Streaming and interrupted requests
+
+Generation uses the official SDK `messages.stream().finalMessage()`, with a
+15-minute overall deadline and a 120-second idle/no-data deadline. Incoming SSE
+transport bytes, including pings, reset the idle deadline. Streaming thinking/text
+is never persisted: only throttled phase messages are saved. The final assembled
+message supplies the original assistant blocks and usage.
+
+Transient network errors, timeouts, HTTP 429 and 5xx/529 generation failures retry
+the identical request after 2/4/8-second backoffs, at most three retries. No tools
+execute from partial streams. Ambiguous attempts reserve their full conservative
+amount as uncertain spend; each retry must fit that reservation within the
+remaining approved cap. User cancellation does not automatically retry. Model
+lookup/token-count failures have a separate bounded retry path without generation
+reservations. Error telemetry includes allowlisted SDK class/cause code, elapsed
+time, status and request ID, never raw transport messages or document contents.
+
+Run facts separate confirmed usage charges and uncertain interrupted-request
+reservations. Both count toward the cap. New confirmed cost events store per-step
+input/cache-write/cache-read/output tokens and dollars. Historical cost events
+retain their exact amounts; older per-step token breakdowns were not saved and
+cannot be reconstructed from aggregate usage, so the UI labels them unavailable.
+Uncertain amounts are not claims about actual Anthropic billing.
+
+Default vector result pages now contain 25 paths (explicit pagination/limits and
+full measured totals remain available). Default page images use zoom 0.5 for an
+overview; explicit zoom/regions preserve access to detail. Measurement still uses
+cached full-resolution vectors, not the overview image.
+
 Durable model/tool history remains unchanged for recovery and future chat. Outbound
 copies retain the latest 12 tool results in full, replacing older text/images with
 `[older result removed to save context — call the tool again if needed]`. Tool IDs,

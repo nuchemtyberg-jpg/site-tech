@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { AddedMaterialRate, AISettings, LearnedRule, RunDocument, RunStatus, TokenUsage } from "@shared/estimating/takeoff";
+import type { AddedMaterialRate, AISettings, LearnedRule, RunDocument, RunStatus, TokenUsage,TakeoffState } from "@shared/estimating/takeoff";
 export interface PublicRun {
   id: number; opportunityId: number; createdBy: string; status: RunStatus;
   revisionId: number | null; error: string | null; createdAt: string; startedAt: string | null; finishedAt: string | null;
@@ -8,6 +8,7 @@ export interface PublicRun {
   instructions: string; trades: string[]; playbookVersion: number; summary?: string; questions: string[];
   flags: { type: string; lineId: string; categoryId: string; description: string; flag: string }[];
   addedRates?: AddedMaterialRate[];
+  confirmedCost?:number; uncertainCost?:number; costEvents?:TakeoffState["costEvents"];
 }
 export interface TakeoffDocument { id: number; name: string; contentType: string; source: string }
 export interface SheetInfo { page: number; title: string; sheetNumber: string; scaleText: string[]; vector: boolean; width: number; height: number }

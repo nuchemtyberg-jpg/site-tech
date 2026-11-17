@@ -22,7 +22,11 @@ export function publicRun(run:Run) {
   const s=run.state;
   return {id:run.id,opportunityId:run.opportunityId,createdBy:run.createdBy,status:run.status,revisionId:run.revisionId,
     error:run.error,createdAt:run.createdAt,startedAt:run.startedAt,finishedAt:run.finishedAt,
-    model:s.settings.model,cost:s.cost,steps:s.steps,budget:s.budget,stepLimit:s.stepLimit,usage:s.usage,progress:s.progress,
+    model:s.settings.model,cost:s.cost,
+    uncertainCost:(s.costEvents||[]).filter(e=>e.uncertain).reduce((n,e)=>n+e.amount,0),
+    confirmedCost:s.cost-(s.costEvents||[]).filter(e=>e.uncertain).reduce((n,e)=>n+e.amount,0),
+    costEvents:s.costEvents||[],
+    steps:s.steps,budget:s.budget,stepLimit:s.stepLimit,usage:s.usage,progress:s.progress,
     documents:s.documents.map(({objectPath,snapshotPath,...d})=>d),instructions:s.instructions,trades:s.trades,
     playbookVersion:s.playbook.version,summary:s.summary,questions:s.questions||[],addedRates:addedMaterialRates(s),
     flags:s.job.categories.flatMap(cat=>cat.items.filter(line=>line.flag).map(line=>({

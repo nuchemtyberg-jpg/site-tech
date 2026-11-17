@@ -15,6 +15,12 @@ Reserve spend before requests; an interrupted call may have incurred charges wit
 
 **How to apply:** Keep uncertain charges visible and require explicit approval for more spending. Long-running production workers need persistent compute; do not claim Autoscale guarantees uninterrupted runs.
 
+Use streamed generation for long reasoning, with separate overall and transport-idle deadlines.
+
+**Why:** A long generation hit the two-minute non-streaming deadline, while a conservative reservation made the displayed spend exceed confirmed usage. Earlier unstructured error filtering also erased the SDK timeout classification.
+
+**How to apply:** Execute only complete final-message tools, retain signed blocks, report confirmed and uncertain spend separately, and preserve safe SDK error classes/codes without logging raw requests. Count SSE pings as transport activity.
+
 Compare rate snapshot objects structurally, not by JSON string order.
 
 **Why:** PostgreSQL JSONB reorders object keys; string comparison falsely rejected unchanged rates in recovered tool submissions.

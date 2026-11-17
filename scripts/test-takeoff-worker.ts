@@ -31,6 +31,31 @@ async function main() {
     const run=await makeRun(state());await executeClaimedRun(run,{client,leaseOwner:owner});
     const [done]=await db.select().from(takeoffRuns).where(eq(takeoffRuns.id,run.id));
     assert.equal(done.status,"needs_review");assert.ok(done.revisionId);assert.equal(calls,1);
+    // A transient stream failure repeats the identical request; only final tool
+    // blocks are appended/executed, and the failed attempt remains uncertain.
+    let streamCalls=0;const streamRequests:string[]=[];
+    const streamed:any={messages:{countTokens:async()=>({input_tokens:100}),stream:(request:any)=>({
+      on:()=>{},abort:()=>{},finalMessage:async()=>{
+        streamRequests.push(JSON.stringify(request));
+        if(++streamCalls===1)throw Object.assign(new Error("network interrupted"),{name:"APIConnectionError",cause:{code:"ECONNRESET"}});
+        return {usage:{input_tokens:100,output_tokens:500},content:[{type:"thinking",thinking:"opaque",signature:"signed"},{type:"tool_use",id:"stream-submit",name:"submit_takeoff",input:{job,summary:"Recovered",questions:[]}}]};
+      },
+    })}};
+    const streamedRun=await makeRun(state());await executeClaimedRun(streamedRun,{client:streamed,leaseOwner:owner});
+    const [streamDone]=await db.select().from(takeoffRuns).where(eq(takeoffRuns.id,streamedRun.id));
+    assert.equal(streamDone.status,"needs_review");assert.equal(streamCalls,2);
+    assert.equal(streamRequests[0],streamRequests[1]);assert.equal(streamDone.state.steps,1);
+    assert.equal(streamDone.state.costEvents!.filter(e=>e.uncertain).length,1);
+    assert.equal(streamDone.state.costEvents!.filter(e=>!e.uncertain)[0].usage!.output,500);
+    let failures=0;
+    const alwaysOverloaded:any={messages:{countTokens:async()=>({input_tokens:100}),stream:()=>({
+      on:()=>{},abort:()=>{},finalMessage:async()=>{failures++;throw Object.assign(new Error("overloaded"),{status:529,error:{type:"overloaded_error",message:"Overloaded"}});},
+    })}};
+    const failedStreaming=await makeRun(state());await executeClaimedRun(failedStreaming,{client:alwaysOverloaded,leaseOwner:owner});
+    const [exhausted]=await db.select().from(takeoffRuns).where(eq(takeoffRuns.id,failedStreaming.id));
+    assert.equal(failures,4);assert.equal(exhausted.status,"failed");assert.equal(exhausted.state.steps,0);
+    assert.equal(exhausted.state.costEvents!.filter(e=>e.uncertain).length,4);
+    assert.equal(exhausted.state.messages.filter((m:any)=>m.role==="assistant").length,0);
     const [rev]=await db.select().from(estimateRevisions).where(eq(estimateRevisions.id,done.revisionId!));assert.equal(rev.summary.sell,200);
     // Recovery replays persisted tools, not the paid model request.
     const recovery=state();recovery.messages=[{role:"assistant",content:[{type:"tool_use",id:"recovered",name:"submit_takeoff",input:{job,summary:"Recovered",questions:[]}}]}];

@@ -4,7 +4,7 @@ import { aiSettingsSchema } from "@shared/estimating/takeoff";
 import type { PublicRun } from "@/hooks/use-takeoff";
 import { ClaudeTakeoff, RunProgress, TakeoffReview } from "./ClaudeTakeoff";
 import TakeoffPlaybook from "./TakeoffPlaybook";
-import EstimatingAISettings from "./EstimatingAISettings";
+import EstimatingAISettings, { RunFacts } from "./EstimatingAISettings";
 import { estimateTakeoffUsage } from "./takeoff-helpers";
 
 const mocks = vi.hoisted(() => ({
@@ -30,6 +30,17 @@ vi.mock("./TakeoffWizard", () => ({ TakeoffWizard: ({ onStarted, onClose }: { on
 function run(patch: Partial<PublicRun> = {}): PublicRun {
   return { id: 9, opportunityId: 3, revisionId: 21, status: "needs_review", createdBy: "estimator-4", createdAt: "2026-06-01T09:12:00Z", startedAt: "2026-06-01T09:12:00Z", finishedAt: "2026-06-01T09:14:36Z", model: "claude-opus-5-5", cost: 1.37, steps: 23, budget: 8, stepLimit: 120, usage: { input: 24000, output: 13200, cacheRead: 1500, cacheWrite: 1500 }, progress: [{ at: "2026-06-01T09:14:36Z", message: "Takeoff ready" }], documents: [], instructions: "", trades: [], playbookVersion: 2, summary: "Review temporary shoring quantities.", questions: ["Confirm the shoring toe elevation."], flags: [{ type: "quantity", lineId: "line-7", categoryId: "cat-2", flag: "Verify", description: "Toe elevation is missing." }], error: null, ...patch };
 }
+it("shows confirmed and uncertain cost separately with per-step tokens and legacy gaps",()=>{
+  render(<RunFacts run={run({confirmedCost:.25,uncertainCost:1,cost:1.25,costEvents:[
+    {at:"2026-06-01",step:1,amount:.25,usage:{input:10,output:20,cacheRead:30,cacheWrite:40}},
+    {at:"2026-06-01",step:2,amount:1,uncertain:true},
+    {at:"2026-06-01",step:3,amount:.1},
+  ]})}/>);
+  expect(screen.getByText("Confirmed $0.25 · Uncertain (interrupted requests) $1.00")).toBeInTheDocument();
+  expect(screen.getByText("Input 10 · Cache write 40 · Cache read 30 · Output 20")).toBeInTheDocument();
+  expect(screen.getByText("No final usage received.")).toBeInTheDocument();
+  expect(screen.getByText(/Per-step token breakdown was not recorded/)).toBeInTheDocument();
+});
 beforeEach(() => {
   mocks.canEstimate = true; mocks.isAdmin = true; mocks.runs = []; mocks.playbook = { versions: [], rules: [] };
   mocks.mutate.mockReset(); mocks.save.mockReset(); mocks.ruleSave.mockReset(); mocks.settingsSave.mockReset();

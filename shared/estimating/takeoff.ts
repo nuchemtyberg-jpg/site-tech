@@ -80,8 +80,9 @@ export interface TakeoffState {
   reviewedAt?: string;
   retryAt?: string;
   retries?: number;
+  networkRetries?: number;
   pendingCall?: { reservation: number; startedAt: string };
-  costEvents?: { at: string; amount: number; uncertain?: boolean }[];
+  costEvents?: { at: string; amount: number; uncertain?: boolean; step?:number; usage?:TokenUsage; durationMs?:number }[];
   capSubmission?: boolean;
 }
 export function usageCost(usage: TokenUsage, price: AISettings["prices"][typeof AI_MODELS[number]]) {

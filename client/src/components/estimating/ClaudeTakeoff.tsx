@@ -56,6 +56,7 @@ export function RunProgress({ run, opportunityId, dirty, selected, onOpenRevisio
   };
   return <article className="ai-panel ai-stack">
     <div className="ai-row"><strong className="mr-auto">Run #{run.id} · {runStatusLabel(run.status)}</strong><span className="ai-stat text-xs">{usd(run.cost)} / {usd(run.budget)} · {run.steps} / {run.stepLimit} steps · {elapsedRun(run)}</span></div>
+    <p className="text-xs ai-stat">Confirmed {usd(run.confirmedCost??run.cost)} · Uncertain (interrupted requests) {usd(run.uncertainCost??0)}</p>
     <p role={live ? "status" : undefined}>{run.progress[run.progress.length - 1]?.message || (run.status === "queued" ? "Waiting to start…" : runStatusLabel(run.status))}</p>
     {run.error && <p className="ai-error" role="alert">{run.error}</p>}{error && <p className="ai-error" role="alert">{error}</p>}
     <div className="ai-row">

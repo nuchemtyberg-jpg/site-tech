@@ -10,6 +10,8 @@ import { finishRun, progress, type Run } from "./service";
 import { addCheckpointTurn, freshCheckpointConversation, hydrateSheetIndexes, prepareContext, safeModelLimits } from "./context";
 import { ensureRateSnapshot } from "./rate-snapshot";
 import { observedAnthropicCall, RecordedAnthropicError } from "./anthropic-errors";
+import { streamGeneration,GENERATION_TIMEOUT_MS,transientGenerationError } from "./streaming";
+import { setTimeout as delay } from "node:timers/promises";
 import { preparationTick, preparedDocument, getPreparation } from "./preparation";
 import { installTakeoffProcessDiagnostics } from "./diagnostics";
 
@@ -87,7 +89,7 @@ export async function executeClaimedRun(run:Run, dependencies?: { client: Pick<A
       delete state.pendingCall;
       await save(state);
     }
-    const client=dependencies?.client || new Anthropic({apiKey:process.env.ANTHROPIC_API_KEY,maxRetries:0,timeout:120000});
+    const client=dependencies?.client || new Anthropic({apiKey:process.env.ANTHROPIC_API_KEY,maxRetries:0,timeout:GENERATION_TIMEOUT_MS});
     let modelLimits: ReturnType<typeof safeModelLimits> | undefined;
     const stableSystem=takeoffSystem(state);
     /* Stable instructions are shared with the count-only diagnostic. */
@@ -161,33 +163,49 @@ export async function executeClaimedRun(run:Run, dependencies?: { client: Pick<A
       progress(state,`Claude is working (step ${state.steps+1}${lastChance?", final submission requested":""}).`);
       await save(state);
       let response;
+      const generationRequest={model:state.settings.model,system,tools,messages,max_tokens:maxTokens,
+        ...(lastChance?{tool_choice:{type:"tool" as const,name:"submit_takeoff"}}:{})};
+      const generationStarted=Date.now();
+      while(true) {
       try {
-        response=await observedAnthropicCall("messages.create",state,run.id,save,()=>client.messages.create({model:state.settings.model,system,tools,messages,max_tokens:maxTokens,
-          ...(lastChance?{tool_choice:{type:"tool" as const,name:"submit_takeoff"}}:{})},{signal:abort.signal}));
+        response=await observedAnthropicCall("messages.create",state,run.id,save,()=>
+          dependencies&&!client.messages.stream
+            ? client.messages.create(generationRequest,{signal:abort.signal})
+            : streamGeneration(client as Anthropic,generationRequest,abort.signal,async phase=>{
+                progress(state,`${phase} (step ${state.steps+1})`);await save(state);
+              }));
+        break;
       } catch(error:any) {
-        if([429,529,503].includes(error?.status)) {
-          delete state.pendingCall;state.retries=(state.retries||0)+1;
-          if(state.retries>6) throw new Error("Anthropic remains rate-limited/unavailable after retries. Try again later.");
-          state.retryAt=new Date(Date.now()+Math.min(120000,2000*2**state.retries)).toISOString();
-          progress(state,"Anthropic rate limited or temporarily unavailable; retry scheduled with backoff.");
-          await db.update(takeoffRuns).set({state,status:"queued",leaseOwner:null,leaseUntil:null,updatedAt:new Date()})
-            .where(and(eq(takeoffRuns.id,run.id),eq(takeoffRuns.leaseOwner,owner)));
-          return;
-        }
         // Known rejected requests have no response usage. Ambiguous transport
         // failures/cancellation may have incurred cost and keep the reservation.
-        if(!error?.status || error.status>=500) recordCost(state,reservation,true);
+        if(!error?.status || error.status>=500) {
+          recordCost(state,reservation,true);
+          Object.assign(state.costEvents!.at(-1)!,{step:state.steps+1,durationMs:Date.now()-Date.parse(state.pendingCall!.startedAt)});
+        }
         delete state.pendingCall;
+        await save(state);
+        if(!abort.signal.aborted&&transientGenerationError(error)&&(state.networkRetries||0)<3) {
+          state.networkRetries=(state.networkRetries||0)+1;
+          if(state.budget-state.cost<reservation) {capPartial(state);await finishRun(run,state,"stopped_at_cap",owner);return;}
+          progress(state,`Transient generation failure; retry ${state.networkRetries}/3 of the same step after backoff. Interrupted-request reservation retained separately.`);
+          await save(state);
+          await delay(2000*2**(state.networkRetries-1),undefined,{signal:abort.signal});
+          state.pendingCall={reservation,startedAt:new Date().toISOString()};await save(state);
+          continue;
+        }
         if(error instanceof RecordedAnthropicError) throw error;
         throw new Error(error?.status===401?"Anthropic rejected the API key. Update ANTHROPIC_API_KEY.":
           error?.status===400?"Anthropic rejected the request (model/context/tool limit). Review the document selection.":
           `Anthropic request failed${error?.status?` (HTTP ${error.status})`:" or was interrupted"}; uncertain charges are reserved conservatively.`);
       }
+      }
       delete state.pendingCall;delete state.retryAt;state.retries=0;
+      delete state.networkRetries;
       const usage={input:response.usage.input_tokens,output:response.usage.output_tokens,
         cacheRead:response.usage.cache_read_input_tokens||0,cacheWrite:response.usage.cache_creation_input_tokens||0};
       for(const k of Object.keys(usage) as (keyof typeof usage)[]) state.usage[k]+=usage[k];
       recordCost(state,usageCost(usage,price));state.steps++;
+      Object.assign(state.costEvents!.at(-1)!,{step:state.steps,usage,durationMs:Date.now()-generationStarted});
       state.messages.push({role:"assistant",content:response.content});
       progress(state,`Step ${state.steps} received; cost $${state.cost.toFixed(2)}.`);
       await save(state);
@@ -195,7 +213,9 @@ export async function executeClaimedRun(run:Run, dependencies?: { client: Pick<A
     await finishRun(run,state,"cancelled",owner);
   } catch(error) {
     const status=(error as any)?.status;
-    if(!abort.signal.aborted && [429,529,503].includes(status) && !state.pendingCall && (state.retries||0)<6) {
+    if(!abort.signal.aborted && error instanceof RecordedAnthropicError &&
+      error.details.operation!=="messages.create" && transientGenerationError(error) &&
+      !state.pendingCall && (state.retries||0)<3) {
       state.retries=(state.retries||0)+1;
       state.retryAt=new Date(Date.now()+Math.min(120000,2000*2**state.retries)).toISOString();
       progress(state,"Anthropic context preparation temporarily unavailable; retry scheduled with backoff.");

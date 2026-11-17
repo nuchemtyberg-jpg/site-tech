@@ -55,5 +55,24 @@ function SettingsWorkspace() {
   </div>;
 }
 export function RunFacts({ run }: { run: PublicRun }) {
+  return <div className="ai-stack"><RunCosts run={run}/><RunActivity run={run}/></div>;
+}
+function RunCosts({run}:{run:PublicRun}) {
+  let completed=0;
+  return <section className="text-xs ai-stack" aria-label="Per-step costs">
+    <p>Confirmed {usd(run.confirmedCost??run.cost)} · Uncertain (interrupted requests) {usd(run.uncertainCost??0)}</p>
+    <p className="ai-muted">Uncertain amounts are conservative reservations, not confirmed charges. Both count toward the approved cap.</p>
+    <ol className="space-y-2">{(run.costEvents||[]).map((event,index)=>{
+      if(!event.uncertain)completed++;
+      return <li key={index} className="border rounded p-2">
+        <strong>Step {event.step??(event.uncertain?completed+1:completed)} · {event.uncertain?"Uncertain reservation":"Confirmed"} ${event.amount.toFixed(6)}</strong>
+        {event.durationMs!==undefined&&<span> · {(event.durationMs/1000).toFixed(1)}s</span>}
+        {event.usage?<p>Input {event.usage.input.toLocaleString()} · Cache write {event.usage.cacheWrite.toLocaleString()} · Cache read {event.usage.cacheRead.toLocaleString()} · Output {event.usage.output.toLocaleString()}</p>
+          :<p className="ai-muted">{event.uncertain?"No final usage received.":"Per-step token breakdown was not recorded for this older response."}</p>}
+      </li>;
+    })}</ol>
+  </section>;
+}
+function RunActivity({ run }: { run: PublicRun }) {
   return <div className="ai-stack text-xs"><p className="ai-muted">{run.model} · playbook {run.playbookVersion} · revision {run.revisionId ?? "not created"} · budget {usd(run.budget)} · step limit {run.stepLimit}</p><p>{run.documents.map(d => `${d.name} (${d.pages.length} pages)`).join("; ") || "No documents"}</p><p className="ai-muted">Trades: {run.trades.join(", ") || "All applicable trades"} · Tokens: {run.usage.input.toLocaleString()} input / {run.usage.output.toLocaleString()} output / {run.usage.cacheRead.toLocaleString()} cache read / {run.usage.cacheWrite.toLocaleString()} cache write</p>{run.instructions && <p className="ai-prose">Instructions: {run.instructions}</p>}{run.error && <p role="alert" className="ai-error">{run.error}</p>}<ol className="space-y-1">{run.progress.map((p, index) => <li key={index}><time className="ai-muted mr-2">{new Date(p.at).toLocaleTimeString()}</time>{p.message}</li>)}</ol></div>;
 }
