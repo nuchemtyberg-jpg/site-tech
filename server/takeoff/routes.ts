@@ -70,7 +70,7 @@ export function registerTakeoffRoutes(app:Express) {
   const root="/api/opportunities/:opportunityId/takeoff";
   app.use(root,takeoffRequestDiagnostics);
   app.get(`${root}/config`,...guard,wrap(async(_req,res)=>{
-    const {settings}=await getAISettings();res.json({model:settings.model,maxCost:settings.maxCost,maxSteps:settings.maxSteps,estimatedInputPerPage:3000,prices:settings.prices[settings.model]});
+    const {settings}=await getAISettings();res.json({model:settings.model,mode:settings.mode,maxCost:settings.maxCost,maxSteps:settings.maxSteps,estimatedInputPerPage:3000,prices:settings.prices[settings.model]});
   }));
   app.get(`${root}/documents`,...guard,wrap(async(req,res)=>{
     res.json((await opportunityDocuments(id(req.params.opportunityId))).map(f=>({id:f.id,name:f.name,contentType:f.contentType,source:f.source})));

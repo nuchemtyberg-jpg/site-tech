@@ -7,6 +7,8 @@ export function estimateTakeoffUsage(pages: number, config: TakeoffConfig) {
   const inputTokens = pages * config.estimatedInputPerPage + 12000;
   if (!config.prices) return { inputTokens, low: null, high: null };
   const { input, output, cacheRead, cacheWrite } = config.prices;
+  // Single-call mode: one request with the documents, 8K-40K output tokens incl. thinking.
+  if (config.mode === "single") return { inputTokens, low: (inputTokens * input + 8000 * output) / 1_000_000, high: (inputTokens * input + 40000 * output) / 1_000_000 };
   // Include repeated cached context, fresh tool input and substantial output on
   // every step. Do not truncate this planning range to the user's spending cap.
   const scenario = (steps: number, prompt: number, fresh: number, out: number) =>

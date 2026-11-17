@@ -2,6 +2,9 @@ import { z } from "zod";
 import type { EstimateJob, EstimateRates } from "./model";
 
 export const AI_MODELS = ["claude-opus-5-5", "claude-sonnet-5-5"] as const;
+/** agent = multi-step tool loop; single = one request with the documents attached. */
+export const TAKEOFF_MODES = ["agent", "single"] as const;
+export const SINGLE_EFFORTS = ["low", "medium", "high"] as const;
 export const TRADES = ["SOE", "Structural Piles", "Excavation", "Site work"] as const;
 const prices = z.object({
   input: z.number().positive(), output: z.number().positive(),
@@ -10,6 +13,8 @@ const prices = z.object({
 });
 export const aiSettingsSchema = z.object({
   model: z.enum(AI_MODELS).default("claude-opus-5-5"),
+  mode: z.enum(TAKEOFF_MODES).default("agent"),
+  singleEffort: z.enum(SINGLE_EFFORTS).default("high"),
   maxCost: z.number().min(0.1).max(10000).default(25),
   maxSteps: z.number().int().min(1).max(1000).default(150),
   prices: z.object({
