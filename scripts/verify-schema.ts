@@ -9,6 +9,7 @@ const requiredTables = [
   "takeoff_runs",
   "estimate_revisions",
   "estimating_company_rates",
+  "estimating_rate_history",
   "project_contracts",
   "project_contacts",
   "opportunities",

@@ -16,7 +16,11 @@ export function useEstimatingRates() {
 }
 export function useSaveEstimatingRates() {
   const qc = useQueryClient();
-  return useMutation({ mutationFn: (data: { rates: EstimateRates; version: number }) => request("/api/estimating-rates", "PUT", data), onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/estimating-rates"] }) });
+  return useMutation({ mutationFn: (data: { rates: EstimateRates; version: number }) => request<{ rates: EstimateRates; version: number }>("/api/estimating-rates", "PUT", data), onSuccess: result => {
+    qc.setQueryData(["/api/estimating-rates"], result);
+    void qc.invalidateQueries({ queryKey: ["/api/estimating-rates"] });
+    void qc.invalidateQueries({ queryKey: ["/api/estimating-rates/history"] });
+  } });
 }
 export function useEstimateRevisions(opportunityId: number) {
   return useQuery({ queryKey: [root(opportunityId)], queryFn: () => request<Omit<EstimateRevision, "job">[]>(root(opportunityId)) });

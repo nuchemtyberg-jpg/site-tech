@@ -8,6 +8,7 @@ import { storage } from "./storage";
 import { isAuthenticated } from "./replit_integrations/auth";
 import { isAuthorizedUser } from "./middleware/auth";
 import { EstimateError, getCompanyRates, saveCompanyRates, saveRevision } from "./services/estimating";
+import { previewRateImport, applyRateImport, rateHistory } from "./services/rate-import";
 
 export function registerEstimatingRoutes(app: Express) {
   const permitted: RequestHandler = async (req, res, next) => {
@@ -31,6 +32,10 @@ export function registerEstimatingRoutes(app: Express) {
     if (!o) throw new EstimateError(404, "Opportunity not found");
   };
   app.get("/api/estimating-rates", ...guard, wrap(async (_req, res) => { res.json(await getCompanyRates()); }));
+  app.post("/api/estimating-rates/preview", ...guard, wrap(async (req, res) => { res.json(await previewRateImport(req.body, userId(req))); }));
+  app.post("/api/estimating-rates/apply", ...guard, wrap(async (req, res) => { res.json(await applyRateImport(req.body, userId(req))); }));
+  app.get("/api/estimating-rates/history", ...guard, wrap(async (_req, res) => { res.json(await rateHistory()); }));
+  app.get("/api/estimating-rates/history/:id", ...guard, wrap(async (req, res) => { res.json(await rateHistory(id(req.params.id))); }));
   app.put("/api/estimating-rates", ...guard, wrap(async (req, res) => {
     const body = z.object({ rates: z.unknown(), version: z.number().int().nonnegative() }).parse(req.body);
     res.json(await saveCompanyRates(body.rates, body.version, userId(req)));

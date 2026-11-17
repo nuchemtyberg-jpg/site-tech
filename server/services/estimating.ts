@@ -1,6 +1,6 @@
 import { and, desc, eq, isNull } from "drizzle-orm";
 import { db } from "../db";
-import { opportunities, estimateRevisions, estimatingCompanyRates, customers } from "@shared/schema";
+import { opportunities, estimateRevisions, estimatingCompanyRates, estimatingRateHistory, customers } from "@shared/schema";
 import { computeJob, summarize } from "@shared/estimating/engine";
 import { emptyJob, jobSchema, ratesSchema, importTakeoff, type EstimateJob } from "@shared/estimating/model";
 
@@ -9,7 +9,7 @@ export class EstimateError extends Error {
 }
 export async function getCompanyRates() {
   const [row] = await db.select().from(estimatingCompanyRates).where(eq(estimatingCompanyRates.id, 1));
-  return row ? { rates: row.rates, version: row.version } : { rates: ratesSchema.parse({}), version: 0 };
+  return row ? { rates: ratesSchema.parse(row.rates), version: row.version } : { rates: ratesSchema.parse({}), version: 0 };
 }
 export function validateCalculation(job: EstimateJob, allowFormulaErrors = true) {
   const result = computeJob(job);
@@ -22,19 +22,24 @@ export function validateCalculation(job: EstimateJob, allowFormulaErrors = true)
   if (Math.abs(Math.round(result.total.sell)) > 2147483647) throw new EstimateError(422, "Total is outside the supported Opportunity Expected Value range.");
   return summarize(job, result);
 }
-export async function saveCompanyRates(raw: unknown, version: number, userId: string) {
+export async function saveCompanyRates(raw: unknown, version: number, userId: string, source = "Manual edit") {
   const rates = ratesSchema.parse(raw);
   const validationJob = jobSchema.parse({ ...emptyJob(), ...rates });
   validateCalculation(validationJob, false);
-  if (version === 0) {
-    const [created] = await db.insert(estimatingCompanyRates).values({ id: 1, rates, savedBy: userId }).onConflictDoNothing().returning();
-    if (created) return { rates: created.rates, version: created.version };
-  } else {
-    const [updated] = await db.update(estimatingCompanyRates).set({ rates, version: version + 1, savedBy: userId, savedAt: new Date() })
-      .where(and(eq(estimatingCompanyRates.id, 1), eq(estimatingCompanyRates.version, version))).returning();
-    if (updated) return { rates: updated.rates, version: updated.version };
-  }
-  throw new EstimateError(409, "Company rates were changed by someone else. Reload before saving.", { current: await getCompanyRates() });
+  return db.transaction(async tx => {
+    const [previous] = await tx.select().from(estimatingCompanyRates).where(eq(estimatingCompanyRates.id, 1)).for("update");
+    if ((previous?.version ?? 0) !== version) throw new EstimateError(409, "Company rates were changed by someone else. Reload and preview again.");
+    const [saved] = previous
+      ? await tx.update(estimatingCompanyRates).set({ rates, version: version + 1, savedBy: userId, savedAt: new Date() })
+        .where(and(eq(estimatingCompanyRates.id, 1), eq(estimatingCompanyRates.version, version))).returning()
+      : await tx.insert(estimatingCompanyRates).values({ id: 1, rates, savedBy: userId }).onConflictDoNothing().returning();
+    if (!saved) throw new EstimateError(409, "Company rates were changed by someone else. Reload and preview again.");
+    if (previous) await tx.insert(estimatingRateHistory).values({
+      version: previous.version, rates: previous.rates, savedBy: previous.savedBy, savedAt: previous.savedAt, source: "Existing company rates",
+    }).onConflictDoNothing();
+    await tx.insert(estimatingRateHistory).values({ version: saved.version, rates: saved.rates, savedBy: userId, savedAt: saved.savedAt, source });
+    return { rates: saved.rates, version: saved.version };
+  });
 }
 
 export async function saveRevision(opportunityId: number, userId: string, input: { start?: boolean; importFile?: unknown; job?: unknown; name?: string; version?: number }, revisionId?: number) {

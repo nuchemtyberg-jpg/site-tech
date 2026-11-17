@@ -7,7 +7,7 @@ import fs from "node:fs";
 import assert from "node:assert/strict";
 import { and, eq, sql } from "drizzle-orm";
 import { db, pool } from "../server/db";
-import { customers, opportunities, estimateRevisions, estimatingCompanyRates } from "../shared/schema";
+import { customers, opportunities, estimateRevisions, estimatingCompanyRates, estimatingRateHistory } from "../shared/schema";
 import { lockEstimateRevision } from "../server/services/estimating";
 import { emptyJob, newCategory, newLine } from "../shared/estimating/model";
 
@@ -54,6 +54,8 @@ async function main() {
       const status = who ? 403 : 401;
       for (const [path, method, body] of [
         ["/api/estimating-rates", "GET", undefined], ["/api/estimating-rates", "PUT", {}],
+        ["/api/estimating-rates/preview", "POST", {}], ["/api/estimating-rates/apply", "POST", {}],
+        ["/api/estimating-rates/history", "GET", undefined], ["/api/estimating-rates/history/1", "GET", undefined],
         [root, "GET", undefined], [root, "POST", { start: true }],
         [`${root}/1`, "GET", undefined], [`${root}/1`, "PUT", {}],
         ["/api/takeoff-playbook", "GET", undefined], ["/api/takeoff-playbook", "POST", {}],
@@ -78,6 +80,39 @@ async function main() {
     const modified = structuredClone(company.rates); modified.defaults.profit = "99";
     const ratesUpdate = await request(estimator, "/api/estimating-rates", "PUT", { rates: modified, version: company.version });
     assert.equal(ratesUpdate.status, 200);
+    const history = await request(estimator, "/api/estimating-rates/history");
+    assert.equal(history.status, 200);
+    assert.equal(history.body[0].version, ratesUpdate.body.version);
+    assert.equal(history.body[0].savedBy, estimator.id);
+    const detail = await request(manager, `/api/estimating-rates/history/${history.body[0].id}`);
+    assert.deepEqual(detail.body.rates, ratesUpdate.body.rates);
+    const input = { source: "estimate", rates: company.rates, replaceDefaultMarkups: false };
+    const preview = await request(estimator, "/api/estimating-rates/preview", "POST", input);
+    assert.equal(preview.status, 200);
+    // Even an empty company table can preview its markups explicitly.
+    const confirmInput = { ...input, replaceDefaultMarkups: true };
+    const ready = (await request(estimator, "/api/estimating-rates/preview", "POST", confirmInput)).body;
+    assert.deepEqual(ready.errors, []); assert.ok(ready.token);
+    const unchangedBeforeConfirm = (await request(estimator, "/api/estimating-rates")).body;
+    assert.equal(unchangedBeforeConfirm.version, ratesUpdate.body.version);
+    assert.equal((await request(manager, "/api/estimating-rates/apply", "POST", { token: ready.token })).status, 403);
+    assert.equal((await request(estimator, "/api/estimating-rates/apply", "POST", { token: `${ready.token}x` })).status, 400);
+    const applied = await request(estimator, "/api/estimating-rates/apply", "POST", { token: ready.token });
+    assert.equal(applied.status, 200);
+    assert.deepEqual(applied.body.rates.defaults, company.rates.defaults);
+    assert.equal((await request(estimator, "/api/estimating-rates/apply", "POST", { token: ready.token })).status, 409);
+    const csv = "Category,Key,Description,Unit,Price,Source / notes\nStone,test_rate_for_import,Test,TON,,No quote\n";
+    const spreadsheet = (await request(admin, "/api/estimating-rates/preview", "POST", {
+      source: "spreadsheet", files: [{ name: "materials.csv", tab: "Materials", data: Buffer.from(csv).toString("base64") }],
+    })).body;
+    assert.deepEqual(spreadsheet.errors, []);
+    assert.ok(spreadsheet.warnings.some((s: string) => s.includes("no price")));
+    const importResult = await request(admin, "/api/estimating-rates/apply", "POST", { token: spreadsheet.token });
+    assert.equal(importResult.status, 200); lastCompanyWriter = admin.id;
+    assert.ok(importResult.body.rates.rates.some((r: any) => r.key === "test_rate_for_import" && r.value === "" && r.category === "Stone"));
+    const stale = await request(estimator, "/api/estimating-rates/apply", "POST", { token: ready.token });
+    assert.equal(stale.status, 409);
+    console.log("PASS rate preview cancellation, confirmation, history, owner binding, stale and tampered previews");
     const snapshot = (await request(admin, `${root}/${start.body.id}`)).body;
     assert.deepEqual(snapshot.job.defaults, company.rates.defaults);
     console.log("PASS company rates writable by three roles, conflicts detected, old snapshots preserved");
@@ -140,6 +175,7 @@ async function main() {
       if (originalCompany) await db.update(estimatingCompanyRates).set(originalCompany).where(owned);
       else await db.delete(estimatingCompanyRates).where(owned);
     }
+    for (const id of ids) await db.delete(estimatingRateHistory).where(eq(estimatingRateHistory.savedBy, id));
     for (const sid of sessions) await db.execute(sql`DELETE FROM sessions WHERE sid=${sid}`);
     for (const id of ids) await db.execute(sql`DELETE FROM users WHERE id=${id}`);
     await pool.end();

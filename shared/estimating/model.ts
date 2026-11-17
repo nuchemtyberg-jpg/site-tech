@@ -31,10 +31,11 @@ export const lineSchema = z.object({
 });
 export const categorySchema = z.object({ id, name: str, ...markupShape, excluded: z.boolean().default(false), items: z.array(lineSchema).max(2000).default([]) });
 export const ratesSchema = z.object({
-  rates: z.array(z.object({ id, key: z.string().max(100).default(""), desc: str, unit: str, value: expr })).max(1000).default([]),
-  laborRates: z.array(z.object({ id, name: str, hr: expr, day: expr })).max(1000).default([]),
-  equipRates: z.array(z.object({ id, name: str, hr: expr, day: expr, wk: expr, mo: expr })).max(1000).default([]),
+  rates: z.array(z.object({ id, key: z.string().max(100).default(""), desc: str, unit: str, value: expr, category: z.string().max(200).optional(), notes: z.string().max(10000).optional() })).max(1000).default([]),
+  laborRates: z.array(z.object({ id, name: str, hr: expr, day: expr, notes: z.string().max(10000).optional() })).max(1000).default([]),
+  equipRates: z.array(z.object({ id, name: str, hr: expr, day: expr, wk: expr, mo: expr, notes: z.string().max(10000).optional() })).max(1000).default([]),
   defaults: defaultsSchema,
+  markupNotes: z.object({ tax: str, oh: str, ins: str, profit: str }).optional(),
 });
 export const jobSchema = ratesSchema.extend({
   name: str, number: str, client: str, location: str, bidDate: str, preparedBy: str,

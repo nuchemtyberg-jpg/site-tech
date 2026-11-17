@@ -99,12 +99,51 @@ Cover view/CSV omit excluded categories and lines and renumber included work.
 Detailed CSV retains every line, costs, markups and inclusion status. CSV cells
 are quoted and text is protected against spreadsheet formula injection.
 
+## Company rates: categories, imports and sharing
+Named material rates accept optional `category` and `notes` metadata in both company
+and estimate-local snapshots. Missing metadata is treated as empty for legacy jobs.
+Labor/equipment `notes` and `markupNotes` (tax/oh/ins/profit) retain spreadsheet provenance.
+These fields have no effect on pricing. The editors group materials alphabetically,
+with Uncategorized last, and support category filtering and text search.
+
+Admins, managers and estimators can import an XLSX workbook (named Materials,
+Labor, Equipment, Markups tabs) or up to four CSVs assigned to those tab types.
+The upload dialog lists exact headers. Limits: 10 MB combined input, 40 MB inflated
+XLSX XML, 1,000 data rows per tab, 30 columns. Spreadsheet formula cells require a
+cached value; they are never executed. Text expressions such as `dga_ton*1.9` are
+stored unchanged. Blank material prices are retained and warned about, not rejected.
+Recognized construction units and custom units already in company rates are allowed;
+unrecognized new units require correction. No unit conversion is inferred.
+
+Preview is read-only and shows row counts, before/after values, source-row diagnostics,
+duplicates, unknown units, missing prices and formula errors. Formula validation uses
+the complete merged table, including existing dependencies. Matching uses
+case-insensitive material keys (consistent with the engine) and type names. Estimate
+sharing matches labor/equipment IDs first, then names. Existing target IDs remain
+stable; unmatched company rows remain. New ID collisions receive fresh IDs.
+
+Save as company rates shares the current local rate draft without saving or
+changing an estimate revision; replacing default markups/notes requires explicit
+opt-in. Company-page spreadsheet import is blocked while local edits are unsaved.
+
+Confirmation tokens bind the exact preview, company version, source and initiating
+user for 30 minutes. Applying revalidates and uses an optimistic transaction;
+stale or replayed previews require a fresh preview. Cancel has no writes.
+Manual saves and confirmed imports atomically append `estimating_rate_history`
+snapshots with source, author, date and version. The first change retains the
+previous company version as the baseline; earlier history cannot be reconstructed.
+The page lists the latest 100 entries with read-only snapshot viewing.
+All preview/apply/history endpoints enforce the same estimating role guard.
+
 ## Verification
 - `npx tsx --test scripts/test-estimating-engine.ts`
 - `npx tsx scripts/test-estimating-api.ts` (development only, temporary fixtures)
 - `npm run test:client`
+- `npx tsx --test scripts/test-rate-import.ts`
+- `npx tsx scripts/test-rate-browser.ts` (development only; self-cleaning company-rate fixtures)
 - `scripts/verify-schema.ts` verifies the added tables and provenance column.
 
-The estimating endpoints accept bounded 5 MB JSON requests; unrelated endpoints
+The estimating endpoints accept bounded 5 MB JSON requests (spreadsheet preview
+15 MB for base64 uploads, confirmation 6 MB); unrelated endpoints
 retain their existing request limits. Estimate payloads are not printed to the
 standard request log. Existing schema synchronization includes the new tables.

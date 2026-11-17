@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { TakeoffEditor } from "./TakeoffEditor";
 import { RatesEditor } from "./RatesEditor";
+import { RateImportDialog } from "./RateImportDialog";
 import { EstimateCover } from "./EstimateCover";
 import { downloadCsv } from "./exports";
 import { discardEstimate, useUnsavedEstimate } from "./use-unsaved-estimate";
@@ -24,6 +25,7 @@ export function EstimateTab({ opportunityId, onDirtyChange }: { opportunityId: n
   const [nameOpen, setNameOpen] = useState(false);
   const [name, setName] = useState("");
   const [refreshOpen, setRefreshOpen] = useState(false);
+  const [shareRates, setShareRates] = useState<EstimateRates>();
   const [focus, setFocus] = useState<TakeoffFocus>();
   const file = useRef<HTMLInputElement>(null);
   const submitted = useRef<string>();
@@ -91,11 +93,12 @@ export function EstimateTab({ opportunityId, onDirtyChange }: { opportunityId: n
       <nav className="estimate-toolbar" aria-label="Estimate views">{[["takeoff", "Takeoff & costs"], ["cover", "Cover sheet"], ["rates", "Estimate-local rates"]].map(([key, title]) => <Button key={key} size="sm" variant={view === key ? "default" : "ghost"} aria-pressed={view === key} onClick={() => setView(key)}>{title}</Button>)}<div className="ml-auto flex flex-wrap gap-2"><Button size="sm" variant="outline" onClick={() => downloadCsv(job)}>Cover CSV</Button><Button size="sm" variant="outline" onClick={() => downloadCsv(job, true)}>Detail CSV</Button></div></nav>
       {view === "takeoff" && <TakeoffEditor key={base.id} job={job} onChange={setJob} focusLineId={focus?.lineId} focusCategoryId={focus?.categoryId} focusSignal={focus?.signal} />}
       {view === "cover" && <EstimateCover job={job} computed={calculated} />}
-      {view === "rates" && <div className="space-y-3"><div className="estimate-toolbar"><p className="text-xs text-muted-foreground flex-1">These rates belong to this draft only. Company changes do not alter saved estimates.</p><Button size="sm" variant="outline" onClick={() => setRefreshOpen(true)}>Refresh company rates</Button></div><RatesEditor rates={job} onChange={rates => setJob({ ...job, ...rates })} /></div>}
+      {view === "rates" && <div className="space-y-3"><div className="estimate-toolbar"><p className="text-xs text-muted-foreground flex-1">These rates belong to this draft only. Company changes do not alter saved estimates.</p><Button size="sm" variant="outline" onClick={() => setRefreshOpen(true)}>Refresh company rates</Button><Button size="sm" variant="outline" onClick={() => setShareRates(structuredClone({ rates: job.rates, laborRates: job.laborRates, equipRates: job.equipRates, defaults: job.defaults, markupNotes: job.markupNotes }))}>Save as company rates</Button></div><RatesEditor rates={job} onChange={rates => setJob({ ...job, ...rates })} /></div>}
     </>}
     <Dialog open={nameOpen} onOpenChange={setNameOpen}><DialogContent><DialogHeader><DialogTitle>Save as new revision</DialogTitle><DialogDescription>The current saved revision stays unchanged. This draft becomes the newest revision.</DialogDescription></DialogHeader><label className="space-y-2 text-sm">Revision name<input autoFocus className="block w-full border rounded p-2 bg-background" value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Updated excavation pricing" maxLength={160} /></label><DialogFooter><Button variant="outline" onClick={() => setNameOpen(false)}>Cancel</Button><Button disabled={save.isPending || !job} onClick={() => { if (job && confirmFormulaSave()) { submitted.current = JSON.stringify(job); save.mutate({ job, name: name.trim() }, { onSuccess: accept, onError: failed }); } }}>Save new revision</Button></DialogFooter></DialogContent></Dialog>
     <Dialog open={!!conflict} onOpenChange={open => { if (!open) setConflict(undefined); }}><DialogContent><DialogHeader><DialogTitle>Revision changed elsewhere</DialogTitle><DialogDescription>Your draft is safe. Load the current saved revision (discarding your edits), or preserve your draft as a new revision.</DialogDescription></DialogHeader><DialogFooter><Button variant="outline" onClick={() => { if (conflict && discardEstimate()) accept(conflict); }}>Load current</Button><Button disabled={save.isPending} onClick={() => { setConflict(undefined); setName(""); setNameOpen(true); }}>Save draft as new revision</Button></DialogFooter></DialogContent></Dialog>
     {refreshOpen && job && <RefreshRatesDialog onClose={() => setRefreshOpen(false)} onApply={(rates, replaceDefaultMarkups) => { setJob(refreshRates(job, rates, { replaceDefaultMarkups })); setRefreshOpen(false); setMessage("Company rates refreshed in this draft only. Save when ready."); }} />}
+    {shareRates && <RateImportDialog estimateRates={shareRates} onClose={() => setShareRates(undefined)} onApplied={result => setMessage(`Company rates saved · version ${result.version}. This estimate draft and its saved revisions were not changed.`)} />}
   </div>;
 }
 function RefreshRatesDialog({ onClose, onApply }: { onClose: () => void; onApply: (rates: EstimateRates, replaceDefaultMarkups: boolean) => void }) {

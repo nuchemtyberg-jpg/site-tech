@@ -1592,6 +1592,15 @@ export const estimatingCompanyRates = pgTable("estimating_company_rates", {
   savedAt: timestamp("saved_at").notNull().defaultNow(),
 });
 
+export const estimatingRateHistory = pgTable("estimating_rate_history", {
+  id: serial("id").primaryKey(),
+  version: integer("version").notNull().unique(),
+  rates: jsonb("rates").$type<EstimateRates>().notNull(),
+  savedBy: varchar("saved_by").notNull(),
+  savedAt: timestamp("saved_at").notNull().defaultNow(),
+  source: text("source").notNull(),
+});
+
 export const estimateRevisions = pgTable("estimate_revisions", {
   id: serial("id").primaryKey(),
   opportunityId: integer("opportunity_id").notNull().references(() => opportunities.id),
