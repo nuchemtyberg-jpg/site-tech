@@ -110,6 +110,13 @@ test("invalid formula fields count as zero, not blank-field defaults", () => {
   assert.equal(result.total.cost, 0);
   assert.equal(Object.keys(result.errs).length, 3);
   line.priceOverride = "bad";
+  line.res.sub[0].qty = "2";
+  const fallback = computeJob(job);
+  assert.equal(fallback.items[line.id].overridden, false);
+  assert.equal(fallback.total.sell, fallback.total.calcSell);
+  assert.equal(fallback.total.sell, 80);
+  assert.equal(fallback.errs[`${line.id}:priceOverride`], "Manual price not understood — using calculated price");
+  line.priceOverride = "0";
   assert.equal(computeJob(job).items[line.id].overridden, true);
   assert.equal(computeJob(job).total.sell, 0);
 });

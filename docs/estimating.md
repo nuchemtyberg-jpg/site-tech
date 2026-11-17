@@ -33,7 +33,9 @@ arithmetic parser in `formulas.ts`. No eval or Function execution is permitted.
 Expressions support named-rate dependencies, `qty` in resource rows, arithmetic,
 powers, brackets, feet/inches, and currency formatting. Draft estimates may save
 invalid expressions and cyclic rates after a UI confirmation; those fields count
-as zero and remain highlighted for correction. Blank-field defaults are distinct
+as zero and remain highlighted for correction. Invalid manual unit prices are
+the exception: pricing falls back to the calculated unit price with a field error.
+Blank-field defaults are distinct
 from invalid formulas. Nonfinite calculated results cannot be saved, and company
 rate settings still require valid formulas. Missing typed labor/equipment
 references are preserved with explicit zero-cost warnings, as in the source

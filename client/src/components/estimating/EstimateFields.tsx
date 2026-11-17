@@ -41,5 +41,6 @@ export function TotalsStrip({ value, margin, excluded }: { value: Totals; margin
 export function ManualPrice({ value, calculated, onChange, job, label = "Override unit price" }: { value: string; calculated: number; onChange: (v: string) => void; job: EstimateJob; label?: string }) {
   const [focused, setFocused] = useState(false);
   const result = makeResolver(job).ev(value);
+  if (result.err) result.err = "Manual price not understood — using calculated price";
   return <div className={`estimate-price ${value.trim() ? "estimate-manual" : ""}`}><label className="estimate-field"><span>{label}</span><input aria-label={label} value={!focused && result.v != null ? money(result.v) : value} placeholder={money(calculated)} onFocus={() => setFocused(true)} onBlur={() => setFocused(false)} onChange={e => onChange(e.target.value)} aria-invalid={!!result.err} /></label>{value.trim() && <div className="estimate-manual-note">Manual price · calculated {money(calculated)} <button type="button" className="underline" aria-label={`Reset ${label} to calculated`} onClick={() => onChange("")}>↺</button></div>}{result.err && <p className="estimate-error" role="alert">{result.err}</p>}</div>;
 }

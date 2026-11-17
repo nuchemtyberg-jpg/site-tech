@@ -87,7 +87,9 @@ export function computeJob(job: EstimateJob): Computation {
       sums.oh = sums.cost * eff.oh / 100; sums.ins = (sums.cost + sums.oh) * eff.ins / 100;
       sums.profit = (sums.cost + sums.oh + sums.ins) * eff.profit / 100;
       sums.calcSell = sums.cost + sums.oh + sums.ins + sums.profit;
-      const override = val("priceOverride");
+      const manual = R.ev(it.priceOverride);
+      if (manual.err) out.errs[`${it.id}:priceOverride`] = "Manual price not understood — using calculated price";
+      const override = manual.err ? null : manual.v;
       sums.sell = override == null ? sums.calcSell : override * (qty || 1);
       if (override != null) sums.profit = sums.sell - sums.cost - sums.oh - sums.ins;
       if (Object.values(sums).some(v => !Number.isFinite(v)) || !Number.isFinite(qty)) out.errs[`${it.id}:total`] = "Calculated amount is too large";

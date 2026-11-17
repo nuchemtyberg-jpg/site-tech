@@ -30,6 +30,8 @@ async function main() {
     page.on("pageerror", e => errors.push(e.message));
     await page.goto(`${base}/bidding/${opp.id}`);
     await page.getByRole("tab", { name: "Estimate", exact: true }).click();
+    const tabs = await page.getByRole("tab").allTextContents();
+    expect(tabs.findIndex(t => t === "estimate" || t === "Estimate")).toBe(tabs.findIndex(t => /^scope/i.test(t)) + 1);
     await page.getByLabel("Import takeoff JSON file").setInputFiles("attached_assets/1_Eyes_on_9_—_Site_Work_-_takeoff_file_1794871558100.json");
     await expect(page.getByLabel("Estimate revision")).toContainText("Imported from takeoff form", { timeout: 30000 });
     await expect(page.getByText("$765,591.76").first()).toBeVisible();
@@ -59,6 +61,12 @@ async function main() {
     await expect(page.locator(".estimate-sticky")).toBeInViewport();
     await page.screenshot({ path: ".local/screenshots/estimate-mobile.png" });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    for (const width of [375, 767]) {
+      await page.setViewportSize({ width, height: 900 });
+      await page.waitForTimeout(200);
+      expect(await page.locator(".estimate-takeoff-scroll, .estimate-resource .estimate-scroll").evaluateAll(elements =>
+        elements.every(el => el.scrollWidth <= el.clientWidth + 1))).toBe(true);
+    }
     await page.goto(`${base}/admin/settings/estimating-rates`);
     await expect(page.getByRole("heading", { name: "Estimating Rates", exact: true })).toBeVisible();
     await page.goto(`${base}/admin/settings/users`);

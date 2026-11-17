@@ -97,3 +97,46 @@ main .overflow-x-hidden:has(.estimate-workspace) { overflow-x:clip !important; o
 .estimate-workspace .estimate-formula-result { display:block; text-align:right; font-size:10px; color:hsl(var(--muted-foreground)); }
 @media(max-width:1450px) { .estimate-workspace .estimate-resources { grid-template-columns:1fr; } }
 @media(max-width:767px) { .estimate-workspace .estimate-sticky { gap:7px; padding:8px; } .estimate-workspace .estimate-sticky > :first-child { flex-basis:100%; } .estimate-workspace .estimate-category-title { flex-basis:100%; } .estimate-workspace .estimate-inline-markups { flex:1 1 100%; } .estimate-workspace .estimate-line-body { padding:8px; } .estimate-workspace .estimate-pricing { grid-template-columns:1fr; } .estimate-workspace .estimate-dimensions > * { flex:1 1 95px; } .estimate-workspace .estimate-scroll { overscroll-behavior-inline:contain; } }
+.estimate-workspace .estimate-mobile-label { display:none; }
+.estimate-workspace .estimate-buildup .estimate-buildup-manual { color:hsl(var(--destructive)); }
+/* Keep desktop tables intact. Below 768px every takeoff and resource field
+   participates in the card layout rather than living in an overflow viewport. */
+@media(max-width:767px) {
+  .estimate-workspace .estimate-takeoff-scroll { overflow:visible; }
+  .estimate-workspace .estimate-lines { min-width:0; }
+  .estimate-workspace .estimate-line-head { display:none; }
+  .estimate-workspace .estimate-line { margin:8px; border:1px solid hsl(var(--border)); border-radius:6px; }
+  .estimate-workspace .estimate-line-grid { grid-template-columns:25px 48px minmax(0,1fr) minmax(0,1fr); gap:8px 5px; padding:10px 8px; }
+  .estimate-workspace .estimate-line-grid > * { min-width:0; overflow-wrap:anywhere; }
+  .estimate-workspace .estimate-line-grid > :nth-child(3) { grid-column:3 / -1; }
+  .estimate-workspace .estimate-line-grid > :nth-child(4) { grid-column:1 / -1; }
+  .estimate-workspace .estimate-line-grid > :nth-child(5) { grid-column:1 / 3; }
+  .estimate-workspace .estimate-line-grid > :nth-child(6) { grid-column:3 / -1; }
+  .estimate-workspace .estimate-line-grid > :nth-child(7) { grid-column:1 / 3; }
+  .estimate-workspace .estimate-line-grid > :nth-child(8) { grid-column:3 / -1; }
+  .estimate-workspace .estimate-line-grid > :nth-child(9) { grid-column:1 / 3; justify-self:start; }
+  .estimate-workspace .estimate-line-grid > :nth-child(10) { grid-column:3 / -1; justify-self:end; }
+  .estimate-workspace .estimate-mobile-label { display:block; font-family:inherit; font-size:10px; font-weight:400; color:hsl(var(--muted-foreground)); margin-bottom:3px; }
+  .estimate-workspace .estimate-line-grid .estimate-quantity,
+  .estimate-workspace .estimate-line-grid > .estimate-number { padding-top:0; }
+  .estimate-workspace .estimate-line-grid .estimate-icon { min-height:36px; }
+  .estimate-workspace .estimate-takeoff-scroll .estimate-line-body { width:auto; min-width:0; }
+  .estimate-workspace .estimate-line-body > *,
+  .estimate-workspace .estimate-pricing > section { min-width:0; max-width:100%; }
+  .estimate-workspace .estimate-notes > *,
+  .estimate-workspace .estimate-dimensions > * { min-width:0; max-width:100%; overflow-wrap:anywhere; }
+  .estimate-workspace .estimate-inline-markups .estimate-grid { flex-wrap:wrap; }
+  .estimate-workspace .estimate-category-head > * { min-width:0; max-width:100%; overflow-wrap:anywhere; }
+  .estimate-workspace .estimate-resource .estimate-scroll { overflow:visible; }
+  .estimate-workspace .estimate-resource table,
+  .estimate-workspace .estimate-resource tbody { display:block; min-width:0; width:100%; }
+  .estimate-workspace .estimate-resource thead { display:none; }
+  .estimate-workspace .estimate-resource tr { display:block; min-width:0; padding:8px 0; border-top:1px solid hsl(var(--border)); }
+  .estimate-workspace .estimate-resource td { display:block; width:100%; min-width:0; border:0; padding:4px 0; overflow-wrap:anywhere; }
+  .estimate-workspace .estimate-resource td[data-label]::before { content:attr(data-label); display:block; margin-bottom:3px; font-size:10px; color:hsl(var(--muted-foreground)); }
+  .estimate-workspace .estimate-resource .estimate-amount { white-space:normal; }
+  .estimate-workspace .estimate-resource-foot { flex-wrap:wrap; gap:8px; }
+  .estimate-workspace .estimate-resource h4 { flex-wrap:wrap; overflow-wrap:anywhere; }
+  .estimate-workspace .estimate-resource td:last-child > .flex { justify-content:flex-end; }
+  .estimate-workspace .estimate-buildup { grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:3px 8px; overflow-wrap:anywhere; }
+}

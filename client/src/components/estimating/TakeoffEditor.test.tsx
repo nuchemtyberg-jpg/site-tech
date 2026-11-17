@@ -83,4 +83,47 @@ describe("Practical takeoff editing", () => {
     confirm.mockRestore();
     expect(screen.getByText("Price buildup")).toBeTruthy();
   });
+  it("shows the effective unit price beneath Sell and marks only overrides as manual", () => {
+    const job = emptyJob(), cat = newCategory();
+    cat.name = "Earthwork";
+    cat.items = [{ ...newLine(), desc: "Rough grade", qty: "3", priceOverride: "17.25" }];
+    job.categories = [cat];
+    render(<Controlled initial={job} />);
+    fireEvent.click(screen.getByRole("button", { name: "Expand category Earthwork" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Expand line 1.1/ }));
+    const unitPrice = screen.getByText("Unit price · manual");
+    expect(unitPrice.previousElementSibling?.textContent).toBe("$51.75");
+    expect(unitPrice.nextElementSibling?.textContent).toBe("$17.25");
+    expect(unitPrice.className).toContain("estimate-buildup-manual");
+    expect(unitPrice.nextElementSibling?.className).toContain("estimate-buildup-manual");
+    fireEvent.click(screen.getByRole("button", { name: "Reset Unit price 1.1 to calculated" }));
+    expect(screen.queryByText("Unit price · manual")).toBeNull();
+    const buildup = screen.getByText("Price buildup").nextElementSibling!;
+    const calculated = within(buildup as HTMLElement).getByText("Unit price");
+    expect(calculated.nextElementSibling?.textContent).toBe("$0.00");
+    expect(calculated.className).not.toContain("estimate-buildup-manual");
+  });
+  it("keeps size, drag, expansion and labeled resource fields available for mobile cards", () => {
+    const job = emptyJob(), cat = newCategory();
+    cat.name = "Earthwork";
+    cat.items = [{ ...newLine(), desc: "Rough grade", size: "12 by 18" }];
+    job.categories = [cat];
+    render(<Controlled initial={job} />);
+    fireEvent.click(screen.getByRole("button", { name: "Expand category Earthwork" }));
+    expect(screen.getByTitle("Drag line").getAttribute("draggable")).toBe("true");
+    fireEvent.change(screen.getByLabelText("Size 1.1"), { target: { value: "18 by 24" } });
+    expect((screen.getByLabelText("Size 1.1") as HTMLTextAreaElement).value).toBe("18 by 24");
+    fireEvent.click(screen.getByRole("button", { name: /^Expand line 1.1/ }));
+    for (const kind of ["material", "labor", "equipment", "subcontract / other"]) {
+      fireEvent.click(screen.getByRole("button", { name: `Add ${kind} row` }));
+    }
+    for (const title of ["Material", "Labor", "Equipment", "Subcontract / other"]) {
+      const region = screen.getByRole("region", { name: `${title} costs` });
+      const cells = region.querySelectorAll("tbody tr:first-child td");
+      expect(cells.length).toBeGreaterThan(4);
+      for (const cell of Array.from(cells).slice(0, -1)) expect(cell.getAttribute("data-label")).toBeTruthy();
+      expect(within(region).getByRole("button", { name: `Duplicate ${title.toLowerCase()} row` })).toBeTruthy();
+      expect(within(region).getByRole("button", { name: `Delete ${title.toLowerCase()} row` })).toBeTruthy();
+    }
+  });
 });

@@ -21,8 +21,14 @@ Use the written requirements over the form source for SF/SY/CY count multiplicat
 
 **How to apply:** Apply these rules consistently to new estimates and imports; retain visible missing-rate warnings rather than inventing rates.
 
-Allow incomplete estimate formulas to be saved after confirmation, counting invalid fields as zero but rejecting nonfinite totals. Refreshing company rates preserves default markups unless explicitly opted in, and matches imported type names case-insensitively when IDs differ.
+Allow incomplete estimate formulas to be saved after confirmation, counting invalid fields as zero but rejecting nonfinite totals. Exception: invalid manual unit prices must use the calculated price with an explicit field error, not zero. Refreshing company rates preserves default markups unless explicitly opted in, and matches imported type names case-insensitively when IDs differ.
 
 **Why:** Estimators need to save work in progress and update imported rates without unexpectedly changing a bid's markups.
 
 **How to apply:** Keep blank-value defaults distinct from formula errors; preserve the draft's original formula strings so errors can be corrected later.
+
+On narrow screens SiteTech must not require horizontal scrolling; estimating lines and resource rows must stack into labeled cards.
+
+**Why:** The owner explicitly stated the mobile no-horizontal-scrolling rule.
+
+**How to apply:** Verify expanded cost rows as well as collapsed line summaries at phone widths, without clipping controls to hide overflow.
