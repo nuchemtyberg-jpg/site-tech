@@ -37,7 +37,7 @@ export function computeJob(job: EstimateJob): Computation {
   const ev = (id: string, field: string, value: string, qty?: number) => {
     const r = R.ev(value, qty === undefined ? undefined : { qty });
     if (r.err) out.errs[`${id}:${field}`] = r.err;
-    return r.v;
+    return r.err ? 0 : r.v;
   };
   for (const [kind, rows, periods] of [
     ["lab", job.laborRates, ["hr", "day"]], ["eq", job.equipRates, ["hr", "day", "wk", "mo"]],
@@ -114,10 +114,18 @@ export function summarize(job: EstimateJob, c = computeJob(job)) {
   return { sell: c.total.sell, cost: c.total.cost, margin: c.margin, lineCount: c.lineCount, warnings: c.warnings,
     categories: job.categories.map(cat => ({ id: cat.id, name: cat.name, sell: cat.excluded ? 0 : c.cats[cat.id].sell, cost: cat.excluded ? 0 : c.cats[cat.id].cost })) };
 }
-export function refreshRates(job: EstimateJob, company: EstimateRates): EstimateJob {
-  // Keep removed company types that existing lines reference: no orphaned IDs.
-  const merge = <T extends { id: string }>(old: T[], fresh: T[]) => [...fresh, ...old.filter(r => !fresh.some(n => n.id === r.id))];
-  return { ...job, defaults: structuredClone(company.defaults),
-    laborRates: merge(job.laborRates, company.laborRates), equipRates: merge(job.equipRates, company.equipRates),
-    rates: [...company.rates, ...job.rates.filter(r => !company.rates.some(n => n.id === r.id || n.key.toLowerCase() === r.key.toLowerCase()))] };
+export function refreshRates(job: EstimateJob, company: EstimateRates, options: { replaceDefaultMarkups?: boolean } = {}): EstimateJob {
+  const match = <T extends { id: string; name: string }>(old: T[], fresh: T[]) => {
+    const ids = new Map(old.map(row => [row.id, (fresh.find(n => n.id === row.id) ??
+      fresh.find(n => n.name.trim().toLowerCase() === row.name.trim().toLowerCase()))?.id ?? row.id]));
+    return { ids, rows: [...fresh, ...old.filter(row => !fresh.some(n => n.id === ids.get(row.id)))] };
+  };
+  const labor = match(job.laborRates, company.laborRates), equipment = match(job.equipRates, company.equipRates);
+  return structuredClone({ ...job, defaults: options.replaceDefaultMarkups ? company.defaults : job.defaults,
+    laborRates: labor.rows, equipRates: equipment.rows,
+    categories: job.categories.map(cat => ({ ...cat, items: cat.items.map(line => ({ ...line, res: { ...line.res,
+      lab: line.res.lab.map(row => ({ ...row, ltype: labor.ids.get(row.ltype) ?? row.ltype })),
+      eq: line.res.eq.map(row => ({ ...row, etype: equipment.ids.get(row.etype) ?? row.etype })),
+    } })) })),
+    rates: [...company.rates, ...job.rates.filter(r => !company.rates.some(n => n.id === r.id || n.key.toLowerCase() === r.key.toLowerCase()))] });
 }

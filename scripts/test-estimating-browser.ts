@@ -20,6 +20,10 @@ async function main() {
     const [opp] = await db.insert(opportunities).values({ name: "Estimate browser verification", opportunityNumber: tag, customerId, streetAddress: "1 Test Street", city: "Test", state: "NJ", zip: "00000" }).returning(); oppId = opp.id;
     const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
     await context.addInitScript(() => localStorage.setItem(`replitDevBannerClosed-${location.hostname}`, "true"));
+    await context.addInitScript(() => {
+      (window as any).__browserErrors = [];
+      window.addEventListener("error", e => (window as any).__browserErrors.push(e.message));
+    });
     const sig = crypto.createHmac("sha256", process.env.SESSION_SECRET!).update(sid).digest("base64").replace(/=+$/, "");
     await context.addCookies([{ name: "connect.sid", value: `s:${sid}.${sig}`, url: base, httpOnly: true }]);
     const page = await context.newPage(), errors: string[] = [];
@@ -31,6 +35,11 @@ async function main() {
     await expect(page.getByText("$765,591.76").first()).toBeVisible();
     await mkdir(".local/screenshots", { recursive: true });
     await page.screenshot({ path: ".local/screenshots/estimate-desktop.png" });
+    await page.getByRole("button", { name: /^Expand category/ }).first().click();
+    await page.getByRole("button", { name: /^Expand line 1\.1:/ }).click();
+    await page.locator(".estimate-line-body").first().scrollIntoViewIfNeeded();
+    await page.screenshot({ path: ".local/screenshots/estimate-expanded.png" });
+    await expect(page.locator(".estimate-sticky")).toBeInViewport();
     await page.getByRole("button", { name: "Save as revision", exact: true }).click();
     const dialog = page.getByRole("dialog");
     await dialog.getByRole("textbox").fill("Browser revision");
@@ -41,6 +50,13 @@ async function main() {
     await expect(page.getByRole("combobox", { name: "Estimate revision", exact: true })).toHaveValue(/\d+/);
     await expect(page.getByText("$765,591.76").first()).toBeVisible();
     await page.setViewportSize({ width: 375, height: 812 });
+    await page.getByRole("button", { name: /^Expand category/ }).first().click();
+    await page.getByRole("button", { name: /^Expand line 1\.1:/ }).click();
+    await page.locator(".estimate-line-body").first().scrollIntoViewIfNeeded();
+    await page.waitForTimeout(400);
+    await expect(page.locator("vite-error-overlay")).toHaveCount(0);
+    expect(await page.evaluate(() => (window as any).__browserErrors)).toEqual([]);
+    await expect(page.locator(".estimate-sticky")).toBeInViewport();
     await page.screenshot({ path: ".local/screenshots/estimate-mobile.png" });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await page.goto(`${base}/admin/settings/estimating-rates`);

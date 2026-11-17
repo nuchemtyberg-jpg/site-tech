@@ -11,16 +11,21 @@ export async function getCompanyRates() {
   const [row] = await db.select().from(estimatingCompanyRates).where(eq(estimatingCompanyRates.id, 1));
   return row ? { rates: row.rates, version: row.version } : { rates: ratesSchema.parse({}), version: 0 };
 }
-export function validateCalculation(job: EstimateJob) {
+export function validateCalculation(job: EstimateJob, allowFormulaErrors = true) {
   const result = computeJob(job);
-  if (Object.keys(result.errs).length) throw new EstimateError(422, "Correct invalid formulas before saving.", { errors: result.errs });
+  if (!allowFormulaErrors && Object.keys(result.errs).length) throw new EstimateError(422, "Correct invalid formulas before saving.", { errors: result.errs });
+  // Draft formulas may be invalid, but overflow in any calculated amount must
+  // never enter JSON storage (including excluded rows and categories).
+  const finite = (value: unknown): boolean => typeof value === "number" ? Number.isFinite(value) :
+    value !== null && typeof value === "object" ? Object.values(value).every(finite) : true;
+  if (!finite(result)) throw new EstimateError(422, "Calculated amounts must be finite numbers.");
   if (Math.abs(Math.round(result.total.sell)) > 2147483647) throw new EstimateError(422, "Total is outside the supported Opportunity Expected Value range.");
   return summarize(job, result);
 }
 export async function saveCompanyRates(raw: unknown, version: number, userId: string) {
   const rates = ratesSchema.parse(raw);
   const validationJob = jobSchema.parse({ ...emptyJob(), ...rates });
-  validateCalculation(validationJob);
+  validateCalculation(validationJob, false);
   if (version === 0) {
     const [created] = await db.insert(estimatingCompanyRates).values({ id: 1, rates, savedBy: userId }).onConflictDoNothing().returning();
     if (created) return { rates: created.rates, version: created.version };

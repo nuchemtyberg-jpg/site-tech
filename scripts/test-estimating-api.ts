@@ -108,12 +108,20 @@ async function main() {
     assert.deepEqual(locked.job, current.job); assert.equal(locked.locked, true);
     console.log("PASS optimistic conflicts, concurrent numbering, immutable locked revision and save-as");
     const invalid = structuredClone(simple); invalid.categories[0].items[0].qty = "1/0";
-    assert.equal((await request(admin, root, "POST", { job: invalid })).status, 422);
+    const draft = await request(admin, root, "POST", { job: invalid });
+    assert.equal(draft.status, 201);
+    assert.equal(draft.body.job.categories[0].items[0].qty, "1/0");
+    assert.ok(Number.isFinite(draft.body.summary.sell));
+    assert.equal((await request(admin, `${root}/${draft.body.id}`, "PUT", { job: invalid, version: draft.body.version })).status, 200);
+    const overflow = structuredClone(simple);
+    overflow.categories[0].items[0].qty = "10^200";
+    overflow.categories[0].items[0].priceOverride = "10^200";
+    assert.equal((await request(admin, root, "POST", { job: overflow })).status, 422);
     assert.equal((await request(admin, root, "POST", { importFile: { format: "nuchem-takeoff", formatVersion: 2, job: {} } })).status, 400);
     assert.equal((await request(admin, root, "POST", { importFile: { format: "nuchem-takeoff", formatVersion: 1, job: { categories: {} } } })).status, 400);
     const list = (await request(admin, root)).body;
     assert.ok(list.every((r: any) => r.job === undefined));
-    assert.equal(list[0].revisionNumber, 4);
+    assert.equal(list[0].revisionNumber, 5);
     console.log("PASS validation, lightweight revision list, server-authoritative totals; ALL ESTIMATING API TESTS PASSED");
   } finally {
     for (const id of oppIds) { await db.delete(estimateRevisions).where(eq(estimateRevisions.opportunityId, id)); await db.delete(opportunities).where(eq(opportunities.id, id)); }

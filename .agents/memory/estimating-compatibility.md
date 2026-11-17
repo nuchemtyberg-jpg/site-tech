@@ -20,3 +20,9 @@ Use the written requirements over the form source for SF/SY/CY count multiplicat
 **Why:** The owner selected the written rules after being told the source omits area/volume counts and sometimes derives from a farther rate.
 
 **How to apply:** Apply these rules consistently to new estimates and imports; retain visible missing-rate warnings rather than inventing rates.
+
+Allow incomplete estimate formulas to be saved after confirmation, counting invalid fields as zero but rejecting nonfinite totals. Refreshing company rates preserves default markups unless explicitly opted in, and matches imported type names case-insensitively when IDs differ.
+
+**Why:** Estimators need to save work in progress and update imported rates without unexpectedly changing a bid's markups.
+
+**How to apply:** Keep blank-value defaults distinct from formula errors; preserve the draft's original formula strings so errors can be corrected later.

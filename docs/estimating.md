@@ -31,8 +31,11 @@ returns metadata/summaries only; a separate request loads one full job.
 The browser and server use `shared/estimating/engine.ts` and the non-executable
 arithmetic parser in `formulas.ts`. No eval or Function execution is permitted.
 Expressions support named-rate dependencies, `qty` in resource rows, arithmetic,
-powers, brackets, feet/inches, and currency formatting. Invalid expressions,
-cyclic rates and nonfinite results cannot be saved. Missing typed labor/equipment
+powers, brackets, feet/inches, and currency formatting. Draft estimates may save
+invalid expressions and cyclic rates after a UI confirmation; those fields count
+as zero and remain highlighted for correction. Blank-field defaults are distinct
+from invalid formulas. Nonfinite calculated results cannot be saved, and company
+rate settings still require valid formulas. Missing typed labor/equipment
 references are preserved with explicit zero-cost warnings, as in the source
 form; a matching imported total is not an assertion that all costs are resolved.
 
@@ -84,8 +87,10 @@ Cents and fractional intermediate amounts remain in the estimate itself.
 
 ## Refresh and exports
 Refresh from company rates is confirmed and affects the local draft only until
-saved. Matching types retain stable IDs; removed types are retained to avoid
-orphaning old cost rows. Matching named keys/IDs are refreshed and remaining
+saved. Types match by ID first, then case-insensitive name; cost rows are repointed
+to the matched company ID. Unmatched types are retained to avoid orphaning old
+cost rows. Estimate default markups remain unchanged unless “Also replace default
+markups” is selected. Matching named keys/IDs are refreshed and remaining
 estimate-specific rates retained. Formula errors remain visible after refresh.
 Cover view/CSV omit excluded categories and lines and renumber included work.
 Detailed CSV retains every line, costs, markups and inclusion status. CSV cells

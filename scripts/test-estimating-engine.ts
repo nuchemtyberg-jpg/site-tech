@@ -76,3 +76,40 @@ test("imports reject unknown versions and malformed arrays; rate refresh preserv
   assert.deepEqual(changed.laborRates.map(r => r.id), ["new", "old"]);
   assert.equal(job.laborRates.length, 1);
 });
+
+test("refresh matches IDs before names, repoints imported rows and preserves markups unless opted in", () => {
+  const job = emptyJob(), cat = newCategory(), line = newLine();
+  job.defaults.profit = "17";
+  job.laborRates = [{ id: "imported", name: "Operator", hr: "10", day: "" }];
+  job.equipRates = [{ id: "importedEq", name: "EXCAVATOR", hr: "", day: "80", wk: "", mo: "" }];
+  line.res.lab.push({ id: "l", desc: "", ltype: "imported", etype: "", crew: "1", dur: "1", basis: "hr", rate: "" });
+  line.res.eq.push({ id: "e", desc: "", ltype: "", etype: "importedEq", crew: "1", dur: "1", basis: "day", rate: "" });
+  cat.items = [line]; job.categories = [cat];
+  const company = ratesSchema.parse({ defaults: { profit: "30" },
+    laborRates: [{ id: "company", name: "operator", hr: "20" }],
+    equipRates: [{ id: "companyEq", name: "Excavator", day: "100" }] });
+  const refreshed = refreshRates(job, company);
+  assert.equal(refreshed.categories[0].items[0].res.lab[0].ltype, "company");
+  assert.equal(refreshed.categories[0].items[0].res.eq[0].etype, "companyEq");
+  assert.equal(refreshed.defaults.profit, "17");
+  assert.equal(computeJob(refreshed).total.lab, 20);
+  assert.equal(computeJob(refreshed).total.eq, 100);
+  assert.equal(refreshRates(job, company, { replaceDefaultMarkups: true }).defaults.profit, "30");
+  assert.equal(job.categories[0].items[0].res.lab[0].ltype, "imported");
+  company.laborRates.push({ id: "imported", name: "Different name", hr: "50", day: "" });
+  assert.equal(refreshRates(job, company).categories[0].items[0].res.lab[0].ltype, "imported");
+});
+
+test("invalid formula fields count as zero, not blank-field defaults", () => {
+  const job = emptyJob(), cat = newCategory(), line = newLine();
+  line.res.mat.push({ id: "m", desc: "", calc: "qty", qty: "1/0", unit: "", n: "", l: "", w: "", d: "", wt: "", waste: "", cost: "100" });
+  line.res.lab.push({ id: "l", desc: "", ltype: "", etype: "", crew: "bad", dur: "2", basis: "hr", rate: "30" });
+  line.res.sub.push({ id: "s", desc: "", qty: "(", unit: "", cost: "40" });
+  cat.items = [line]; job.categories = [cat];
+  const result = computeJob(job);
+  assert.equal(result.total.cost, 0);
+  assert.equal(Object.keys(result.errs).length, 3);
+  line.priceOverride = "bad";
+  assert.equal(computeJob(job).items[line.id].overridden, true);
+  assert.equal(computeJob(job).total.sell, 0);
+});
