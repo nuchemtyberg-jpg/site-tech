@@ -38,7 +38,7 @@ test("counted overflow prunes further and recounts before returning a generation
     counts.push(retained);
     return retained > 6 ? 600001 : 125000;
   });
-  assert.deepEqual(counts, [12, 6]); assert.equal(result.resultsKept, 6);
+  assert.deepEqual(counts, [20,12, 6]); assert.equal(result.resultsKept, 6);
   assert.equal(result.inputTokens, 125000); assert.equal(result.historyReset, false);
   assert.equal(result.messages.at(-1).content.at(-1).cache_control,undefined);
   assert.equal((raw.at(-1) as any).content[0].cache_control, undefined);
@@ -51,7 +51,7 @@ test("large assistant inputs are never removed to fit the context", async () => 
 test("irreducible context stops after bounded attempts; unfinished tools and bad counts fail explicitly", async () => {
   let attempts = 0;
   await assert.rejects(prepareContext(history(15), async () => { attempts++; return 600001; }), TakeoffContextLimitError);
-  assert.equal(attempts, 3);
+  assert.equal(attempts, 4);
   await assert.rejects(prepareContext(history(15).slice(0, -1), async () => 600001), TakeoffContextLimitError);
   await assert.rejects(prepareContext([], async () => NaN), /invalid input token count/);
   const rateLimited = Object.assign(new Error("rate limited"), { status: 429 });
@@ -63,7 +63,7 @@ test("token endpoint size/context errors prune further, while essential oversize
     if (++attempts < 3) throw Object.assign(new Error("input is too long"), { status: 400 });
     return 42;
   });
-  assert.equal(result.resultsKept, 0);
+  assert.equal(result.resultsKept, 6);
   await assert.rejects(prepareContext([], async () => { throw Object.assign(new Error("request too large"), { status: 413 }); }), TakeoffContextLimitError);
 });
 test("checkpoint context includes current work, scales and indexes, not private paths or initial stale work", () => {

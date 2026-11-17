@@ -162,8 +162,9 @@ full measured totals remain available). Default page images use zoom 0.5 for an
 overview; explicit zoom/regions preserve access to detail. Measurement still uses
 cached full-resolution vectors, not the overview image.
 
-Durable model/tool history remains unchanged for recovery and future chat. Outbound
-copies retain the latest 12 tool results in full, replacing older text/images with
+Durable model/tool history remains unchanged for recovery and future chat. Requests
+normally retain every previously sent message byte-for-byte. At an explicit pruning
+batch, outbound copies retain the latest 12 tool results in full, replacing older text/images with
 `[older result removed to save context — call the tool again if needed]`. Tool IDs,
 result pairing and error flags remain intact. If counted input is still too large,
 the worker retries with six results, then zero. It never modifies, reorders or drops
@@ -172,14 +173,17 @@ Only contents of user tool-result blocks can be replaced during pruning. If this
 cannot fit the request, it fails explicitly rather than dropping assistant history.
 Size errors from counting trigger these same limited passes.
 
-At run creation the system blocks are snapshotted as a JSON string, avoiding JSONB
+At run creation the system blocks and ordered tools are snapshotted as JSON strings, avoiding JSONB
 key-order changes. The same snapshot is reused byte-for-byte on every request,
 restart, Continue and Retry. Fixed instructions, job instructions, rules, playbook,
 original rates and initial document manifest are included. No changing checkpoint,
 scale, index, budget warning or submit-now instruction goes into system.
 
-Each step appends the current checkpoint job, calibrated scales, selected sheet
-indexes and limit instructions to a user turn, alongside tool results when present.
+Each step appends a compact checkpoint summary, calibrated scales, selected sheet
+indexes and limit instructions to the newest unsent user turn, alongside tool results when present.
+The full initial job is provided once; full updated jobs remain in checkpoint
+tool-call inputs. Previously sent turns are never edited. A persisted wire-message
+snapshot preserves JSON key order and previously pruned results across restart.
 Successful sheet indexes are saved with state; legacy successful
 indexes are recovered from durable history where possible. Neither scales nor
 checkpoints rely on old conversation text surviving pruning.
@@ -208,6 +212,44 @@ Outbound histories over 20 MB skip toward compaction before the counting call.
 If essential context cannot fit after all passes, the run fails explicitly with
 its checkpoint retained and no new generation charge. This is not a cost-cap
 stop; approving more dollars cannot fix oversized essential context.
+
+### Conversation cache protocol
+
+Two fixed system breakpoints use `ttl: "1h"`. Stable top-level
+`cache_control: {type: "ephemeral", ttl: "5m"}` delegates the newest-user-message
+breakpoint to Anthropic automatic caching, for three total breakpoints.
+This is intentional: moving explicit per-turn markers would change earlier
+message JSON, while leaving every past marker would exceed the four-marker limit.
+Automatic caching implements the last-block breakpoint without client-side history
+mutation. `tool_choice` stays `auto`, including budget-limit submission requests;
+submit-now instructions are appended in user content instead.
+
+Pruning is attempted only above 400K counted tokens (or 80% of a smaller model
+input allowance), or on size/context errors. A batch can keep 12, 6 or zero recent
+tool results until the request fits. Its wire representation is persisted, so
+pruned data never reappears on restart. After a batch, the next threshold allows
+50K growth if needed, bounded below the hard input ceiling, to avoid repeated
+small pruning passes. Assistant blocks are unchanged.
+
+Legacy runs such as #61 keep their signed conversation and exact existing system
+snapshot, including its five-minute TTL, when adopting the automatic conversation
+breakpoint. Upgrading an old system to one hour would violate its signature/prefix
+invariant; one-hour system blocks apply to newly created conversations only.
+Costs, caps, documents and preparation caches are unchanged. No code update by
+itself retries a failed run.
+
+One-hour writes are billed at `cacheWriteHour`, defaulting to twice the input
+price ($8/MTok Opus 5.5, $4/MTok Sonnet 5.5). Provider
+`cache_creation.ephemeral_1h_input_tokens` is separated from total cache-write
+tokens to avoid double billing; other writes retain the five-minute price.
+Conservative reservations use the highest write price, not assumed future hits.
+
+Tests: `scripts/test-prompt-cache.ts` compares byte-identical prefixes over
+18 steps with scale/budget changes and simulated JSONB/restart ordering, then
+checks that only an explicit pruning batch changes the prior wire prefix.
+`scripts/verify-prompt-cache.ts` makes exactly two low-output paid Sonnet requests,
+using synthetic data and no takeoff run. Run it only with explicit spending approval.
+Provider reference: https://platform.claude.com/docs/en/build-with-claude/prompt-caching
 
 ## Claude-added named material rates
 

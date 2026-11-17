@@ -6,6 +6,7 @@ export const TRADES = ["SOE", "Structural Piles", "Excavation", "Site work"] as 
 const prices = z.object({
   input: z.number().positive(), output: z.number().positive(),
   cacheRead: z.number().nonnegative(), cacheWrite: z.number().positive(),
+  cacheWriteHour:z.number().positive().optional(),
 });
 export const aiSettingsSchema = z.object({
   model: z.enum(AI_MODELS).default("claude-opus-5-5"),
@@ -44,11 +45,17 @@ export interface RunDocument {
   sourceGeneration?: string;
   documentVersion?: number;
 }
-export interface TokenUsage { input: number; output: number; cacheRead: number; cacheWrite: number }
+export interface TokenUsage { input: number; output: number; cacheRead: number; cacheWrite: number; cacheWriteHour?:number }
 export type AddedMaterialRate = EstimateRates["rates"][number] & { computedValue: number | null };
 export interface TakeoffState {
   /** JSON string avoids JSONB key reordering of signed request blocks. */
   systemSnapshot?: string;
+  toolsSnapshot?:string;
+  cacheVersion?:number;
+  cacheMessages?:string;
+  cacheSourceCount?:number;
+  cacheBatches?:number;
+  cachePruneThreshold?:number;
   conversationArchives?: { at: string; reason: string; messages: unknown[]; systemSnapshot?: string }[];
   checkpointTurnStep?: number;
   requestKey?: string;
@@ -86,6 +93,8 @@ export interface TakeoffState {
   capSubmission?: boolean;
 }
 export function usageCost(usage: TokenUsage, price: AISettings["prices"][typeof AI_MODELS[number]]) {
+  const hour=usage.cacheWriteHour||0;
   return (usage.input * price.input + usage.output * price.output +
-    usage.cacheRead * price.cacheRead + usage.cacheWrite * price.cacheWrite) / 1_000_000;
+    usage.cacheRead * price.cacheRead + (usage.cacheWrite-hour) * price.cacheWrite +
+    hour*(price.cacheWriteHour??price.input*2)) / 1_000_000;
 }

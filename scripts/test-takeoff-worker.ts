@@ -7,7 +7,7 @@ import { emptyJob, newCategory, newLine } from "../shared/estimating/model";
 import { aiSettingsSchema, type TakeoffState } from "../shared/estimating/takeoff";
 import { executeClaimedRun, SYSTEM, takeoffSystem } from "../server/takeoff/worker";
 import { publicRun } from "../server/takeoff/service";
-import { executeTool } from "../server/takeoff/tools";
+import { executeTool, TAKEOFF_TOOLS } from "../server/takeoff/tools";
 import { pinSource, preparationTick, getPreparation } from "../server/takeoff/preparation";
 import { PDFDocument } from "pdf-lib";
 import { writePrivate } from "../server/takeoff/documents";
@@ -21,7 +21,7 @@ async function main() {
   try {
     const [c]=await db.insert(customers).values({name:tag}).returning();cid=c.id;
     const [o]=await db.insert(opportunities).values({name:tag,opportunityNumber:tag,customerId:cid}).returning();oid=o.id;
-    const makeRun=async(s:TakeoffState,cancel=false)=>(await db.insert(takeoffRuns).values({opportunityId:oid!,createdBy:tag,status:"running",state:{...s,systemSnapshot:s.systemSnapshot||JSON.stringify(takeoffSystem(s))},
+    const makeRun=async(s:TakeoffState,cancel=false)=>(await db.insert(takeoffRuns).values({opportunityId:oid!,createdBy:tag,status:"running",state:{...s,cacheVersion:1,toolsSnapshot:JSON.stringify(TAKEOFF_TOOLS),systemSnapshot:s.systemSnapshot||JSON.stringify(takeoffSystem(s))},
       leaseOwner:owner,leaseUntil:new Date(Date.now()+600000),cancelRequested:cancel}).returning())[0];
     const job=emptyJob(),cat=newCategory(),line=newLine();
     line.desc="Known item";line.qty="2";line.ref="S1; count 2";line.res.sub=[{id:"sub",desc:"Known cost",qty:"qty",unit:"EA",cost:"100"}];cat.items=[line];job.categories=[cat];
@@ -56,6 +56,25 @@ async function main() {
     assert.equal(failures,4);assert.equal(exhausted.status,"failed");assert.equal(exhausted.state.steps,0);
     assert.equal(exhausted.state.costEvents!.filter(e=>e.uncertain).length,4);
     assert.equal(exhausted.state.messages.filter((m:any)=>m.role==="assistant").length,0);
+    const legacyState=state();legacyState.cost=.4;legacyState.steps=8;legacyState.job=structuredClone(job);
+    legacyState.messages=[{role:"user",content:"old request"},{role:"assistant",content:[{type:"thinking",thinking:"opaque",signature:"OLD_SIGNATURE"}]},{role:"user",content:"Continue"}];
+    const legacyRun=await makeRun(legacyState);
+    delete legacyRun.state.cacheVersion;delete legacyRun.state.toolsSnapshot;
+    legacyRun.state.systemSnapshot=legacyRun.state.systemSnapshot!.replaceAll(',"ttl":"1h"',"");
+    const legacySystem=legacyRun.state.systemSnapshot;
+    await db.update(takeoffRuns).set({state:legacyRun.state}).where(eq(takeoffRuns.id,legacyRun.id));
+    const migrateClient:any={messages:{countTokens:async(request:any)=>{
+      assert.match(JSON.stringify(request.messages),/OLD_SIGNATURE/);
+      assert.match(JSON.stringify(request.messages),/Known item/);
+      assert.equal(JSON.stringify(request.system),legacySystem);
+      return {input_tokens:100};
+    },create:client.messages.create}};
+    await executeClaimedRun(legacyRun,{client:migrateClient,leaseOwner:owner});
+    const [migrated]=await db.select().from(takeoffRuns).where(eq(takeoffRuns.id,legacyRun.id));
+    assert.equal(migrated.status,"needs_review");assert.equal(migrated.state.cacheVersion,1);
+    assert.equal(migrated.state.steps,9);assert.ok(migrated.state.cost>=.4);
+    assert.deepEqual(migrated.state.messages.slice(0,legacyState.messages.length),legacyState.messages);
+    calls=1; // Existing fixture assertions below count only the original client run.
     const [rev]=await db.select().from(estimateRevisions).where(eq(estimateRevisions.id,done.revisionId!));assert.equal(rev.summary.sell,200);
     // Recovery replays persisted tools, not the paid model request.
     const recovery=state();recovery.messages=[{role:"assistant",content:[{type:"tool_use",id:"recovered",name:"submit_takeoff",input:{job,summary:"Recovered",questions:[]}}]}];
@@ -102,7 +121,7 @@ async function main() {
         verifyRequest(request);
         const checkpoint=request.messages.at(-1).content.findLast((b:any)=>b.type==="text"&&b.text.startsWith("Current durable checkpoint"));
         assert.ok(checkpoint);assert.match(checkpoint.text,/C-101/);assert.match(checkpoint.text,/feetPerPoint/);
-        if(pricedCalls) {assert.match(checkpoint.text,/Claude named rate/);assert.match(checkpoint.text,/Known item/);}
+        if(pricedCalls) {assert.match(checkpoint.text,/added/);assert.match(checkpoint.text,/Known item/);}
         return {input_tokens:100};
       },
       create:async(request:any)=>{

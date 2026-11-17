@@ -39,6 +39,12 @@ Thinking signatures require an immutable system prompt for the lifetime of a con
 
 **How to apply:** Persist the system snapshot as a JSON string, put mutable checkpoints/limits in user turns, and never prune assistant blocks. Archive a broken conversation intact before an explicit checkpoint-based recovery; retain spend and limits.
 
+Conversation caching requires stable wire prefixes, not just stable system instructions.
+
+**Why:** System-only breakpoints left growing tool/image history uncached; pruning every step changed the prefix. Repeated full-job reminders also created unnecessary fresh input.
+
+**How to apply:** Freeze ordered tools and prior wire messages as strings across JSONB round trips. Append compact context only to unsent user turns, keep tool choice stable, and prune in explicit threshold-driven batches. Use automatic conversation caching to avoid moving old markers or exceeding four breakpoints; account separately for one-hour writes.
+
 Native canvas PDF rendering cannot be assumed safe for signed construction plan sets.
 
 **Why:** The office's 22-page signed drawing set reproducibly caused SIGSEGV during thumbnail rendering, after successful text/vector extraction. A native crash cannot be caught by Express.

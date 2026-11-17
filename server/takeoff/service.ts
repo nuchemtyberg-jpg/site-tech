@@ -9,6 +9,7 @@ import { pinDocument } from "./preparation";
 import { createHash } from "node:crypto";
 import { takeoffSystem } from "./worker";
 import { addedMaterialRates, ensureRateSnapshot } from "./rate-snapshot";
+import { TAKEOFF_TOOLS } from "./tools";
 export type Run = typeof takeoffRuns.$inferSelect;
 export async function getAISettings() {
   const [row]=await db.select().from(estimatingAISettings).where(eq(estimatingAISettings.id,1));
@@ -70,6 +71,7 @@ export async function startRun(opportunityId:number,userId:string,raw:unknown) {
     budget:Math.min(config.settings.maxCost,input.approvedBudget),stepLimit:Math.min(config.settings.maxSteps,input.approvedSteps),progress:[{at:new Date().toISOString(),message:"Queued: documents and rate snapshot saved."}]};
   ensureRateSnapshot(state);
   state.systemSnapshot=JSON.stringify(takeoffSystem(state));
+  state.cacheVersion=1;state.toolsSnapshot=JSON.stringify(TAKEOFF_TOOLS);
   const [run]=await tx.insert(takeoffRuns).values({opportunityId,createdBy:userId,state}).returning();
   return publicRun(run);
   });
