@@ -1609,3 +1609,44 @@ export const estimateRevisions = pgTable("estimate_revisions", {
 }, table => [
   uniqueIndex("estimate_revisions_opportunity_number").on(table.opportunityId, table.revisionNumber),
 ]);
+
+export const estimatingAISettings = pgTable("estimating_ai_settings", {
+  id: integer("id").primaryKey(),
+  settings: jsonb("settings").$type<import("./estimating/takeoff").AISettings>().notNull(),
+  version: integer("version").notNull().default(1),
+  savedBy: varchar("saved_by").notNull(),
+  savedAt: timestamp("saved_at").notNull().defaultNow(),
+});
+export const takeoffPlaybooks = pgTable("takeoff_playbooks", {
+  id: serial("id").primaryKey(),
+  markdown: text("markdown").notNull(),
+  createdBy: varchar("created_by").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  restoredFrom: integer("restored_from"),
+});
+export const takeoffRules = pgTable("takeoff_rules", {
+  id: serial("id").primaryKey(),
+  text: text("text").notNull(),
+  appliesTo: text("applies_to").notNull().default("All"),
+  active: boolean("active").notNull().default(true),
+  sourceNote: text("source_note").notNull().default(""),
+  addedBy: varchar("added_by").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+export const takeoffRuns = pgTable("takeoff_runs", {
+  id: serial("id").primaryKey(),
+  opportunityId: integer("opportunity_id").notNull().references(() => opportunities.id),
+  createdBy: varchar("created_by").notNull(),
+  status: text("status").$type<import("./estimating/takeoff").RunStatus>().notNull().default("queued"),
+  state: jsonb("state").$type<import("./estimating/takeoff").TakeoffState>().notNull(),
+  revisionId: integer("revision_id").references(() => estimateRevisions.id),
+  error: text("error"),
+  cancelRequested: boolean("cancel_requested").notNull().default(false),
+  leaseOwner: varchar("lease_owner"),
+  leaseUntil: timestamp("lease_until"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  startedAt: timestamp("started_at"),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  finishedAt: timestamp("finished_at"),
+}, table => [index("takeoff_runs_status_lease").on(table.status, table.leaseUntil)]);

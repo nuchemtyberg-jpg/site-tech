@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ChevronDown, ChevronRight, Copy, GripVertical, MoreHorizontal, Trash2 } from "lucide-react";
 import { computeJob } from "@shared/estimating/engine";
 import { MARKUPS, newCategory, newId, newLine, money, type EstimateJob, type EstimateLine, type EstimateCategory } from "@shared/estimating/model";
@@ -13,9 +13,21 @@ function cloneLine(line: EstimateLine): EstimateLine {
   for (const rows of Object.values(result.res)) for (const row of rows) row.id = newId();
   return result;
 }
-export function TakeoffEditor({ job, onChange }: { job: EstimateJob; onChange: (job: EstimateJob) => void }) {
+export function TakeoffEditor({ job, onChange, focusLineId, focusCategoryId, focusSignal }: { job: EstimateJob; onChange: (job: EstimateJob) => void; focusLineId?: string; focusCategoryId?: string; focusSignal?: number }) {
   const [openCats, setOpenCats] = useState<Set<string>>(new Set());
   const [openLines, setOpenLines] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    const category = job.categories.find(c => c.items.some(line => line.id === focusLineId)) || job.categories.find(c => c.id === focusCategoryId);
+    if (!category) return;
+    setOpenCats(previous => new Set([...previous, category.id]));
+    if (focusLineId) setOpenLines(previous => new Set([...previous, focusLineId]));
+    const timer = window.setTimeout(() => {
+      const target = document.getElementById(focusLineId && category.items.some(line => line.id === focusLineId) ? `takeoff-line-${focusLineId}` : `takeoff-category-${category.id}`);
+      target?.scrollIntoView?.({ behavior: "smooth", block: "center" });
+      target?.focus({ preventScroll: true });
+    }, 80);
+    return () => window.clearTimeout(timer);
+  }, [focusLineId, focusCategoryId, focusSignal]);
   const computed = computeJob(job);
   const toggle = (set: Set<string>, id: string) => { const next = new Set(set); next.has(id) ? next.delete(id) : next.add(id); return next; };
   const patchCat = (cat: EstimateCategory) => onChange({ ...job, categories: job.categories.map(c => c.id === cat.id ? cat : c) });
@@ -45,7 +57,7 @@ export function TakeoffEditor({ job, onChange }: { job: EstimateJob; onChange: (
     {job.categories.map((cat, ci) => {
       const open = openCats.has(cat.id), totals = computed.cats[cat.id];
       const inherited = Object.fromEntries(MARKUPS.map(key => [key, cat[key].trim() ? cat[key] : job.defaults[key]])) as Record<typeof MARKUPS[number], string>;
-      return <section key={cat.id} className={`estimate-panel ${cat.excluded ? "estimate-excluded" : ""}`} aria-label={`Category ${ci + 1}: ${cat.name}`} onDragOver={e => e.preventDefault()} onDrop={e => {
+      return <section key={cat.id} id={`takeoff-category-${cat.id}`} tabIndex={-1} className={`estimate-panel ${cat.excluded ? "estimate-excluded" : ""}`} aria-label={`Category ${ci + 1}: ${cat.name}`} onDragOver={e => e.preventDefault()} onDrop={e => {
         e.preventDefault(); e.stopPropagation();
         try { const data = JSON.parse(e.dataTransfer.getData("application/sitetech-estimate")); if (data.line) moveLine(data.cat, data.line, cat.id); else if (data.cat) moveCat(data.cat, ci); } catch { /* Non-estimate drag. */ }
       }}>
@@ -74,7 +86,7 @@ export function TakeoffEditor({ job, onChange }: { job: EstimateJob; onChange: (
           <div className="estimate-line-grid estimate-line-head" aria-hidden="true"><span /><span>No.</span><span>Description</span><span>Size</span><span className="text-right">Qty / unit</span><span className="text-right">Unit price</span><span className="text-right">Total</span><span className="text-right">Margin</span><span>Scope</span><span /></div>
           {cat.items.map((line, li) => {
             const r = computed.items[line.id], expanded = openLines.has(line.id), number = `${ci + 1}.${li + 1}`;
-            return <article key={line.id} className={`estimate-line ${expanded ? "estimate-line-open" : ""} ${line.excluded || cat.excluded ? "estimate-excluded" : ""}`} aria-label={`Line ${number}`} onDragOver={e => e.preventDefault()} onDrop={e => {
+            return <article key={line.id} id={`takeoff-line-${line.id}`} tabIndex={-1} className={`estimate-line ${expanded ? "estimate-line-open" : ""} ${line.excluded || cat.excluded ? "estimate-excluded" : ""}`} aria-label={`Line ${number}`} onDragOver={e => e.preventDefault()} onDrop={e => {
               e.preventDefault(); e.stopPropagation(); try { const data = JSON.parse(e.dataTransfer.getData("application/sitetech-estimate")); if (data.line) moveLine(data.cat, data.line, cat.id, line.id); } catch { /* Non-estimate drag. */ }
             }}>
               <div className="estimate-line-grid">

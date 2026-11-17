@@ -1,6 +1,7 @@
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { startTodoReminderScheduler } from "./services/todoReminders";
+import { startTakeoffWorker } from "./takeoff/worker";
 import { runDataMigrations } from "./dataMigrations";
 import { serveStatic } from "./static";
 import { createServer } from "http";
@@ -16,7 +17,7 @@ declare module "http" {
 
 // Large takeoff imports are bounded separately; keep the default limit for
 // unrelated endpoints rather than broadening the entire application's parser.
-app.use(["/api/estimating-rates", "/api/opportunities/:opportunityId/estimates"], express.json({ limit: "5mb" }));
+app.use(["/api/estimating-rates", "/api/opportunities/:opportunityId/estimates", "/api/takeoff-playbook", "/api/opportunities/:opportunityId/takeoff"], express.json({ limit: "5mb" }));
 app.use(
   express.json({
     verify: (req, _res, buf) => {
@@ -53,7 +54,7 @@ app.use((req, res, next) => {
     const duration = Date.now() - start;
     if (path.startsWith("/api")) {
       let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
-      if (capturedJsonResponse && !path.includes("/estimates") && path !== "/api/estimating-rates") {
+      if (capturedJsonResponse && !path.includes("/estimates") && !path.includes("takeoff") && !path.includes("estimating-ai") && path !== "/api/estimating-rates") {
         logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
       }
 
@@ -70,6 +71,7 @@ app.use((req, res, next) => {
   await runDataMigrations();
 
   await registerRoutes(httpServer, app);
+  startTakeoffWorker();
 
   // Daily due-today / overdue todo reminders (duplicate-safe)
   startTodoReminderScheduler();

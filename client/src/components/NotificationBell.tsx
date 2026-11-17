@@ -25,7 +25,9 @@ export function NotificationBell() {
     setOpen(false);
     // Deep-link to the related todo so its dialog (with Updates) opens on arrival
     const todoParam = n.todoId ? `todo=${n.todoId}` : "";
-    if (n.projectId) {
+    if (n.relatedEntityType === "opportunity" && n.relatedEntityId) {
+      navigate(`/bidding/${n.relatedEntityId}`);
+    } else if (n.projectId) {
       navigate(`/projects/${n.projectId}?tab=todos${todoParam ? `&${todoParam}` : ""}`);
     } else {
       navigate(`/my-work${todoParam ? `?${todoParam}` : ""}`);

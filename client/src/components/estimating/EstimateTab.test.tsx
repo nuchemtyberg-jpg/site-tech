@@ -4,6 +4,7 @@ import { emptyJob, type EstimateRates, type EstimateRevision } from "@shared/est
 import { summarize } from "@shared/estimating/engine";
 import { EstimateApiError } from "@/hooks/use-estimates";
 import { EstimateTab } from "./EstimateTab";
+vi.mock("./ClaudeTakeoff", () => ({ ClaudeTakeoff: () => null }));
 
 const mocks = vi.hoisted(() => ({
   revision: undefined as EstimateRevision | undefined,

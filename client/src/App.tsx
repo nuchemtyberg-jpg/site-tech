@@ -26,6 +26,7 @@ import PDFViewerPage from "@/pages/PDFViewerPage";
 import DailyReportPage from "@/pages/DailyReportPage";
 import MyWork from "@/pages/MyWork";
 import AdminSettings, { AdminSettingsDetail, LegacyAdminSettingsRedirect } from "@/pages/AdminSettings";
+import TakeoffPlaybook from "@/components/estimating/TakeoffPlaybook";
 import EmailSetup from "@/pages/EmailSetup";
 import Billing from "@/pages/Billing";
 import Employees from "@/pages/Employees";
@@ -118,6 +119,7 @@ export function Router() {
       <Route path="/employees" component={() => <ProtectedRoute component={Employees} />} />
       <Route path="/settings" component={() => <ProtectedRoute component={Settings} />} />
       <Route path="/admin/settings" component={() => <ProtectedRoute component={AdminSettings} />} />
+      <Route path="/estimating/playbook" component={() => <ProtectedRoute component={TakeoffPlaybook} />} />
       <Route path="/admin/settings/:section" component={() => <ProtectedRoute component={AdminSettingsDetail} />} />
       <Route path="/admin/users" component={() => <ProtectedRoute component={LegacyAdminSettingsRedirect} adminOnly />} />
       <Route path="/admin/workflows" component={() => <ProtectedRoute component={LegacyAdminSettingsRedirect} adminOnly />} />

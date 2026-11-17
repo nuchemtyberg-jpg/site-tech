@@ -9,6 +9,7 @@ import { RatesEditor } from "./RatesEditor";
 import { EstimateCover } from "./EstimateCover";
 import { downloadCsv } from "./exports";
 import { discardEstimate, useUnsavedEstimate } from "./use-unsaved-estimate";
+import { ClaudeTakeoff, type TakeoffFocus } from "./ClaudeTakeoff";
 import "./estimating.css";
 
 export function EstimateTab({ opportunityId, onDirtyChange }: { opportunityId: number; onDirtyChange: (dirty: boolean) => void }) {
@@ -23,6 +24,7 @@ export function EstimateTab({ opportunityId, onDirtyChange }: { opportunityId: n
   const [nameOpen, setNameOpen] = useState(false);
   const [name, setName] = useState("");
   const [refreshOpen, setRefreshOpen] = useState(false);
+  const [focus, setFocus] = useState<TakeoffFocus>();
   const file = useRef<HTMLInputElement>(null);
   const submitted = useRef<string>();
   const currentJob = useRef(job); currentJob.current = job;
@@ -65,8 +67,17 @@ export function EstimateTab({ opportunityId, onDirtyChange }: { opportunityId: n
       <Button variant="outline" size="sm" disabled={save.isPending} onClick={() => file.current?.click()}>Import takeoff JSON</Button><input ref={file} type="file" accept=".json,application/json" className="hidden" aria-label="Import takeoff JSON file" onChange={e => { const upload = e.target.files?.[0]; if (upload) void importJson(upload); e.target.value = ""; }} />
       {job && <><span role="status" className={`text-xs font-medium ${dirty ? "text-amber-700 dark:text-amber-300" : "text-muted-foreground"}`}>{dirty ? "Unsaved changes" : "All changes saved"}</span><Button size="sm" disabled={!dirty || !!base?.locked || save.isPending} onClick={() => { if (base && confirmFormulaSave()) { submitted.current = JSON.stringify(job); save.mutate({ revisionId: base.id, version: base.version, job }, { onSuccess: accept, onError: failed }); } }}>{save.isPending ? "Saving…" : "Save"}</Button><Button variant="outline" size="sm" disabled={save.isPending} onClick={() => { setName(""); setNameOpen(true); }}>Save as revision</Button>{calculated && <div className="estimate-job-total"><strong className="estimate-number">{money(calculated.total.sell)}</strong><small className="estimate-number text-muted-foreground">{(calculated.margin * 100).toFixed(2)}% margin · job sell</small></div>}</>}
     </div>
+    <ClaudeTakeoff opportunityId={opportunityId} revisionId={base?.id} dirty={dirty} manualPending={save.isPending} onManualStart={ordered.length === 0 && !job ? () => save.mutate({ start: true }, { onSuccess: accept, onError: failed }) : undefined} onOpenRevision={id => {
+      // Never navigate away from an in-progress draft to show a generated result.
+      if (dirty) { setMessage("Save your draft before opening the generated revision. Your edits are safe."); return; }
+      if (id !== selected) { setSelected(id); setJob(undefined); setBase(undefined); setFocus(undefined); }
+      setView("takeoff");
+    }} onFocus={value => {
+      if (!job?.categories.some(c => c.id === value.categoryId || c.items.some(l => l.id === value.lineId))) { setMessage("This flagged line is no longer in the current draft. Check the run summary or reopen the saved revision."); return; }
+      setView("takeoff"); setFocus(value);
+    }} />
     {message && <p role="status" className="rounded border p-3 text-sm">{message}</p>}
-    {ordered.length === 0 && !job && <div className="estimate-panel px-5 py-12 text-center space-y-3"><h3 className="font-semibold text-lg">Price this opportunity</h3><p className="text-muted-foreground max-w-md mx-auto">Start Revision 0 with the current company rates, or import a takeoff file. This estimate does not change the scope checklist or awarded contract.</p><Button disabled={save.isPending} onClick={() => save.mutate({ start: true }, { onSuccess: accept, onError: failed })}>Start Rev 0</Button></div>}
+    {ordered.length === 0 && !job && <div className="estimate-panel px-5 py-8 text-center space-y-3"><h3 className="font-semibold text-lg">Start estimate</h3><p className="text-muted-foreground max-w-md mx-auto">Start manually with current company rates using Start Rev 0, choose New Claude takeoff above to measure documents, or import a takeoff file. This estimate does not change the scope checklist or awarded contract.</p><Button disabled={save.isPending} onClick={() => save.mutate({ start: true }, { onSuccess: accept, onError: failed })}>Start Rev 0</Button></div>}
     {selected && loaded.isLoading && !job && <div className="h-48 bg-muted rounded animate-pulse" aria-label="Loading estimate" />}
     {selected && loaded.isError && !job && <div role="alert" className="p-4 border rounded"><p>Could not load revision: {loaded.error.message}</p><Button variant="outline" onClick={() => loaded.refetch()}>Retry</Button></div>}
     {job && base && calculated && <>
@@ -78,7 +89,7 @@ export function EstimateTab({ opportunityId, onDirtyChange }: { opportunityId: n
         return <li key={key}>{label}: {error}</li>;
       })}</ul></details>}
       <nav className="estimate-toolbar" aria-label="Estimate views">{[["takeoff", "Takeoff & costs"], ["cover", "Cover sheet"], ["rates", "Estimate-local rates"]].map(([key, title]) => <Button key={key} size="sm" variant={view === key ? "default" : "ghost"} aria-pressed={view === key} onClick={() => setView(key)}>{title}</Button>)}<div className="ml-auto flex flex-wrap gap-2"><Button size="sm" variant="outline" onClick={() => downloadCsv(job)}>Cover CSV</Button><Button size="sm" variant="outline" onClick={() => downloadCsv(job, true)}>Detail CSV</Button></div></nav>
-      {view === "takeoff" && <TakeoffEditor key={base.id} job={job} onChange={setJob} />}
+      {view === "takeoff" && <TakeoffEditor key={base.id} job={job} onChange={setJob} focusLineId={focus?.lineId} focusCategoryId={focus?.categoryId} focusSignal={focus?.signal} />}
       {view === "cover" && <EstimateCover job={job} computed={calculated} />}
       {view === "rates" && <div className="space-y-3"><div className="estimate-toolbar"><p className="text-xs text-muted-foreground flex-1">These rates belong to this draft only. Company changes do not alter saved estimates.</p><Button size="sm" variant="outline" onClick={() => setRefreshOpen(true)}>Refresh company rates</Button></div><RatesEditor rates={job} onChange={rates => setJob({ ...job, ...rates })} /></div>}
     </>}

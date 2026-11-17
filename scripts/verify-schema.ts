@@ -3,6 +3,10 @@ import pg from "pg";
 const { Client } = pg;
 
 const requiredTables = [
+  "estimating_ai_settings",
+  "takeoff_playbooks",
+  "takeoff_rules",
+  "takeoff_runs",
   "estimate_revisions",
   "estimating_company_rates",
   "project_contracts",

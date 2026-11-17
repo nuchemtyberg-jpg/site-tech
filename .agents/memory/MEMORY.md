@@ -8,3 +8,4 @@
 - [Shared Documents preservation](shared-documents.md) — keep explicit versions and one shared manager; preserve folder trees left behind by historical pre-award migration.
 - [Bidding contract lifecycle](bidding-contract-lifecycle.md) — Bidding stays editable after award; additional bids add contracts to one Project; change orders come later.
 - [Estimating compatibility](estimating-compatibility.md) — estimates are separate from scope; preserve form precision and imported zero-default markups.
+- [Claude takeoff](claude-takeoff.md) — preserve Phase 1, snapshot sources, reserve uncertain API spend, and use persistent production workers.

@@ -44,13 +44,22 @@ async function main() {
     for (const who of [admin, manager, estimator]) {
       assert.equal((await request(who, "/api/estimating-rates")).status, 200);
       assert.equal((await request(who, root)).status, 200);
+      assert.equal((await request(who, "/api/takeoff-playbook")).status, 200);
+      assert.equal((await request(who, `/api/opportunities/${oppIds[0]}/takeoff/runs`)).status, 200);
     }
+    assert.equal((await request(admin, "/api/admin/estimating-ai")).status, 200);
+    assert.equal((await request(estimator, "/api/admin/estimating-ai")).status, 403);
+    assert.equal((await request(manager, "/api/admin/estimating-ai", "PUT", {})).status, 403);
     for (const who of [user, pending, null]) {
       const status = who ? 403 : 401;
       for (const [path, method, body] of [
         ["/api/estimating-rates", "GET", undefined], ["/api/estimating-rates", "PUT", {}],
         [root, "GET", undefined], [root, "POST", { start: true }],
         [`${root}/1`, "GET", undefined], [`${root}/1`, "PUT", {}],
+        ["/api/takeoff-playbook", "GET", undefined], ["/api/takeoff-playbook", "POST", {}],
+        ["/api/admin/estimating-ai", "GET", undefined],
+        [`/api/opportunities/${oppIds[0]}/takeoff/runs`, "POST", {}],
+        [`/api/opportunities/${oppIds[0]}/takeoff/documents`, "GET", undefined],
       ] as const) assert.equal((await request(who, path, method, body)).status, status);
     }
     console.log("PASS all estimate/rate endpoints deny regular, pending and anonymous users");

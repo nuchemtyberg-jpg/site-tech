@@ -1,5 +1,6 @@
 import { Link, useLocation, useParams, useSearch } from "wouter";
 import { useEffect } from "react";
+import { estimatingAISettingsOption } from "@/components/estimating/TakeoffNavigation";
 import { ArrowLeft, ChevronRight, FileText, ListChecks, Settings2, Shield, Zap } from "lucide-react";
 import { DocumentCategoriesSettings } from "@/components/settings/DocumentCategoriesSettings";
 import { ScopeCatalogSettings } from "@/components/settings/ScopeCatalogSettings";
@@ -11,6 +12,7 @@ import { useAuth } from "@/hooks/use-auth";
 
 // One directory definition drives the landing page, child pages, and legacy links.
 export const adminSettingsOptions = [
+  estimatingAISettingsOption,
   {
     slug: "estimating-rates",
     title: "Estimating Rates",

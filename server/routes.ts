@@ -15,6 +15,7 @@ import { handleProjectStatusChange } from "./services/workflowEngine";
 import { changeOpportunityStatus, OpportunityStatusError } from "./services/opportunityService";
 import { registerAwardRoutes } from "./awardRoutes";
 import { registerEstimatingRoutes } from "./estimatingRoutes";
+import { registerTakeoffRoutes } from "./takeoff/routes";
 import { canEstimate } from "@shared/estimating/model";
 import { USER_ROLES } from "@shared/models/auth";
 import { awardDerivedProjectIds, projectViewForUser, projectViewsForUser } from "./services/projectFinancialAccess";
@@ -101,6 +102,7 @@ export async function registerRoutes(
   await setupAuth(app);
   registerAuthRoutes(app);
   registerEstimatingRoutes(app);
+  registerTakeoffRoutes(app);
   
   // Object Storage Setup
   registerObjectStorageRoutes(app);

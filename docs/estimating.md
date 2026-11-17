@@ -3,7 +3,8 @@
 ## Phase-one boundary
 Estimates belong to Opportunities and are independent of the scope checklist.
 Nothing in estimating creates or changes contracts, awards, project tasks, or
-pay applications. Proposal generation and AI takeoff are future phases.
+pay applications. Proposal generation is a future phase. Phase 2 AI takeoff
+is documented in `docs/claude-takeoff.md`.
 
 ## Access
 Approved admins, managers and estimators may read/write estimates and company

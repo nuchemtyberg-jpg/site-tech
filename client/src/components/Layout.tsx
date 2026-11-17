@@ -24,6 +24,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { NotificationBell } from "@/components/NotificationBell";
+import { TakeoffNavigation } from "@/components/estimating/TakeoffNavigation";
 import siteTechLogo from "@assets/Logo_1770600587313.png";
 
 export function Layout({ children }: { children: React.ReactNode }) {
@@ -102,6 +103,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
               );
             })}
             
+            <TakeoffNavigation />
             {isAdmin && (
               <>
                 <div className="my-4 px-4">
@@ -231,6 +233,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 );
               })}
               
+              <TakeoffNavigation onNavigate={() => setMobileMenuOpen(false)} />
               {isAdmin && (
                 <>
                   <div className="my-4">
