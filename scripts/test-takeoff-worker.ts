@@ -21,7 +21,7 @@ async function main() {
   try {
     const [c]=await db.insert(customers).values({name:tag}).returning();cid=c.id;
     const [o]=await db.insert(opportunities).values({name:tag,opportunityNumber:tag,customerId:cid}).returning();oid=o.id;
-    const makeRun=async(s:TakeoffState,cancel=false)=>(await db.insert(takeoffRuns).values({opportunityId:oid!,createdBy:tag,status:"running",state:{...s,cacheVersion:1,toolsSnapshot:JSON.stringify(TAKEOFF_TOOLS),systemSnapshot:s.systemSnapshot||JSON.stringify(takeoffSystem(s))},
+    const makeRun=async(s:TakeoffState,cancel=false)=>(await db.insert(takeoffRuns).values({opportunityId:oid!,createdBy:tag,status:"running",state:{...s,contextProtocol:2,cacheVersion:1,toolsSnapshot:JSON.stringify(TAKEOFF_TOOLS),systemSnapshot:s.systemSnapshot||JSON.stringify(takeoffSystem(s))},
       leaseOwner:owner,leaseUntil:new Date(Date.now()+600000),cancelRequested:cancel}).returning())[0];
     const job=emptyJob(),cat=newCategory(),line=newLine();
     line.desc="Known item";line.qty="2";line.ref="S1; count 2";line.res.sub=[{id:"sub",desc:"Known cost",qty:"qty",unit:"EA",cost:"100"}];cat.items=[line];job.categories=[cat];
@@ -56,24 +56,35 @@ async function main() {
     assert.equal(failures,4);assert.equal(exhausted.status,"failed");assert.equal(exhausted.state.steps,0);
     assert.equal(exhausted.state.costEvents!.filter(e=>e.uncertain).length,4);
     assert.equal(exhausted.state.messages.filter((m:any)=>m.role==="assistant").length,0);
+    let truncatedCalls=0;
+    const truncatedClient:any={messages:{countTokens:async()=>({input_tokens:100}),create:async()=>{
+      truncatedCalls++;return {stop_reason:"max_tokens",usage:{input_tokens:100,output_tokens:24000},content:[{type:"tool_use",id:`partial-${truncatedCalls}`,name:"checkpoint_category",input:{}}]};
+    }}};
+    const truncatedRun=await makeRun(state());await executeClaimedRun(truncatedRun,{client:truncatedClient,leaseOwner:owner});
+    const [truncatedDone]=await db.select().from(takeoffRuns).where(eq(takeoffRuns.id,truncatedRun.id));
+    assert.equal(truncatedDone.status,"failed");assert.equal(truncatedCalls,2);
+    assert.match(truncatedDone.error!,/Repeated output truncation/);
+    assert.equal(truncatedDone.state.job.categories.length,0);
+    assert.equal(truncatedDone.state.toolTimings?.length||0,0);
     const legacyState=state();legacyState.cost=.4;legacyState.steps=8;legacyState.job=structuredClone(job);
     legacyState.messages=[{role:"user",content:"old request"},{role:"assistant",content:[{type:"thinking",thinking:"opaque",signature:"OLD_SIGNATURE"}]},{role:"user",content:"Continue"}];
     const legacyRun=await makeRun(legacyState);
     delete legacyRun.state.cacheVersion;delete legacyRun.state.toolsSnapshot;
+    delete legacyRun.state.contextProtocol;
     legacyRun.state.systemSnapshot=legacyRun.state.systemSnapshot!.replaceAll(',"ttl":"1h"',"");
     const legacySystem=legacyRun.state.systemSnapshot;
     await db.update(takeoffRuns).set({state:legacyRun.state}).where(eq(takeoffRuns.id,legacyRun.id));
     const migrateClient:any={messages:{countTokens:async(request:any)=>{
-      assert.match(JSON.stringify(request.messages),/OLD_SIGNATURE/);
+      assert.doesNotMatch(JSON.stringify(request.messages),/OLD_SIGNATURE/);
       assert.match(JSON.stringify(request.messages),/Known item/);
-      assert.equal(JSON.stringify(request.system),legacySystem);
+      assert.notEqual(JSON.stringify(request.system),legacySystem);
       return {input_tokens:100};
     },create:client.messages.create}};
     await executeClaimedRun(legacyRun,{client:migrateClient,leaseOwner:owner});
     const [migrated]=await db.select().from(takeoffRuns).where(eq(takeoffRuns.id,legacyRun.id));
     assert.equal(migrated.status,"needs_review");assert.equal(migrated.state.cacheVersion,1);
     assert.equal(migrated.state.steps,9);assert.ok(migrated.state.cost>=.4);
-    assert.deepEqual(migrated.state.messages.slice(0,legacyState.messages.length),legacyState.messages);
+    assert.deepEqual(migrated.state.conversationArchives![0].messages,legacyState.messages);
     calls=1; // Existing fixture assertions below count only the original client run.
     const [rev]=await db.select().from(estimateRevisions).where(eq(estimateRevisions.id,done.revisionId!));assert.equal(rev.summary.sell,200);
     // Recovery replays persisted tools, not the paid model request.
@@ -159,7 +170,7 @@ async function main() {
     );
     let counts=0,generations=0;
     const bounded:any={models:{retrieve:async()=>({max_input_tokens:200000,max_tokens:24000})},messages:{
-      countTokens:async()=>({input_tokens:++counts<3?700000:100}),
+      countTokens:async()=>{counts++;return {input_tokens:100,context_management:{original_input_tokens:700000}};},
       create:async(request:any)=>{
         generations++;assert.ok(request.messages.length>=40);assert.equal(request.messages.filter((m:any)=>m.role==="assistant").length,20);
         return {usage:{input_tokens:100,output_tokens:200},content:[{type:"tool_use",id:"bounded-submit",name:"submit_takeoff",input:{job,summary:"Done",questions:[]}}]};
@@ -167,7 +178,7 @@ async function main() {
     }};
     const boundedRun=await makeRun(growing);await executeClaimedRun(boundedRun,{client:bounded,leaseOwner:owner});
     const [boundedDone]=await db.select().from(takeoffRuns).where(eq(takeoffRuns.id,boundedRun.id));
-    assert.equal(boundedDone.status,"needs_review");assert.equal(counts,3);assert.equal(generations,1);
+    assert.equal(boundedDone.status,"needs_review");assert.equal(counts,1);assert.equal(generations,1);
     assert.equal(boundedDone.state.modelLimits!.input,172000);assert.ok(boundedDone.state.messages.length>40);
     const oversized:any={messages:{countTokens:async()=>({input_tokens:700000}),create:async()=>{throw new Error("Must not generate");}}};
     const blockedRun=await makeRun(state());await executeClaimedRun(blockedRun,{client:oversized,leaseOwner:owner});

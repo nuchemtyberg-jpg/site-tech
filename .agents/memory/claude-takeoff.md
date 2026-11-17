@@ -31,19 +31,31 @@ Context compaction must retain canonical checkpoint/scales/sheet indexes indepen
 
 **Why:** The owner permits Claude to add reusable material keys, not to rewrite existing prices; long drawing runs must not depend on resending old images or geometry.
 
-**How to apply:** Preserve the original baseline through checkpoints, restart and Continue; prune outbound copies, never the data needed to recover unfinished work.
+**How to apply:** Preserve the original baseline through checkpoints, restart and Continue. Use server-side context editing; do not rewrite outbound historical messages.
 
-Thinking signatures require an immutable system prompt for the lifetime of a conversation.
+Thinking signatures bind the complete preceding prefix, including older user tool results, not just the system.
 
-**Why:** The real takeoff failed after a scale change because checkpoint data had changed the system prompt beneath signed assistant thinking.
+**Why:** A scale change in system caused the first incident; later, client-side rewriting of an old tool result invalidated downstream thinking despite keeping the assistant blocks unchanged.
 
-**How to apply:** Persist the system snapshot as a JSON string, put mutable checkpoints/limits in user turns, and never prune assistant blocks. Archive a broken conversation intact before an explicit checkpoint-based recovery; retain spend and limits.
+**How to apply:** Keep system, tools and all earlier messages unchanged. Use Anthropic server-side context editing, never local tool-result substitution. Archive a broken conversation before fresh-checkpoint recovery; retain spend and limits.
 
 Conversation caching requires stable wire prefixes, not just stable system instructions.
 
 **Why:** System-only breakpoints left growing tool/image history uncached; pruning every step changed the prefix. Repeated full-job reminders also created unnecessary fresh input.
 
-**How to apply:** Freeze ordered tools and prior wire messages as strings across JSONB round trips. Append compact context only to unsent user turns, keep tool choice stable, and prune in explicit threshold-driven batches. Use automatic conversation caching to avoid moving old markers or exceeding four breakpoints; account separately for one-hour writes.
+**How to apply:** Freeze ordered tools and prior wire messages as strings across JSONB round trips. Append compact context only to unsent user turns and keep tool choice stable. Server-side editing may rebuild a cache; local prefix mutation is never safe. Use one-hour automatic caching for long runs and account for its write price.
+
+Large estimate submissions should checkpoint individual categories and finalize the stored job.
+
+**Why:** Full-job submission repeatedly exhausted the output limit, producing incomplete arguments and expensive retries instead of a valid estimate.
+
+**How to apply:** Preserve the Phase 1 stored structure and rates server-side; never execute truncated tool arguments. Cap repeated truncations rather than looping indefinitely.
+
+A low server-editing trigger is not proof that an edit occurred.
+
+**Why:** Small synthetic histories were accepted with signed thinking but the provider returned no applied edits despite the low threshold.
+
+**How to apply:** Assert actual `applied_edits` and the presence of prior signed blocks in the same generated request when testing that combination. Separate successful counting, successful generation and actual clearing in reports.
 
 Native canvas PDF rendering cannot be assumed safe for signed construction plan sets.
 

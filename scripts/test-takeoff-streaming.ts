@@ -52,16 +52,17 @@ test("official SDK assembles SSE thinking, tools and usage; ping bytes keep idle
     send({type:"content_block_start",index:1,content_block:{type:"tool_use",id:"tool",name:"evaluate",input:{}}});
     send({type:"content_block_delta",index:1,delta:{type:"input_json_delta",partial_json:'{"formula":"1"}'}});
     send({type:"content_block_stop",index:1});
-    send({type:"message_delta",delta:{stop_reason:"tool_use",stop_sequence:null},usage:{output_tokens:5}});
+    send({type:"message_delta",delta:{stop_reason:"tool_use",stop_sequence:null},usage:{output_tokens:5},context_management:{applied_edits:[{type:"clear_tool_uses_20250919",cleared_tool_uses:2,cleared_input_tokens:300}]}});
     send({type:"message_stop"});res.end();
   });
   await new Promise<void>(resolve=>server.listen(0,"127.0.0.1",resolve));
   try{
     const port=(server.address() as any).port;
     const client=new Anthropic({apiKey:"local-test-placeholder",baseURL:`http://127.0.0.1:${port}`,maxRetries:0});
-    const final=await streamGeneration(client,{model:"test-model",max_tokens:10,messages:[{role:"user",content:"test"}]},new AbortController().signal,async()=>{},{idle:150,overall:3000});
+    const final=await streamGeneration(client,{model:"test-model",max_tokens:10,messages:[{role:"user",content:"test"}],betas:["context-management-2025-06-27"],context_management:{edits:[{type:"clear_tool_uses_20250919"}]}},new AbortController().signal,async()=>{},{idle:150,overall:3000});
     assert.deepEqual(final.content,[{type:"thinking",thinking:"opaque fixture",signature:"signed-fixture"},{type:"tool_use",id:"tool",name:"evaluate",input:{formula:"1"}}]);
     assert.equal(final.usage.input_tokens,10);assert.equal(final.usage.output_tokens,5);
     assert.equal(final.usage.cache_creation_input_tokens,20);assert.equal(final.usage.cache_read_input_tokens,30);
+    assert.equal((final as any).context_management.applied_edits[0].cleared_tool_uses,2);
   }finally{server.closeAllConnections();await new Promise<void>(resolve=>server.close(()=>resolve()));}
 });

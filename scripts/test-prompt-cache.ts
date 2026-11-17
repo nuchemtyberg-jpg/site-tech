@@ -22,11 +22,11 @@ test("wire system/tools/prior messages stay byte-identical through steps, budget
     state=sort(JSON.parse(JSON.stringify(state)));
   }
   let counts=0;
-  const batch=await prepareCachedContext(state,async()=>++counts===1?410000:250000);
-  assert.equal(state.cacheBatches,1);assert.notEqual(JSON.stringify(batch.messages.slice(0,previous.length)),JSON.stringify(previous));
+  const batch=await prepareCachedContext(state,async()=>{counts++;return 250000;});
+  assert.equal(state.cacheBatches,undefined);assert.equal(JSON.stringify(batch.messages.slice(0,previous.length)),JSON.stringify(previous));
   const after=await prepareCachedContext(state,async()=>250000);
   assert.equal(JSON.stringify(after.messages),JSON.stringify(batch.messages));
-  assert.equal(state.cacheBatches,1);
+  assert.equal(state.cacheBatches,undefined);
   assert.deepEqual(after.messages.filter(m=>m.role==="assistant"),batch.messages.filter(m=>m.role==="assistant"));
 });
 test("mixed one-hour and five-minute cache writes billed separately",()=>{

@@ -135,7 +135,7 @@ memory-profiled and these figures are not a universal maximum.
 
 ### Streaming and interrupted requests
 
-Generation uses the official SDK `messages.stream().finalMessage()`, with a
+Generation uses the official SDK `beta.messages.stream().finalMessage()`, with a
 15-minute overall deadline and a 120-second idle/no-data deadline. Incoming SSE
 transport bytes, including pings, reset the idle deadline. Streaming thinking/text
 is never persisted: only throttled phase messages are saved. The final assembled
@@ -162,16 +162,17 @@ full measured totals remain available). Default page images use zoom 0.5 for an
 overview; explicit zoom/regions preserve access to detail. Measurement still uses
 cached full-resolution vectors, not the overview image.
 
-Durable model/tool history remains unchanged for recovery and future chat. Requests
-normally retain every previously sent message byte-for-byte. At an explicit pruning
-batch, outbound copies retain the latest 12 tool results in full, replacing older text/images with
-`[older result removed to save context — call the tool again if needed]`. Tool IDs,
-result pairing and error flags remain intact. If counted input is still too large,
-the worker retries with six results, then zero. It never modifies, reorders or drops
-assistant content (including thinking, redacted thinking, text and tool-use blocks).
-Only contents of user tool-result blocks can be replaced during pruning. If this
-cannot fit the request, it fails explicitly rather than dropping assistant history.
-Size errors from counting trigger these same limited passes.
+Durable model/tool history and outbound prior messages remain unchanged.
+Client-side pruning is prohibited: a thinking signature binds all preceding
+content, including user tool results. Both counting and generation use
+`context-management-2025-06-27` through the beta SDK, with:
+- `clear_thinking_20251015`, `keep: "all"` for cache stability;
+- `clear_tool_uses_20250919`, trigger 400,000 input tokens, keep 12 tool uses,
+  clear at least 50,000 tokens, excluding checkpoint/final submission tools.
+Editing is applied only by Anthropic. The raw history is never synchronized to
+the edited version. Response `context_management.applied_edits` and the count
+endpoint's original/effective counts are saved for inspection. If the effective
+context still exceeds the safe limit, fail without rewriting history.
 
 At run creation the system blocks and ordered tools are snapshotted as JSON strings, avoiding JSONB
 key-order changes. The same snapshot is reused byte-for-byte on every request,
@@ -183,7 +184,7 @@ Each step appends a compact checkpoint summary, calibrated scales, selected shee
 indexes and limit instructions to the newest unsent user turn, alongside tool results when present.
 The full initial job is provided once; full updated jobs remain in checkpoint
 tool-call inputs. Previously sent turns are never edited. A persisted wire-message
-snapshot preserves JSON key order and previously pruned results across restart.
+snapshot preserves JSON key order across restart.
 Successful sheet indexes are saved with state; legacy successful
 indexes are recovered from durable history where possible. Neither scales nor
 checkpoints rely on old conversation text surviving pruning.
@@ -191,32 +192,32 @@ checkpoints rely on old conversation text surviving pruning.
 Retry after a signature/replay failure archives the old conversation intact and
 starts a fresh user turn from the latest checkpoint. Documents/caches, settings,
 original rates, usage, spent amounts, pending reservations and limits are preserved.
-An existing system snapshot is preserved; legacy runs without one create it before
-any new model request and archive non-replayable old history. Recovery does not
+Recovery creates a new system/tools snapshot and server-editing policy for the
+fresh conversation, with one-hour caching throughout. Recovery does not
 increase spending approval. No drop-block beta header is used.
 
 `scripts/test-thinking-context.ts` exercises signed/opaque assistant blocks over
-16 mocked checkpoints with pruning and restart round trips.
+16 mocked checkpoints and restart round trips.
 `scripts/test-takeoff-worker.ts` asserts identical systems and untouched assistant
 blocks through actual mocked worker checkpoint/save/restart execution.
 `scripts/verify-thinking-count.ts <run-id>` is read-only and count-only. For the
 legacy scale-change incident, it reconstructs the original frozen system to verify
-a prior signed thinking block survives a new user checkpoint and pruned result,
+a prior signed thinking block survives a new user checkpoint and server policy,
 then separately validates fresh-checkpoint recovery. It never requeues or generates.
 
 Before generation the worker retrieves unbilled model metadata and counts the exact
-compacted request. Input is capped at 600,000 tokens or the model's reported capacity
+server-edited request. Input is capped at 600,000 tokens or the model's reported capacity
 minus bounded output and a 4,000-token margin, whichever is smaller. Missing model
 capacity uses a conservative 200,000-token window (172,000 input with 24,000 output).
-Outbound histories over 20 MB skip toward compaction before the counting call.
-If essential context cannot fit after all passes, the run fails explicitly with
+Outbound histories over 20 MB fail explicitly rather than being rewritten.
+If essential context cannot fit after server editing, the run fails explicitly with
 its checkpoint retained and no new generation charge. This is not a cost-cap
 stop; approving more dollars cannot fix oversized essential context.
 
 ### Conversation cache protocol
 
 Two fixed system breakpoints use `ttl: "1h"`. Stable top-level
-`cache_control: {type: "ephemeral", ttl: "5m"}` delegates the newest-user-message
+`cache_control: {type: "ephemeral", ttl: "1h"}` delegates the newest-user-message
 breakpoint to Anthropic automatic caching, for three total breakpoints.
 This is intentional: moving explicit per-turn markers would change earlier
 message JSON, while leaving every past marker would exceed the four-marker limit.
@@ -224,19 +225,14 @@ Automatic caching implements the last-block breakpoint without client-side histo
 mutation. `tool_choice` stays `auto`, including budget-limit submission requests;
 submit-now instructions are appended in user content instead.
 
-Pruning is attempted only above 400K counted tokens (or 80% of a smaller model
-input allowance), or on size/context errors. A batch can keep 12, 6 or zero recent
-tool results until the request fits. Its wire representation is persisted, so
-pruned data never reappears on restart. After a batch, the next threshold allows
-50K growth if needed, bounded below the hard input ceiling, to avoid repeated
-small pruning passes. Assistant blocks are unchanged.
+Server-side clearing is triggered by the stored policy. Cache entries may be
+rebuilt when clearing happens; `clear_at_least` makes those rebuilds worthwhile.
+Thinking is kept rather than cleared each turn, avoiding unnecessary cache churn.
+No block-binding/drop-block fallback is enabled because context editing is supported.
 
-Legacy runs such as #61 keep their signed conversation and exact existing system
-snapshot, including its five-minute TTL, when adopting the automatic conversation
-breakpoint. Upgrading an old system to one hour would violate its signature/prefix
-invariant; one-hour system blocks apply to newly created conversations only.
-Costs, caps, documents and preparation caches are unchanged. No code update by
-itself retries a failed run.
+Legacy runs upgrade to a fresh conversation at the checkpoint before using the
+new policy/tools. Broken history is archived intact. Costs, caps, documents and
+preparation caches remain unchanged. No code update retries a failed run.
 
 One-hour writes are billed at `cacheWriteHour`, defaulting to twice the input
 price ($8/MTok Opus 5.5, $4/MTok Sonnet 5.5). Provider
@@ -246,10 +242,30 @@ Conservative reservations use the highest write price, not assumed future hits.
 
 Tests: `scripts/test-prompt-cache.ts` compares byte-identical prefixes over
 18 steps with scale/budget changes and simulated JSONB/restart ordering, then
-checks that only an explicit pruning batch changes the prior wire prefix.
+checks that server-edited token counts never change the client wire prefix.
 `scripts/verify-prompt-cache.ts` makes exactly two low-output paid Sonnet requests,
 using synthetic data and no takeoff run. Run it only with explicit spending approval.
 Provider reference: https://platform.claude.com/docs/en/build-with-claude/prompt-caching
+
+Context editing reference: https://platform.claude.com/docs/en/build-with-claude/context-editing
+
+### Avoiding oversized submissions
+
+`checkpoint_category` upserts one validated Phase 1 category into the stored job,
+without retransmitting the immutable rate tables. `submit_takeoff` can finalize
+that job with `use_checkpoint:true`. Full-job submission remains supported for
+compatibility. All paths use the same validation and calculation engine.
+Responses stopped at `max_tokens` never execute partial tool arguments. Claude is
+asked to checkpoint smaller categories; two consecutive truncations fail the run
+instead of repeatedly buying another full-job output. Tool duration and success
+are recorded separately from model-generation duration.
+
+Live test scripts require explicit spending approval:
+- `scripts/test-takeoff-live-fixture.ts`: synthetic 3-page PDF, Sonnet 5.5, $1 cap,
+  low server-editing threshold, requires actual applied edits and cache reads.
+- `scripts/verify-signed-context-live.ts`: synthetic Opus probe capped at $0.25,
+  requires both prior signed thinking and an actual server edit on a generated response.
+  Acceptance without applied edits does not satisfy that assertion.
 
 ## Claude-added named material rates
 

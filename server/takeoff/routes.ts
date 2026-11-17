@@ -14,7 +14,8 @@ import { getAISettings, getPlaybook, getRun, monthlySpend, progress, publicRun, 
 import { abortRun } from "./worker";
 import { pinDocument, getPreparation } from "./preparation";
 import { takeoffRequestDiagnostics } from "./diagnostics";
-import { freshCheckpointConversation } from "./context";
+import { freshCheckpointConversation,defaultContextManagement } from "./context";
+import { TAKEOFF_TOOLS } from "./tools";
 import { takeoffSystem } from "./worker";
 const id=(raw:unknown)=>z.coerce.number().int().positive().parse(raw);
 export function registerTakeoffRoutes(app:Express) {
@@ -101,9 +102,12 @@ export function registerTakeoffRoutes(app:Express) {
       delete state.retryAt;delete state.retries;
       delete state.networkRetries;
       delete state.checkpointTurnStep;
-      if(!state.systemSnapshot || /invalid signature|thinking block|bound to a different conversation|system prompt differs/i.test(run.error||"")) {
+      if(!state.systemSnapshot || /invalid.{0,5}signature|thinking.{0,5}block|bound to a different conversation|system prompt differs/i.test(run.error||"")) {
         freshCheckpointConversation(state,"Retry recovered a non-replayable conversation from its checkpoint.");
         delete state.systemSnapshot;delete state.contextProtocol;delete state.toolsSnapshot;delete state.truncatedResponses;
+        state.systemSnapshot=JSON.stringify(takeoffSystem(state));
+        state.toolsSnapshot=JSON.stringify(TAKEOFF_TOOLS);
+        state.contextProtocol=2;state.cacheVersion=1;state.contextManagement=defaultContextManagement();
       }
       // Keep pendingCall: interrupted generation must retain its conservative reservation.
       progress(state,"Estimator requested retry from the last checkpoint. Existing documents, rates, settings, spend and approved limits are unchanged.");

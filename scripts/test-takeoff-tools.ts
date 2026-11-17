@@ -7,6 +7,21 @@ import { addedMaterialRates, ensureRateSnapshot } from "../server/takeoff/rate-s
 import { aiSettingsSchema, usageCost, type TakeoffState } from "../shared/estimating/takeoff";
 import { emptyJob, newCategory, newLine } from "../shared/estimating/model";
 
+test("incremental category checkpoints preserve rates and support lightweight final submission",async()=>{
+  const state={job:emptyJob()} as TakeoffState;
+  const category=newCategory(),line=newLine();line.desc="Fixture";line.qty="3";line.unit="EA";line.ref="C1; stated count 3";
+  line.res.sub=[{id:"s1",desc:"Test price",qty:"qty",unit:"EA",cost:"10"}];category.items=[line];
+  await executeTool("checkpoint_category",{category},state);
+  assert.equal(state.job.categories.length,1);
+  category.name="Updated category";await executeTool("checkpoint_category",{category},state);
+  assert.equal(state.job.categories.length,1);assert.equal(state.job.categories[0].name,"Updated category");
+  const result=await executeTool("submit_takeoff",{use_checkpoint:true,summary:"Done",questions:[]},state);
+  assert.ok(result.submitted);assert.equal((result.result as any).totals.sell,30);
+  const before=structuredClone(state.job);
+  await assert.rejects(executeTool("checkpoint_category",{category:{...category,profit:"20"}},state),/leave markups blank/);
+  assert.deepEqual(state.job,before);
+});
+
 export async function knownDrawing() {
   const pdf=await PDFDocument.create(), page=pdf.addPage([612,792]);
   const font=await pdf.embedFont(StandardFonts.Helvetica);
