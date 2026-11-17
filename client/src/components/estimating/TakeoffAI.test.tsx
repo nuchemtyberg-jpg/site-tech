@@ -76,9 +76,9 @@ describe("Claude takeoff review & approval", () => {
   it("requires confirmation before retrying the same failed run", () => {
     const confirm=vi.spyOn(window,"confirm").mockReturnValueOnce(false).mockReturnValueOnce(true);
     render(<RunProgress run={run({status:"failed",error:"Anthropic rejected the token count: credit balance too low"})} opportunityId={3} dirty={false} selected={false} onOpenRevision={vi.fn()} />);
-    fireEvent.click(screen.getByRole("button",{name:"Retry",exact:true}));
+    fireEvent.click(screen.getByRole("button",{name:"Retry"}));
     expect(mocks.mutate).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button",{name:"Retry",exact:true}));
+    fireEvent.click(screen.getByRole("button",{name:"Retry"}));
     expect(mocks.mutate.mock.calls[0][0]).toEqual({action:"runs/9/retry",data:undefined});
     expect(confirm).toHaveBeenCalledWith(expect.stringContaining("paid Claude calls"));
     confirm.mockRestore();

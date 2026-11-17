@@ -47,6 +47,10 @@ export interface RunDocument {
 export interface TokenUsage { input: number; output: number; cacheRead: number; cacheWrite: number }
 export type AddedMaterialRate = EstimateRates["rates"][number] & { computedValue: number | null };
 export interface TakeoffState {
+  /** JSON string avoids JSONB key reordering of signed request blocks. */
+  systemSnapshot?: string;
+  conversationArchives?: { at: string; reason: string; messages: unknown[]; systemSnapshot?: string }[];
+  checkpointTurnStep?: number;
   requestKey?: string;
   requestFingerprint?: string;
   preparationComplete?: boolean;

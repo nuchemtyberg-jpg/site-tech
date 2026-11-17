@@ -27,6 +27,12 @@ Context compaction must retain canonical checkpoint/scales/sheet indexes indepen
 
 **How to apply:** Preserve the original baseline through checkpoints, restart and Continue; prune outbound copies, never the data needed to recover unfinished work.
 
+Thinking signatures require an immutable system prompt for the lifetime of a conversation.
+
+**Why:** The real takeoff failed after a scale change because checkpoint data had changed the system prompt beneath signed assistant thinking.
+
+**How to apply:** Persist the system snapshot as a JSON string, put mutable checkpoints/limits in user turns, and never prune assistant blocks. Archive a broken conversation intact before an explicit checkpoint-based recovery; retain spend and limits.
+
 Native canvas PDF rendering cannot be assumed safe for signed construction plan sets.
 
 **Why:** The office's 22-page signed drawing set reproducibly caused SIGSEGV during thumbnail rendering, after successful text/vector extraction. A native crash cannot be caught by Express.

@@ -40,22 +40,19 @@ test("counted overflow prunes further and recounts before returning a generation
   });
   assert.deepEqual(counts, [12, 6]); assert.equal(result.resultsKept, 6);
   assert.equal(result.inputTokens, 125000); assert.equal(result.historyReset, false);
-  assert.ok(result.messages.at(-1).content.at(-1).cache_control);
+  assert.equal(result.messages.at(-1).content.at(-1).cache_control,undefined);
   assert.equal((raw.at(-1) as any).content[0].cache_control, undefined);
 });
-test("large historical tool inputs can be removed without orphan results and without deleting raw history", async () => {
+test("large assistant inputs are never removed to fit the context", async () => {
   const raw = history(13);
-  const result = await prepareContext(raw, async messages => messages.length > 1 ? 700000 : 100);
-  assert.equal(result.historyReset, true);
-  assert.equal(result.messages.length, 1);
-  assert.match(result.messages[0].content[0].text, /checkpoint/);
+  await assert.rejects(prepareContext(raw, async messages => {assert.equal(messages.length,26);return 700000;}),TakeoffContextLimitError);
   assert.equal(raw.length, 26);
 });
 test("irreducible context stops after bounded attempts; unfinished tools and bad counts fail explicitly", async () => {
   let attempts = 0;
   await assert.rejects(prepareContext(history(15), async () => { attempts++; return 600001; }), TakeoffContextLimitError);
-  assert.equal(attempts, 4);
-  await assert.rejects(prepareContext(history(15).slice(0, -1), async () => 600001), /unfinished tool calls/);
+  assert.equal(attempts, 3);
+  await assert.rejects(prepareContext(history(15).slice(0, -1), async () => 600001), TakeoffContextLimitError);
   await assert.rejects(prepareContext([], async () => NaN), /invalid input token count/);
   const rateLimited = Object.assign(new Error("rate limited"), { status: 429 });
   await assert.rejects(prepareContext([], async () => { throw rateLimited; }), error => error === rateLimited);

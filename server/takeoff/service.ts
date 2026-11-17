@@ -7,6 +7,7 @@ import { computeJob, summarize } from "@shared/estimating/engine";
 import { EstimateError, getCompanyRates } from "../services/estimating";
 import { pinDocument } from "./preparation";
 import { createHash } from "node:crypto";
+import { takeoffSystem } from "./worker";
 import { addedMaterialRates, ensureRateSnapshot } from "./rate-snapshot";
 export type Run = typeof takeoffRuns.$inferSelect;
 export async function getAISettings() {
@@ -64,6 +65,7 @@ export async function startRun(opportunityId:number,userId:string,raw:unknown) {
     job,messages:[],scales:{},sheetIndexes:{},usage:{input:0,output:0,cacheRead:0,cacheWrite:0},cost:0,steps:0,
     budget:Math.min(config.settings.maxCost,input.approvedBudget),stepLimit:Math.min(config.settings.maxSteps,input.approvedSteps),progress:[{at:new Date().toISOString(),message:"Queued: documents and rate snapshot saved."}]};
   ensureRateSnapshot(state);
+  state.systemSnapshot=JSON.stringify(takeoffSystem(state));
   const [run]=await tx.insert(takeoffRuns).values({opportunityId,createdBy:userId,state}).returning();
   return publicRun(run);
   });

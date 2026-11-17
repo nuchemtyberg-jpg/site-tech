@@ -5,7 +5,7 @@ import { db, pool } from "../server/db";
 import { customers, opportunities, takeoffRuns, estimateRevisions, notifications } from "../shared/schema";
 import { emptyJob, newCategory, newLine } from "../shared/estimating/model";
 import { aiSettingsSchema, type TakeoffState } from "../shared/estimating/takeoff";
-import { executeClaimedRun, SYSTEM } from "../server/takeoff/worker";
+import { executeClaimedRun, SYSTEM, takeoffSystem } from "../server/takeoff/worker";
 import { publicRun } from "../server/takeoff/service";
 import { executeTool } from "../server/takeoff/tools";
 import { pinSource, preparationTick, getPreparation } from "../server/takeoff/preparation";
@@ -21,7 +21,7 @@ async function main() {
   try {
     const [c]=await db.insert(customers).values({name:tag}).returning();cid=c.id;
     const [o]=await db.insert(opportunities).values({name:tag,opportunityNumber:tag,customerId:cid}).returning();oid=o.id;
-    const makeRun=async(s:TakeoffState,cancel=false)=>(await db.insert(takeoffRuns).values({opportunityId:oid!,createdBy:tag,status:"running",state:s,
+    const makeRun=async(s:TakeoffState,cancel=false)=>(await db.insert(takeoffRuns).values({opportunityId:oid!,createdBy:tag,status:"running",state:{...s,systemSnapshot:s.systemSnapshot||JSON.stringify(takeoffSystem(s))},
       leaseOwner:owner,leaseUntil:new Date(Date.now()+600000),cancelRequested:cancel}).returning())[0];
     const job=emptyJob(),cat=newCategory(),line=newLine();
     line.desc="Known item";line.qty="2";line.ref="S1; count 2";line.res.sub=[{id:"sub",desc:"Known cost",qty:"qty",unit:"EA",cost:"100"}];cat.items=[line];job.categories=[cat];
@@ -64,16 +64,26 @@ async function main() {
     const priced=structuredClone(job);
     priced.rates.push({id:"added",key:"added",desc:"Claude named rate",unit:"EA",value:"50",category:"Test",notes:"VERIFY"});
     let pricedCalls=0;
+    let frozenSystem:string|undefined;
+    const signedBlocks=[{type:"thinking",thinking:"opaque test thinking",signature:"test-signature"},{type:"redacted_thinking",data:"opaque-data"},{type:"text",text:"Checkpointing"}];
+    const verifyRequest=(request:any)=>{
+      frozenSystem ||= JSON.stringify(request.system);
+      assert.equal(JSON.stringify(request.system),frozenSystem);
+      for(const m of request.messages.filter((m:any)=>m.role==="assistant")) assert.deepEqual(m.content.slice(0,3),signedBlocks);
+      assert.ok(!JSON.stringify(request.system).includes("Current durable checkpoint"));
+    };
     const evolving:any={models:{retrieve:async()=>({max_input_tokens:1000000,max_tokens:32000})},messages:{
       countTokens:async(request:any)=>{
-        const checkpoint=request.system.find((b:any)=>b.text.startsWith("Current durable checkpoint"));
+        verifyRequest(request);
+        const checkpoint=request.messages.at(-1).content.findLast((b:any)=>b.type==="text"&&b.text.startsWith("Current durable checkpoint"));
         assert.ok(checkpoint);assert.match(checkpoint.text,/C-101/);assert.match(checkpoint.text,/feetPerPoint/);
         if(pricedCalls) {assert.match(checkpoint.text,/Claude named rate/);assert.match(checkpoint.text,/Known item/);}
         return {input_tokens:100};
       },
-      create:async()=>{
+      create:async(request:any)=>{
+        verifyRequest(request);
         const checkpoint=pricedCalls++===0;
-        return {usage:{input_tokens:100,output_tokens:500},content:[{type:"tool_use",id:checkpoint?"checkpoint-1":"submit-2",
+        return {usage:{input_tokens:100,output_tokens:500},content:[...structuredClone(signedBlocks),{type:"tool_use",id:checkpoint?"checkpoint-1":"submit-2",
           name:checkpoint?"checkpoint_takeoff":"submit_takeoff",input:{job:priced,summary:"Done",questions:[]}}]};
       },
     }};
@@ -90,7 +100,7 @@ async function main() {
     const restart=structuredClone(pricedDone.state);
     restart.messages=restart.messages.slice(0,-1);
     const resumedRates=await makeRun(restart);
-    const finalOnly:any={messages:{countTokens:async(request:any)=>{assert.match(JSON.stringify(request.system),/Claude named rate/);return {input_tokens:100};},
+    const finalOnly:any={messages:{countTokens:async(request:any)=>{verifyRequest(request);assert.match(JSON.stringify(request.messages),/Claude named rate/);return {input_tokens:100};},
       create:async()=>({usage:{input_tokens:100,output_tokens:200},content:[{type:"tool_use",id:"resubmit",name:"submit_takeoff",input:{job:priced,summary:"Resumed",questions:[]}}]})}};
     await executeClaimedRun(resumedRates,{client:finalOnly,leaseOwner:owner});
     const [resumedDone]=await db.select().from(takeoffRuns).where(eq(takeoffRuns.id,resumedRates.id));
@@ -105,15 +115,15 @@ async function main() {
     );
     let counts=0,generations=0;
     const bounded:any={models:{retrieve:async()=>({max_input_tokens:200000,max_tokens:24000})},messages:{
-      countTokens:async()=>({input_tokens:++counts<4?700000:100}),
+      countTokens:async()=>({input_tokens:++counts<3?700000:100}),
       create:async(request:any)=>{
-        generations++;assert.equal(request.messages.length,1);assert.match(JSON.stringify(request.messages),/Earlier conversation/);
+        generations++;assert.ok(request.messages.length>=40);assert.equal(request.messages.filter((m:any)=>m.role==="assistant").length,20);
         return {usage:{input_tokens:100,output_tokens:200},content:[{type:"tool_use",id:"bounded-submit",name:"submit_takeoff",input:{job,summary:"Done",questions:[]}}]};
       },
     }};
     const boundedRun=await makeRun(growing);await executeClaimedRun(boundedRun,{client:bounded,leaseOwner:owner});
     const [boundedDone]=await db.select().from(takeoffRuns).where(eq(takeoffRuns.id,boundedRun.id));
-    assert.equal(boundedDone.status,"needs_review");assert.equal(counts,4);assert.equal(generations,1);
+    assert.equal(boundedDone.status,"needs_review");assert.equal(counts,3);assert.equal(generations,1);
     assert.equal(boundedDone.state.modelLimits!.input,172000);assert.ok(boundedDone.state.messages.length>40);
     const oversized:any={messages:{countTokens:async()=>({input_tokens:700000}),create:async()=>{throw new Error("Must not generate");}}};
     const blockedRun=await makeRun(state());await executeClaimedRun(blockedRun,{client:oversized,leaseOwner:owner});

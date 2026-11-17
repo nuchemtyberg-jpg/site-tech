@@ -3,36 +3,18 @@ import type { TakeoffState } from "@shared/estimating/takeoff";
 export const REMOVED_RESULT = "[older result removed to save context — call the tool again if needed]";
 export const MAX_INPUT_TOKENS = 600000;
 export const RECENT_TOOL_RESULTS = 12;
-const RESUME = "Earlier conversation was omitted to save context. Continue from the current checkpoint, scales and sheet indexes supplied with this request. Call tools again for any other evidence needed; do not invent missing measurements.";
 
 /** Only changes outbound copies. Raw durable history remains available for recovery/chat. */
 export function pruneToolResults(history: unknown[], keep = RECENT_TOOL_RESULTS): any[] {
   if (!Number.isInteger(keep) || keep < 0) throw new Error("Invalid result retention count");
   const messages: any[] = structuredClone(history);
-  const results = messages.flatMap(m => Array.isArray(m.content) ? m.content.filter((b: any) => b.type === "tool_result") : []);
+  const results = messages.flatMap(m => m.role === "user" && Array.isArray(m.content) ? m.content.filter((b: any) => b.type === "tool_result") : []);
   for (const block of results.slice(0, Math.max(0, results.length - keep))) {
     block.content = REMOVED_RESULT;
-    delete block.cache_control;
   }
   return messages;
 }
 
-function completedConversation(history: any[]) {
-  const pending = new Set<string>();
-  for (const message of history) if (Array.isArray(message.content)) for (const block of message.content) {
-    if (block.type === "tool_use") pending.add(block.id);
-    if (block.type === "tool_result") pending.delete(block.tool_use_id);
-  }
-  return pending.size === 0;
-}
-function cacheTail(messages: any[]) {
-  const last = messages.at(-1);
-  if (last?.role === "user") {
-    if (typeof last.content === "string") last.content = [{ type: "text", text: last.content }];
-    if (last.content.length) last.content[last.content.length - 1].cache_control = { type: "ephemeral" };
-  }
-  return messages;
-}
 /** Rebuild on every step, not just once at worker startup. */
 export function checkpointContext(state: TakeoffState) {
   return {
@@ -75,16 +57,13 @@ export function safeModelLimits(info?: { max_input_tokens?: number | null; max_t
 
 export class TakeoffContextLimitError extends Error {
   constructor() {
-    super("Takeoff context is too large even after removing old tool results and conversation. No generation request was sent. Your checkpoint is retained; shorten the playbook/rate notes or start a smaller document selection.");
+    super("Takeoff context is too large after pruning user tool results. Assistant content was preserved. No generation request was sent; the checkpoint is retained.");
   }
 }
 export async function prepareContext(history: unknown[], count: (messages: any[]) => Promise<number>, inputLimit = MAX_INPUT_TOKENS) {
   const limit = Math.min(MAX_INPUT_TOKENS, inputLimit);
-  for (const keep of [12, 6, 0, -1]) {
-    if (keep === -1 && !completedConversation(history)) throw new Error("Cannot compact history with unfinished tool calls.");
-    // In the last pass also remove resolved old tool inputs (e.g. repeated full
-    // checkpoint jobs) and prose. Canonical state remains in the system context.
-    const messages = cacheTail(keep === -1 ? [{ role: "user", content: RESUME }] : pruneToolResults(history, keep));
+  for (const keep of [12, 6, 0]) {
+    const messages = pruneToolResults(history, keep);
     // Repeated full-job tool inputs can exceed the HTTP request size before
     // token counting succeeds. Skip directly toward the compact checkpoint.
     if (Buffer.byteLength(JSON.stringify(messages)) > 20 * 1024 * 1024) continue;
@@ -95,7 +74,26 @@ export async function prepareContext(history: unknown[], count: (messages: any[]
       throw error;
     }
     if (!Number.isFinite(inputTokens) || inputTokens < 0) throw new Error("Anthropic returned an invalid input token count.");
-    if (inputTokens <= limit) return { messages, inputTokens, resultsKept: Math.max(keep, 0), historyReset: keep === -1 };
+    if (inputTokens <= limit) return { messages, inputTokens, resultsKept: keep, historyReset: false };
   }
   throw new TakeoffContextLimitError();
+}
+
+export function addCheckpointTurn(state:TakeoffState, submitNow=false) {
+  if(state.checkpointTurnStep===state.steps) return;
+  const blocks:any[]=[checkpointContext(state),{type:"text",text:submitNow
+    ? "The approved run limit is near. Submit current partial work now; flag all unfinished scope NOT QUANTIFIED — run stopped at cost cap."
+    : `Continue from this checkpoint. Recorded spend $${state.cost}; approved total budget $${state.budget}; steps ${state.steps}/${state.stepLimit}.`}];
+  const last:any=state.messages.at(-1);
+  if(last?.role==="user") {
+    if(typeof last.content==="string") last.content=[{type:"text",text:last.content}];
+    last.content.push(...blocks);
+  } else state.messages.push({role:"user",content:blocks});
+  state.checkpointTurnStep=state.steps;
+}
+export function freshCheckpointConversation(state:TakeoffState,reason:string) {
+  if(state.messages.length) (state.conversationArchives??=[]).push({at:new Date().toISOString(),reason,messages:structuredClone(state.messages),systemSnapshot:state.systemSnapshot});
+  state.messages=[{role:"user",content:[{type:"text",text:"Resume this takeoff in a fresh conversation from the latest saved checkpoint. Earlier work and spend are retained. Continue unfinished scope using the same selected documents and rates; do not start over or invent missing evidence."}]}];
+  delete state.checkpointTurnStep;
+  addCheckpointTurn(state);
 }

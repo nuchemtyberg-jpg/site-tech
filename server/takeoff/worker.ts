@@ -7,7 +7,7 @@ import { newCategory, newLine } from "@shared/estimating/model";
 import { usageCost, type TakeoffState } from "@shared/estimating/takeoff";
 import { TAKEOFF_TOOLS, executeTool } from "./tools";
 import { finishRun, progress, type Run } from "./service";
-import { checkpointContext, hydrateSheetIndexes, prepareContext, safeModelLimits } from "./context";
+import { addCheckpointTurn, freshCheckpointConversation, hydrateSheetIndexes, prepareContext, safeModelLimits } from "./context";
 import { ensureRateSnapshot } from "./rate-snapshot";
 import { observedAnthropicCall, RecordedAnthropicError } from "./anthropic-errors";
 import { preparationTick, preparedDocument, getPreparation } from "./preparation";
@@ -25,6 +25,7 @@ const LEASE_MS=180000;
 let timer:ReturnType<typeof setInterval>|undefined, busy=false;
 const active=new Map<number,AbortController>();
 export function takeoffSystem(state:TakeoffState):any[] {
+  if(state.systemSnapshot) return JSON.parse(state.systemSnapshot);
   return [
     {type:"text",text:SYSTEM},
     {type:"text",text:`Job-specific instructions:\n${state.instructions}\nActive learned rules newest first:\n${JSON.stringify(state.rules)}\nBase playbook version ${state.playbook.version}:\n${state.playbook.markdown}`,cache_control:{type:"ephemeral"}},
@@ -62,6 +63,10 @@ export async function executeClaimedRun(run:Run, dependencies?: { client: Pick<A
     if(!process.env.ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY is missing. Add it in Secrets.");
     ensureRateSnapshot(state);
     hydrateSheetIndexes(state);
+    if(!state.systemSnapshot) {
+      if(state.messages.length) freshCheckpointConversation(state,"Legacy conversation had no immutable system snapshot.");
+      state.systemSnapshot=JSON.stringify(takeoffSystem(state));
+    }
     if(state.preparationComplete===false) {
       progress(state,"Preparing pinned documents before contacting Claude.");
       for(const file of state.documents) {
@@ -70,6 +75,7 @@ export async function executeClaimedRun(run:Run, dependencies?: { client: Pick<A
         state.sheetIndexes![String(file.fileId)]=prepared.manifest.pages.filter(p=>file.pages.includes(p.page)).map(({textPath,vectorsPath,thumbnailPath,...p})=>p);
       }
       state.preparationComplete=true;
+      delete state.checkpointTurnStep;
     }
     await save(state);
     // A process can die after Anthropic accepted a request but before usage was
@@ -135,8 +141,9 @@ export async function executeClaimedRun(run:Run, dependencies?: { client: Pick<A
         state.modelLimits=modelLimits;
         await save(state);
       }
-      const system:any[]=[...stableSystem,checkpointContext(state),
-        ...(lastChance?[{type:"text",text:"The approved run limit is near. Submit current partial work now, flagging all unfinished scope NOT QUANTIFIED — run stopped at cost cap."}]:[])];
+      const system=stableSystem;
+      addCheckpointTurn(state,lastChance);
+      await save(state);
       // Count actual prompt tokens before committing the next call. Reserve at
       // the highest input/cache-write price, with a small tokenizer safety margin.
       const context=await prepareContext(state.messages,async messages=>{

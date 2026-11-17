@@ -50,7 +50,8 @@ async function main() {
       preparationComplete:false,instructions:"Same checkpoint",trades:[],playbook:{id:null,version:0,markdown:""},rules:[],
       messages:[],scales:{},usage:{input:0,output:0,cacheRead:0,cacheWrite:0},cost:1,steps:0,budget:25,stepLimit:150,progress:[],
       pendingCall:{reservation:.5,startedAt:new Date().toISOString()}};
-    const [failed]=await db.insert(takeoffRuns).values({opportunityId:oppIds[0],createdBy:estimator.id,status:"failed",state:retryState,error:"Test failure"}).returning();
+    retryState.messages=[{role:"assistant",content:[{type:"thinking",thinking:"opaque fixture",signature:"legacy-signed-block"}]}];
+    const [failed]=await db.insert(takeoffRuns).values({opportunityId:oppIds[0],createdBy:estimator.id,status:"failed",state:retryState,error:"Invalid signature in thinking block. The system prompt differs."}).returning();
     const retryPath=`/api/opportunities/${oppIds[0]}/takeoff/runs/${failed.id}/retry`;
     assert.equal((await request(user,retryPath,"POST")).status,403);
     assert.equal((await request(null,retryPath,"POST")).status,401);
@@ -59,6 +60,11 @@ async function main() {
     assert.equal(retried.status,200);assert.equal(retried.body.id,failed.id);assert.equal(retried.body.status,"queued");
     assert.equal(retried.body.cost,1);assert.equal(retried.body.budget,25);assert.equal(retried.body.stepLimit,150);
     assert.deepEqual(retried.body.documents[0].pages,[1]);assert.equal(retried.body.instructions,"Same checkpoint");
+    const [recovered]=await db.select().from(takeoffRuns).where(eq(takeoffRuns.id,failed.id));
+    assert.deepEqual(recovered.state.conversationArchives![0].messages,retryState.messages);
+    assert.ok(recovered.state.systemSnapshot);assert.equal((recovered.state.messages[0] as any).role,"user");
+    assert.match(JSON.stringify(recovered.state.messages),/Current durable checkpoint/);
+    assert.equal(recovered.state.cost,1);assert.deepEqual(recovered.state.documents,retryState.documents);
     console.log("PASS failed-run Retry authorization, same ID/checkpoint/documents and unchanged spending limits");
     for (const who of [admin, manager, estimator]) {
       assert.equal((await request(who, "/api/estimating-rates")).status, 200);

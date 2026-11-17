@@ -14,6 +14,8 @@ import { getAISettings, getPlaybook, getRun, monthlySpend, progress, publicRun, 
 import { abortRun } from "./worker";
 import { pinDocument, getPreparation } from "./preparation";
 import { takeoffRequestDiagnostics } from "./diagnostics";
+import { freshCheckpointConversation } from "./context";
+import { takeoffSystem } from "./worker";
 const id=(raw:unknown)=>z.coerce.number().int().positive().parse(raw);
 export function registerTakeoffRoutes(app:Express) {
   const permitted:RequestHandler=async(req,res,next)=>{
@@ -97,6 +99,11 @@ export function registerTakeoffRoutes(app:Express) {
       const state=structuredClone(run.state);
       if(state.cost>=state.budget||state.steps>=state.stepLimit) throw new EstimateError(409,"This run has exhausted its approved limits. Retry cannot increase them.");
       delete state.retryAt;delete state.retries;
+      delete state.checkpointTurnStep;
+      if(!state.systemSnapshot || /invalid signature|thinking block|bound to a different conversation|system prompt differs/i.test(run.error||"")) {
+        freshCheckpointConversation(state,"Retry recovered a non-replayable conversation from its checkpoint.");
+        state.systemSnapshot ||= JSON.stringify(takeoffSystem(state));
+      }
       // Keep pendingCall: interrupted generation must retain its conservative reservation.
       progress(state,"Estimator requested retry from the last checkpoint. Existing documents, rates, settings, spend and approved limits are unchanged.");
       const [saved]=await tx.update(takeoffRuns).set({state,status:"queued",error:null,cancelRequested:false,leaseOwner:null,leaseUntil:null,finishedAt:null,updatedAt:new Date()})
@@ -120,6 +127,7 @@ export function registerTakeoffRoutes(app:Express) {
       if(!run||run.status!=="stopped_at_cap") throw new EstimateError(409,"Only capped runs can be continued.");
       const state=structuredClone(run.state);state.budget+=body.additionalBudget;state.stepLimit+=body.additionalSteps;
       delete state.capSubmission;
+      delete state.checkpointTurnStep;
       const last:any=state.messages.at(-1);
       if(last?.role==="assistant"&&Array.isArray(last.content)) {
         const calls=last.content.filter((b:any)=>b.type==="tool_use");

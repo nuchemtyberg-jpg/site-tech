@@ -4,7 +4,7 @@ import { and, eq } from "drizzle-orm";
 import { db,pool } from "../server/db";
 import { takeoffRuns } from "../shared/schema";
 import { takeoffSystem } from "../server/takeoff/worker";
-import { checkpointContext,prepareContext } from "../server/takeoff/context";
+import { addCheckpointTurn,prepareContext } from "../server/takeoff/context";
 import { TAKEOFF_TOOLS } from "../server/takeoff/tools";
 import { observedAnthropicCall,RecordedAnthropicError } from "../server/takeoff/anthropic-errors";
 async function main() {
@@ -13,6 +13,8 @@ async function main() {
   if(!run||run.status!=="failed") throw new Error("Diagnostic requires an existing failed run.");
   const state=structuredClone(run.state);
   if(state.steps!==0) throw new Error("This first-request diagnostic requires step 0.");
+  state.systemSnapshot ||= JSON.stringify(takeoffSystem(state));
+  addCheckpointTurn(state);
   const save=async()=>{
     await db.update(takeoffRuns).set({state,updatedAt:new Date()})
       .where(and(eq(takeoffRuns.id,id),eq(takeoffRuns.status,"failed")));
@@ -21,7 +23,7 @@ async function main() {
   try {
     const result=await prepareContext(state.messages,async messages=>{
       const count=await observedAnthropicCall("messages.countTokens",state,id,save,()=>client.messages.countTokens({
-        model:state.settings.model,system:[...takeoffSystem(state),checkpointContext(state)],tools:TAKEOFF_TOOLS,messages,
+        model:state.settings.model,system:takeoffSystem(state),tools:TAKEOFF_TOOLS,messages,
       }));
       return count.input_tokens;
     },state.modelLimits?.input||172000);

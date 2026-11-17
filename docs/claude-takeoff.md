@@ -137,18 +137,39 @@ Durable model/tool history remains unchanged for recovery and future chat. Outbo
 copies retain the latest 12 tool results in full, replacing older text/images with
 `[older result removed to save context — call the tool again if needed]`. Tool IDs,
 result pairing and error flags remain intact. If counted input is still too large,
-the worker retries with six results, then zero. As a final pass it removes the
-completed conversation (including repeated full-job tool inputs), using a fresh
-continuation message and the canonical checkpoint. Unfinished tool calls must be
-resolved before this pass; a pending tool is never lost or executed again because
-of pruning. Size errors from counting also trigger compaction; unrelated errors
-retain the normal retry/failure policy.
+the worker retries with six results, then zero. It never modifies, reorders or drops
+assistant content (including thinking, redacted thinking, text and tool-use blocks).
+Only contents of user tool-result blocks can be replaced during pruning. If this
+cannot fit the request, it fails explicitly rather than dropping assistant history.
+Size errors from counting trigger these same limited passes.
 
-Each step supplies the current full checkpoint job, calibrated scales and selected
-sheet indexes as untrusted data, separately from the immutable original-rate snapshot
-and instructions. Successful sheet indexes are saved with state; legacy successful
+At run creation the system blocks are snapshotted as a JSON string, avoiding JSONB
+key-order changes. The same snapshot is reused byte-for-byte on every request,
+restart, Continue and Retry. Fixed instructions, job instructions, rules, playbook,
+original rates and initial document manifest are included. No changing checkpoint,
+scale, index, budget warning or submit-now instruction goes into system.
+
+Each step appends the current checkpoint job, calibrated scales, selected sheet
+indexes and limit instructions to a user turn, alongside tool results when present.
+Successful sheet indexes are saved with state; legacy successful
 indexes are recovered from durable history where possible. Neither scales nor
 checkpoints rely on old conversation text surviving pruning.
+
+Retry after a signature/replay failure archives the old conversation intact and
+starts a fresh user turn from the latest checkpoint. Documents/caches, settings,
+original rates, usage, spent amounts, pending reservations and limits are preserved.
+An existing system snapshot is preserved; legacy runs without one create it before
+any new model request and archive non-replayable old history. Recovery does not
+increase spending approval. No drop-block beta header is used.
+
+`scripts/test-thinking-context.ts` exercises signed/opaque assistant blocks over
+16 mocked checkpoints with pruning and restart round trips.
+`scripts/test-takeoff-worker.ts` asserts identical systems and untouched assistant
+blocks through actual mocked worker checkpoint/save/restart execution.
+`scripts/verify-thinking-count.ts <run-id>` is read-only and count-only. For the
+legacy scale-change incident, it reconstructs the original frozen system to verify
+a prior signed thinking block survives a new user checkpoint and pruned result,
+then separately validates fresh-checkpoint recovery. It never requeues or generates.
 
 Before generation the worker retrieves unbilled model metadata and counts the exact
 compacted request. Input is capped at 600,000 tokens or the model's reported capacity
@@ -156,8 +177,7 @@ minus bounded output and a 4,000-token margin, whichever is smaller. Missing mod
 capacity uses a conservative 200,000-token window (172,000 input with 24,000 output).
 Outbound histories over 20 MB skip toward compaction before the counting call.
 If essential context cannot fit after all passes, the run fails explicitly with
-its checkpoint retained, no new generation charge, and advice to shorten the
-playbook/rate notes or start a smaller document selection. This is not a cost-cap
+its checkpoint retained and no new generation charge. This is not a cost-cap
 stop; approving more dollars cannot fix oversized essential context.
 
 ## Claude-added named material rates
