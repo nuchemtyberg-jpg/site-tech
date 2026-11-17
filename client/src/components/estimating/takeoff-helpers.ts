@@ -9,6 +9,8 @@ export function estimateTakeoffUsage(pages: number, config: TakeoffConfig) {
   const { input, output, cacheRead, cacheWrite } = config.prices;
   // Single-call mode: one request with the documents, 8K-40K output tokens incl. thinking.
   if (config.mode === "single") return { inputTokens, low: (inputTokens * input + 8000 * output) / 1_000_000, high: (inputTokens * input + 40000 * output) / 1_000_000 };
+  // Sectioned: shared notes sheets are re-sent with each of ~2-6 sections; output is split, not added.
+  if (config.mode === "sectioned") return { inputTokens, low: (inputTokens * 1.3 * input + 10000 * output) / 1_000_000, high: (inputTokens * 2 * input + 50000 * output) / 1_000_000 };
   // Include repeated cached context, fresh tool input and substantial output on
   // every step. Do not truncate this planning range to the user's spending cap.
   const scenario = (steps: number, prompt: number, fresh: number, out: number) =>

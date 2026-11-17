@@ -338,21 +338,35 @@ Known-dimension PDF tests verify a 30-foot vector line and 1,800-SF rectangle.
 These are not a substitute for validating a real production drawing set or a
 paid end-to-end Claude run. No user bid documents were sent during implementation.
 
-## Single-call mode
+## Single-call and sectioned modes
 
-Admin AI settings → **Takeoff mode**: `Agent` (default, the multi-step tool loop above)
-or `Single call`. The mode is snapshotted per run, so switching it never affects a run
-already queued or running.
+Admin AI settings → **Takeoff mode**: `Agent` (default, the multi-step tool loop above),
+`Single call` or `Sectioned`. The mode is snapshotted per run, so switching it never
+affects a run already queued or running. Code: `server/takeoff/single.ts`.
 
-Single call (`server/takeoff/single.ts`) sends the selected pages once: PDFs are cut down
-to the selected pages with pdf-lib (inline under 20 MB, otherwise uploaded through the
-Files API), spreadsheets as rows, images as image blocks. Instructions, learned rules,
-playbook and rate tables go in the system prompt. The response is constrained with
+**Single call** sends every selected page in one request. PDFs are cut down to the
+selected pages with pdf-lib (inline under 20 MB, otherwise uploaded through the Files
+API), spreadsheets as rows, images as image blocks. Instructions, learned rules, playbook
+and rate tables go in the system prompt. The response is constrained with
 `output_config.format` (JSON schema: categories, newRates, summary, questions); IDs are
-assigned server-side and markups forced blank. The result goes through the same
-`validateSubmission` checks and `finishRun` revision flow as agent mode. If validation
-fails, the error is sent back once for a correction; a second failure fails the run.
-Effort is set by **Single-call effort** (default `high`). No vector measurement tools are
-used: scaled quantities are flagged VERIFY "approximate - scaled from drawing".
+assigned server-side and markups forced blank.
+
+**Sectioned** is for large sets. `claude-haiku-5-5` reads the prepared sheet index
+(sheet number, title block, scale, first ~700 characters of text per page; no images)
+and returns 2–6 scope sections plus a short list of shared sheets (general notes,
+legends, geotech). Each section then runs as its own request, in parallel, with only its
+sheets plus the shared sheets and an explicit "quantify only this scope; other sections
+cover …" instruction. Results are merged in code: categories kept apart (renamed
+"Name (Section)" on a name clash), the first definition of a new rate key wins, questions
+prefixed with the section. If the planner fails, the run falls back to one request.
+Sets of 3 pages or fewer skip the planner.
+
+Both modes reuse `validateSubmission` and the `finishRun` revision flow. A failed
+validation is sent back once for correction; a second failure fails that request.
+Finished sections are saved in `state.sectionOutputs`, so Retry re-runs only the failed
+sections. In-flight reservations are kept in `pendingCall` and counted as uncertain spend
+on Retry, like agent mode. Effort is set by **Single/sectioned effort** (default `high`).
+No vector measurement tools are used: scaled quantities are flagged VERIFY
+"approximate - scaled from drawing".
 
 - `npx tsx --test scripts/test-takeoff-single.ts` — mocked client, no paid requests.

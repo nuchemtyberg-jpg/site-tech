@@ -64,7 +64,7 @@ export async function executeClaimedRun(run:Run, dependencies?: { client: Pick<A
   },15000);
   try {
     if(!process.env.ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY is missing. Add it in Secrets.");
-    if(state.settings.mode==="single") {
+    if(state.settings.mode==="single"||state.settings.mode==="sectioned") {
       // One request with the documents attached; no tool loop. See single.ts.
       if(state.pendingCall) {recordCost(state,state.pendingCall.reservation,true);delete state.pendingCall;}
       const singleClient=(dependencies?.client||new Anthropic({apiKey:process.env.ANTHROPIC_API_KEY,timeout:GENERATION_TIMEOUT_MS})) as Anthropic;

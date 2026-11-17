@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { takeoffRequest, takeoffRoot, type SheetInfo } from "@/hooks/use-takeoff";
 import type { AISettings, LearnedRule } from "@shared/estimating/takeoff";
 
-export interface TakeoffConfig { model: string; mode?: "agent" | "single"; maxCost: number; maxSteps: number; estimatedInputPerPage: number; prices?: { input: number; output: number; cacheRead: number; cacheWrite: number } }
+export interface TakeoffConfig { model: string; mode?: "agent" | "single" | "sectioned"; maxCost: number; maxSteps: number; estimatedInputPerPage: number; prices?: { input: number; output: number; cacheRead: number; cacheWrite: number } }
 export function useTakeoffConfig(id: number) {
   return useQuery({ queryKey: [takeoffRoot(id), "config"], queryFn: () => takeoffRequest<TakeoffConfig>(`${takeoffRoot(id)}/config`) });
 }

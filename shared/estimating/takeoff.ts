@@ -1,9 +1,10 @@
 import { z } from "zod";
 import type { EstimateJob, EstimateRates } from "./model";
 
-export const AI_MODELS = ["claude-opus-5-5", "claude-sonnet-5-5"] as const;
-/** agent = multi-step tool loop; single = one request with the documents attached. */
-export const TAKEOFF_MODES = ["agent", "single"] as const;
+export const AI_MODELS = ["claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5"] as const;
+/** agent = multi-step tool loop; single = one request with the documents attached;
+ *  sectioned = a cheap planner splits sheets into sections that run in parallel. */
+export const TAKEOFF_MODES = ["agent", "single", "sectioned"] as const;
 export const SINGLE_EFFORTS = ["low", "medium", "high"] as const;
 export const TRADES = ["SOE", "Structural Piles", "Excavation", "Site work"] as const;
 const prices = z.object({
@@ -20,6 +21,7 @@ export const aiSettingsSchema = z.object({
   prices: z.object({
     "claude-opus-5-5": prices.default({ input: 4, output: 20, cacheRead: .2, cacheWrite: 5 }),
     "claude-sonnet-5-5": prices.default({ input: 2, output: 10, cacheRead: .1, cacheWrite: 2.5 }),
+    "claude-haiku-5-5": prices.default({ input: .1, output: .5, cacheRead: .01, cacheWrite: .125 }),
   }).default({}),
 });
 export type AISettings = z.infer<typeof aiSettingsSchema>;
@@ -101,6 +103,9 @@ export interface TakeoffState {
   pendingCall?: { reservation: number; startedAt: string };
   costEvents?: { at: string; amount: number; uncertain?: boolean; step?:number; usage?:TokenUsage; durationMs?:number }[];
   capSubmission?: boolean;
+  /** Single/sectioned modes: the sheet plan and finished section results (so Retry skips them). */
+  sectionPlan?: { sections: { name: string; scope: string; pages: { document: number; page: number }[] }[]; shared: { document: number; page: number }[] };
+  sectionOutputs?: Record<string, any>;
 }
 export function usageCost(usage: TokenUsage, price: AISettings["prices"][typeof AI_MODELS[number]]) {
   const hour=usage.cacheWriteHour||0;
