@@ -64,10 +64,61 @@ counted conservatively as uncertain spend, and recorded in progress rather than
 silently replaying the call. Costs reflect configured pricing, not an invoice.
 429/temporary-unavailable responses use persisted exponential backoff.
 
-Ephemeral prompt-cache boundaries cover instructions/playbook/rates/document
-manifest and the growing tool-results conversation. Cache expiration still
+Ephemeral prompt-cache boundaries cover instructions/playbook/original rates/document
+manifest and the compacted tool-results conversation. Cache expiration still
 applies; budget reservation assumes no cache discount. Selected-page estimates
 in the wizard are heuristics, not guaranteed prices.
+
+## Long-run context management
+
+Durable model/tool history remains unchanged for recovery and future chat. Outbound
+copies retain the latest 12 tool results in full, replacing older text/images with
+`[older result removed to save context — call the tool again if needed]`. Tool IDs,
+result pairing and error flags remain intact. If counted input is still too large,
+the worker retries with six results, then zero. As a final pass it removes the
+completed conversation (including repeated full-job tool inputs), using a fresh
+continuation message and the canonical checkpoint. Unfinished tool calls must be
+resolved before this pass; a pending tool is never lost or executed again because
+of pruning. Size errors from counting also trigger compaction; unrelated errors
+retain the normal retry/failure policy.
+
+Each step supplies the current full checkpoint job, calibrated scales and selected
+sheet indexes as untrusted data, separately from the immutable original-rate snapshot
+and instructions. Successful sheet indexes are saved with state; legacy successful
+indexes are recovered from durable history where possible. Neither scales nor
+checkpoints rely on old conversation text surviving pruning.
+
+Before generation the worker retrieves unbilled model metadata and counts the exact
+compacted request. Input is capped at 600,000 tokens or the model's reported capacity
+minus bounded output and a 4,000-token margin, whichever is smaller. Missing model
+capacity uses a conservative 200,000-token window (172,000 input with 24,000 output).
+Outbound histories over 20 MB skip toward compaction before the counting call.
+If essential context cannot fit after all passes, the run fails explicitly with
+its checkpoint retained, no new generation charge, and advice to shorten the
+playbook/rate notes or start a smaller document selection. This is not a cost-cap
+stop; approving more dollars cannot fix oversized essential context.
+
+## Claude-added named material rates
+
+The fixed prompt is trade-neutral: follow the playbook for the trade and read
+general notes, legends, schedules, geotech and trade-specific notes.
+Claude may append new named material rates for repeated materials according to
+the playbook. Each new row requires a unique valid key/ID, description, unit and
+nonblank number/formula; optional category/notes capture provenance. The unchanged
+Phase 1 engine checks dependencies, cycles and finite formula values.
+
+The original rates are snapshotted independently before work starts. Validation
+protects both that snapshot and all rates already accepted in the latest checkpoint:
+no removal or edits to existing keys, values, IDs or metadata; no changes to
+labor/equipment tables, defaults or markup notes. Legacy active runs establish their
+baseline from the saved job, because the previous implementation disallowed additions.
+Legacy completed runs without a baseline are not falsely attributed added rates.
+
+The sanitized run response lists additions relative to the original baseline,
+with the original expression and server-computed value. Review displays
+**Rates added by Claude — verify**, including key, description, unit and price.
+These remain estimate-local; company promotion is an explicit, separate workflow.
+Checkpointing, restart and Continue preserve provenance and do not reset the baseline.
 
 ## Tools and measurement boundaries
 
@@ -95,7 +146,7 @@ No measuring tool invents a scale.
 - `read_spreadsheet`: XLSX/CSV rows; cached formula values are read, not executed.
 - `evaluate`: unchanged Phase 1 formula resolver.
 - `checkpoint_takeoff`, `submit_takeoff`: validated Phase 1 job, unique IDs,
-  unchanged rate snapshots, no manual prices/markup overrides, required
+  append-only named material rates with existing rate snapshots protected, no manual prices/markup overrides, required
   references, valid formulas and finite authoritative totals.
 
 Documents are limited to 40 MB, PDFs to 500 pages, spreadsheets to 20,000 rows.
@@ -105,10 +156,13 @@ private object-storage paths, not model-provided network URLs.
 ## Verification
 
 - `npx tsx --test scripts/test-takeoff-tools.ts scripts/test-estimating-engine.ts`
+- `npx tsx --test scripts/test-takeoff-context.ts` — pruning, pairing, token limits, canonical state and legacy hydration.
 - `npx tsx scripts/test-takeoff-worker.ts` — mocked Anthropic, no paid requests:
-  submission, saved-tool restart recovery, caps, cancellation and notification.
+  submission, saved-tool restart recovery, caps, cancellation, notification,
+  persisted sheet indexes/scales, rate provenance and oversized-request guards.
 - `npx tsx scripts/test-estimating-api.ts` — authorization and Phase 1 regressions.
 - `npx tsx scripts/test-estimating-browser.ts` — signed-in wizard/playbook and editor.
+- `npx tsx scripts/test-takeoff-review-browser.ts` — synthetic completed-run API, added-rate review/approval and mobile layout; no model calls.
 - `npm run test:client`, `npm run build`
 
 Known-dimension PDF tests verify a 30-foot vector line and 1,800-SF rectangle.

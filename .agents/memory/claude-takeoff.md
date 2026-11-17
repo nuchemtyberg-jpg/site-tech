@@ -20,3 +20,9 @@ Compare rate snapshot objects structurally, not by JSON string order.
 **Why:** PostgreSQL JSONB reorders object keys; string comparison falsely rejected unchanged rates in recovered tool submissions.
 
 **How to apply:** Use deep object equality for validation across database round trips.
+
+Context compaction must retain canonical checkpoint/scales/sheet indexes independently of conversation text, and named-rate additions must stay attributable to the original snapshot.
+
+**Why:** The owner permits Claude to add reusable material keys, not to rewrite existing prices; long drawing runs must not depend on resending old images or geometry.
+
+**How to apply:** Preserve the original baseline through checkpoints, restart and Continue; prune outbound copies, never the data needed to recover unfinished work.

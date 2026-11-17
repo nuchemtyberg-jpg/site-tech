@@ -80,6 +80,20 @@ export function TakeoffReview({ run, opportunityId, onFocus }: { run: PublicRun;
     {run.summary && <p className="ai-prose">{run.summary}</p>}
     <div className="ai-file ai-stack"><p className="text-xs"><strong>Model:</strong> {run.model}</p><div><h4 className="font-semibold text-xs">Documents & pages used</h4>{run.documents.length ? <ul className="mt-1 space-y-2 text-xs">{run.documents.map((document, index) => <li key={`${document.fileId}-${index}`}><strong>{document.name}</strong><span className="block ai-muted">Pages / sheets: {document.pages.join(", ")} · {document.pages.length} selected</span></li>)}</ul> : <p className="ai-muted">No source documents recorded for this run.</p>}</div></div>
     <p className="ai-muted">{run.flags.length} flags · {run.questions.length} questions · {usd(run.cost)} · {run.steps} steps · {elapsedRun(run)} · playbook {run.playbookVersion}</p>
+    {!!run.addedRates?.length && <section className="ai-file ai-stack min-w-0 [overflow-wrap:anywhere]" aria-label="Rates added by Claude — verify">
+      <h4 className="font-semibold text-xs">Rates added by Claude — verify</h4>
+      <p className="ai-muted">These rates are estimate-local, not automatically company rates. Verify each rate before relying on it.</p>
+      <ul className="ai-stack min-w-0">
+        {run.addedRates.map(rate => <li key={rate.id} className="min-w-0 border-t pt-2 text-xs">
+          <p><strong className="font-mono">{rate.key}</strong> · {rate.desc}</p>
+          <dl className="mt-1 space-y-1">
+            <div><dt className="inline ai-muted">Unit: </dt><dd className="inline">{rate.unit}</dd></div>
+            <div><dt className="inline ai-muted">Original expression: </dt><dd className="inline font-mono whitespace-pre-wrap">{rate.value}</dd></div>
+            <div><dt className="inline ai-muted">Computed price: </dt><dd className="inline font-medium">{rate.computedValue === null ? "Unavailable" : usd(rate.computedValue)}</dd></div>
+          </dl>
+        </li>)}
+      </ul>
+    </section>}
     {run.flags.length > 0 && <div className="ai-stack"><h4 className="font-semibold text-xs">Check these quantities & assumptions</h4>{Object.entries(flagsByType).map(([type, flags]) => <section key={type} className="ai-stack" aria-label={`${type} flags`}><h5 className="font-semibold text-xs">{type} ({flags.length})</h5>{flags.map((flag, i) => <button key={i} className="ai-flag" onClick={() => onFocus({ lineId: flag.lineId, categoryId: flag.categoryId, signal: Date.now() })}><strong className="text-xs">{flag.type} · {flag.flag}</strong><span className="block text-xs mt-1">{flag.description}</span><span className="ai-muted">Open corresponding takeoff {flag.lineId ? "line" : "category"}</span></button>)}</section>)}</div>}
     {run.questions.length > 0 && <div className="ai-stack"><div className="ai-row"><h4 className="font-semibold text-xs mr-auto">Questions for the project team</h4><Button size="sm" variant="outline" onClick={async () => { try { await navigator.clipboard.writeText(run.questions.map((q, i) => `${i + 1}. ${q}`).join("\n")); setCopy("Questions copied."); } catch { setCopy("Clipboard unavailable. Select and copy the questions below."); } }}>Copy questions</Button></div><ol className="list-decimal pl-5 space-y-1 text-xs select-text">{run.questions.map((q, i) => <li key={i}>{q}</li>)}</ol>{copy && <p role="status" className="ai-muted">{copy}</p>}</div>}
     {error && <p role="alert" className="ai-error">{error}</p>}

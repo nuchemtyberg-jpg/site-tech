@@ -6,6 +6,7 @@ import { emptyJob, money } from "@shared/estimating/model";
 import { computeJob, summarize } from "@shared/estimating/engine";
 import { EstimateError, getCompanyRates } from "../services/estimating";
 import { snapshotDocument } from "./documents";
+import { addedMaterialRates, ensureRateSnapshot } from "./rate-snapshot";
 export type Run = typeof takeoffRuns.$inferSelect;
 export async function getAISettings() {
   const [row]=await db.select().from(estimatingAISettings).where(eq(estimatingAISettings.id,1));
@@ -21,7 +22,7 @@ export function publicRun(run:Run) {
     error:run.error,createdAt:run.createdAt,startedAt:run.startedAt,finishedAt:run.finishedAt,
     model:s.settings.model,cost:s.cost,steps:s.steps,budget:s.budget,stepLimit:s.stepLimit,usage:s.usage,progress:s.progress,
     documents:s.documents.map(({objectPath,snapshotPath,...d})=>d),instructions:s.instructions,trades:s.trades,
-    playbookVersion:s.playbook.version,summary:s.summary,questions:s.questions||[],
+    playbookVersion:s.playbook.version,summary:s.summary,questions:s.questions||[],addedRates:addedMaterialRates(s),
     flags:s.job.categories.flatMap(cat=>cat.items.filter(line=>line.flag).map(line=>({
       type:line.flag.match(/NOT QUANTIFIED|BY OTHERS|ASSUMED|CONFLICT|VERIFY/i)?.[0].toUpperCase()||"VERIFY",
       lineId:line.id,categoryId:cat.id,description:line.desc,flag:line.flag,
@@ -50,8 +51,9 @@ export async function startRun(opportunityId:number,userId:string,raw:unknown) {
   const state:TakeoffState={documents,instructions:input.instructions,trades:input.trades,settings:config.settings,
     playbook:{id:latest?.id||null,version:latest?.id||0,markdown:latest?.markdown||""},
     rules:active.map(r=>({...r,createdAt:r.createdAt.toISOString()})) as LearnedRule[],
-    job,messages:[],scales:{},usage:{input:0,output:0,cacheRead:0,cacheWrite:0},cost:0,steps:0,
+    job,messages:[],scales:{},sheetIndexes:{},usage:{input:0,output:0,cacheRead:0,cacheWrite:0},cost:0,steps:0,
     budget:Math.min(config.settings.maxCost,input.approvedBudget),stepLimit:Math.min(config.settings.maxSteps,input.approvedSteps),progress:[{at:new Date().toISOString(),message:"Queued: documents and rate snapshot saved."}]};
+  ensureRateSnapshot(state);
   const [run]=await db.insert(takeoffRuns).values({opportunityId,createdBy:userId,state}).returning();
   return publicRun(run);
 }

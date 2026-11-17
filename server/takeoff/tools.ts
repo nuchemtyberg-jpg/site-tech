@@ -1,11 +1,11 @@
 import { z } from "zod";
-import { isDeepStrictEqual } from "node:util";
 import { loadImage, createCanvas } from "@napi-rs/canvas";
 import { jobSchema, MARKUPS } from "@shared/estimating/model";
 import { computeJob, makeResolver, summarize } from "@shared/estimating/engine";
 import type { TakeoffState } from "@shared/estimating/takeoff";
 import { readObject, readSpreadsheet } from "./documents";
 import { openPDF, pageText, pageVectors, sheetIndex, renderPage, measurePaths, type Region } from "./pdf";
+import { assertAppendOnlyRates, ensureRateSnapshot } from "./rate-snapshot";
 
 const region=z.tuple([z.number().nonnegative(),z.number().nonnegative(),z.number().positive(),z.number().positive()])
   .refine(r=>r[2]>r[0]&&r[3]>r[1],"Region must be [left,top,right,bottom] in page points.");
@@ -30,16 +30,14 @@ export const TAKEOFF_TOOLS=[
   tool("calibrate","Set scale from two page-point coordinates and a known real-world distance in feet, citing its source.",{...pageProperties,points:{type:"array",items:{type:"array",items:num,minItems:2,maxItems:2},minItems:2,maxItems:2},knownFeet:num,source:str},["document","page","points","knownFeet","source"]),
   tool("read_spreadsheet","Read uploaded XLSX/CSV rows; formulas include cached values, never execute spreadsheet code.",{document:num},["document"]),
   tool("evaluate","Use the exact SiteTech formula evaluator with named rates, feet-inches and optional line qty.",{formula:str,qty:num},["formula"]),
-  tool("checkpoint_takeoff","Persist partial estimate work after each category so it survives a cap or restart. Same job shape as submit_takeoff; unfinished lines must be flagged NOT QUANTIFIED.",{job:{type:"object"}},["job"]),
-  tool("submit_takeoff","Submit full Phase1 job with NO totals. Supply summary and questions separately. SiteTech validates and calculates totals, creates new revision only. All line/category markups blank, priceOverride blank; every line cites sheet + method + arithmetic. Preserve supplied rate snapshot and IDs.",{job:{type:"object"},summary:str,questions:{type:"array",items:str}},["job","summary","questions"]),
+  tool("checkpoint_takeoff","Persist partial estimate work after each category so it survives a cap or restart. Same job shape as submit_takeoff; unfinished lines must be flagged NOT QUANTIFIED. Existing rates are immutable; only append new unique named material rates with id,key,desc,unit,value and optional category/notes.",{job:{type:"object"}},["job"]),
+  tool("submit_takeoff","Submit full Phase1 job with NO totals. Supply summary and questions separately. SiteTech validates and calculates totals, creates new revision only. All line/category markups blank, priceOverride blank; every line cites sheet + method + arithmetic. Preserve existing material rates, IDs, labor/equipment tables and defaults. May append unique named material rates with description, unit and valid value/formula; never rewrite previous additions.",{job:{type:"object"},summary:str,questions:{type:"array",items:str}},["job","summary","questions"]),
 ];
 export function validateSubmission(raw: unknown,state:TakeoffState) {
   if(raw && typeof raw==="object" && ["total","totals","summary","sell","cost"].some(k=>k in raw))
     throw new Error("Do not submit totals. SiteTech calculates them.");
   const job=jobSchema.parse(raw);
-  // The model may refer to the provided tables, never rewrite the rate snapshot.
-  for(const key of ["rates","laborRates","equipRates","defaults"] as const)
-    if(!isDeepStrictEqual(job[key],state.job[key])) throw new Error(`Keep the supplied ${key} unchanged.`);
+  assertAppendOnlyRates(job,state);
   if(!job.categories.length) throw new Error("Takeoff needs at least one category; explain missing/unknown quantities with flagged lines.");
   for(const cat of job.categories) {
     if(MARKUPS.some(k=>cat[k].trim())) throw new Error(`Category ${cat.name}: leave markups blank.`);
@@ -63,6 +61,7 @@ export async function executeTool(name:string,raw:unknown,state:TakeoffState):Pr
   }
   if(name==="submit_takeoff"||name==="checkpoint_takeoff") {
     const a=z.object({job:z.unknown(),summary:z.string().max(12000).default(""),questions:z.array(z.string().max(2000)).max(200).default([])}).parse(raw);
+    ensureRateSnapshot(state);
     const valid=validateSubmission(a.job,state); state.job=valid.job;
     return {result:{accepted:true,totals:valid.summary},...(name==="submit_takeoff"?{submitted:{summary:a.summary,questions:a.questions}}:{})};
   }
@@ -75,7 +74,11 @@ export async function executeTool(name:string,raw:unknown,state:TakeoffState):Pr
     return {result:await readSpreadsheet(file.name,bytes)};
   }
   if(!/\.pdf$/i.test(file.name)) {
-    if(name==="sheet_index") return {result:[{page:1,title:file.name,sheetNumber:"",scaleText:[],vector:false,warning:"Raster/spreadsheet; read visually or use read_spreadsheet."}]};
+    if(name==="sheet_index") {
+      const result=[{page:1,title:file.name,sheetNumber:"",scaleText:[],vector:false,warning:"Raster/spreadsheet; read visually or use read_spreadsheet."}];
+      (state.sheetIndexes??={})[String(documentId)]=result;
+      return {result};
+    }
     if(name!=="view_page") throw new Error("This is not a vector PDF. Use view_page and flag image-based measurements as approximate.");
     const a=pageArgs.extend({zoom:z.number().min(.1).max(4).default(1)}).parse(raw);
     if(!file.pages.includes(a.page)) throw new Error("Page not selected.");
@@ -85,7 +88,11 @@ export async function executeTool(name:string,raw:unknown,state:TakeoffState):Pr
   }
   const doc=await openPDF(bytes);
   try {
-    if(name==="sheet_index") return {result:await sheetIndex(doc,file.pages)};
+    if(name==="sheet_index") {
+      const result=await sheetIndex(doc,file.pages);
+      (state.sheetIndexes??={})[String(documentId)]=result;
+      return {result};
+    }
     if(name==="find_text") {
       const a=z.object({text:z.string().min(1).max(500).optional(),pattern:z.string().min(1).max(100).optional(),pages:z.array(z.number().int().positive()).optional()}).refine(v=>!!v.text!==!!v.pattern,"Supply text or pattern").parse(raw);
       if(a.pattern&&(a.pattern.match(/\*/g)||[]).length>2) throw new Error("Use at most two wildcard stars.");

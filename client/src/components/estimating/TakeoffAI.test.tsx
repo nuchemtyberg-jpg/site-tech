@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { aiSettingsSchema } from "@shared/estimating/takeoff";
 import type { PublicRun } from "@/hooks/use-takeoff";
@@ -72,6 +72,48 @@ describe("Claude takeoff review & approval", () => {
     render(<RunProgress run={run()} opportunityId={3} dirty selected={false} onOpenRevision={vi.fn()} />);
     expect((screen.getByRole("button", { name: "Open generated revision" }) as HTMLButtonElement).disabled).toBe(true);
     expect(screen.getByText(/Your edits have not been discarded/)).toBeTruthy();
+  });
+  it("shows estimate-local added rates as read-only information to verify", () => {
+    render(<TakeoffReview run={run({ addedRates: [
+      { id: "rate-1", key: "FLOWABLE_FILL", desc: "Flowable fill delivered to Newark", unit: "CY", value: "187.65", computedValue: 187.65 },
+    ] })} opportunityId={3} onFocus={vi.fn()} />);
+    const rates = within(screen.getByRole("region", { name: "Rates added by Claude — verify" }));
+    expect(rates.getByRole("heading", { name: "Rates added by Claude — verify" })).toBeTruthy();
+    expect(rates.getByText("FLOWABLE_FILL")).toBeTruthy();
+    expect(rates.getByText(/Flowable fill delivered to Newark/)).toBeTruthy();
+    expect(rates.getByText("CY")).toBeTruthy();
+    expect(rates.getByText("$187.65")).toBeTruthy();
+    expect(rates.getByText(/estimate-local, not automatically company rates/)).toBeTruthy();
+    expect(rates.getByText(/Verify each rate before relying on it/)).toBeTruthy();
+    expect(rates.queryByRole("button")).toBeNull();
+    expect(rates.queryByRole("textbox")).toBeNull();
+    expect(mocks.mutate).not.toHaveBeenCalled();
+  });
+  it("shows original formulas, computed prices, zero and explicitly unavailable values", () => {
+    render(<TakeoffReview run={run({ addedRates: [
+      { id: "formula", key: "DELIVERED_FILL", desc: "Delivered fill", unit: "CY", value: "=125*1.12", computedValue: 140 },
+      { id: "zero", key: "REUSED_FILL", desc: "Reused fill", unit: "CY", value: "0", computedValue: 0 },
+      { id: "formula-zero", key: "CREDIT", desc: "Material credit", unit: "LS", value: "=125-125", computedValue: 0 },
+      { id: "unavailable", key: "SPECIAL_MIX", desc: "Special mix pending quote", unit: "CY", value: "=MISSING_QUOTE*1.12", computedValue: null },
+    ] })} opportunityId={3} onFocus={vi.fn()} />);
+    const rates = within(screen.getByRole("region", { name: "Rates added by Claude — verify" }));
+    const rows = rates.getAllByRole("listitem");
+    expect(within(rows[0]).getByText("=125*1.12")).toBeTruthy();
+    expect(within(rows[0]).getByText("Computed price:")).toBeTruthy();
+    expect(within(rows[0]).getByText("$140.00")).toBeTruthy();
+    expect(within(rows[1]).getByText("Computed price:")).toBeTruthy();
+    expect(within(rows[1]).getByText("$0.00")).toBeTruthy();
+    expect(within(rows[2]).getByText("=125-125")).toBeTruthy();
+    expect(within(rows[2]).getByText("$0.00")).toBeTruthy();
+    expect(within(rows[3]).getByText("=MISSING_QUOTE*1.12")).toBeTruthy();
+    expect(within(rows[3]).getByText("Unavailable")).toBeTruthy();
+    expect(within(rows[3]).queryByText("$0.00")).toBeNull();
+  });
+  it.each([undefined, []])("omits the added rates section for missing or empty rates (%j)", addedRates => {
+    render(<TakeoffReview run={run({ addedRates })} opportunityId={3} onFocus={vi.fn()} />);
+    expect(screen.queryByRole("region", { name: "Rates added by Claude — verify" })).toBeNull();
+    expect(screen.queryByRole("heading", { name: "Rates added by Claude — verify" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Mark takeoff reviewed" })).toBeTruthy();
   });
   it("requires positive limits and explicit additional spending approval", () => {
     render(<RunProgress run={run({ status: "stopped_at_cap" })} opportunityId={3} dirty={false} selected={false} onOpenRevision={vi.fn()} />);

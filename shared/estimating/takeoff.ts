@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { EstimateJob } from "./model";
+import type { EstimateJob, EstimateRates } from "./model";
 
 export const AI_MODELS = ["claude-opus-5-5", "claude-sonnet-5-5"] as const;
 export const TRADES = ["SOE", "Structural Piles", "Excavation", "Site work"] as const;
@@ -41,6 +41,7 @@ export interface RunDocument {
   pages: number[]; sha256: string; snapshotPath: string;
 }
 export interface TokenUsage { input: number; output: number; cacheRead: number; cacheWrite: number }
+export type AddedMaterialRate = EstimateRates["rates"][number] & { computedValue: number | null };
 export interface TakeoffState {
   documents: RunDocument[];
   instructions: string;
@@ -49,6 +50,11 @@ export interface TakeoffState {
   playbook: { id: number | null; version: number; markdown: string };
   rules: LearnedRule[];
   job: EstimateJob;
+  /** Original immutable rate snapshot, before any Claude-created material keys. */
+  originalRates?: EstimateRates;
+  /** Durable selected-page indexes; independent of outbound conversation pruning. */
+  sheetIndexes?: Record<string, unknown[]>;
+  modelLimits?: { input: number; output: number };
   messages: unknown[];
   scales: Record<string, { feetPerPoint: number; method: string }>;
   usage: TokenUsage;
