@@ -90,6 +90,21 @@ export function registerTakeoffRoutes(app:Express) {
     res.json((await db.select().from(takeoffRuns).where(eq(takeoffRuns.opportunityId,id(req.params.opportunityId))).orderBy(desc(takeoffRuns.id))).map(publicRun));
   }));
   app.post(`${root}/runs`,...guard,wrap(async(req,res)=>{res.status(201).json(await startRun(id(req.params.opportunityId),uid(req),req.body));}));
+  app.post(`${root}/runs/:runId/retry`,...guard,wrap(async(req,res)=>{
+    const result=await db.transaction(async tx=>{
+      const [run]=await tx.select().from(takeoffRuns).where(and(eq(takeoffRuns.id,id(req.params.runId)),eq(takeoffRuns.opportunityId,id(req.params.opportunityId)))).for("update");
+      if(!run||run.status!=="failed") throw new EstimateError(409,"Only a failed run can be retried. Refresh its current status.");
+      const state=structuredClone(run.state);
+      if(state.cost>=state.budget||state.steps>=state.stepLimit) throw new EstimateError(409,"This run has exhausted its approved limits. Retry cannot increase them.");
+      delete state.retryAt;delete state.retries;
+      // Keep pendingCall: interrupted generation must retain its conservative reservation.
+      progress(state,"Estimator requested retry from the last checkpoint. Existing documents, rates, settings, spend and approved limits are unchanged.");
+      const [saved]=await tx.update(takeoffRuns).set({state,status:"queued",error:null,cancelRequested:false,leaseOwner:null,leaseUntil:null,finishedAt:null,updatedAt:new Date()})
+        .where(eq(takeoffRuns.id,run.id)).returning();
+      return saved;
+    });
+    res.json(publicRun(result));
+  }));
   app.post(`${root}/runs/:runId/cancel`,...guard,wrap(async(req,res)=>{
     const run=await getRun(id(req.params.opportunityId),id(req.params.runId));
     if(!["queued","running"].includes(run.status)) throw new EstimateError(409,"Only a queued or running takeoff can be cancelled.");

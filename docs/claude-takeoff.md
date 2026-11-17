@@ -71,6 +71,18 @@ in the wizard are heuristics, not guaranteed prices.
 
 ## Document preparation and start reliability
 
+Anthropic model lookup, token counting and generation failures retain sanitized
+operation, HTTP status, provider error type/message and request ID in run activity
+and structured server logs. SDK objects, request bodies and credentials are never
+serialized. A failed run's Retry action requires confirmation because it can make
+paid calls; it requeues the same checkpoint with unchanged documents/settings,
+spent amounts and caps. Transient retry timers reset; uncertain-call reservations
+remain. Exhausted limits cannot be increased through Retry.
+
+`npx tsx scripts/diagnose-takeoff-count.ts <run-id>` replays only the first
+token-count request for a failed step-zero run, using shared system construction.
+It records results without requeueing or calling generation.
+
 Start uses a wizard request UUID, a per-user advisory transaction lock and a saved
 request fingerprint. Concurrent starts/retries return the original run; reusing a
 key with changed inputs returns 409. Storage-side copies pin the exact source

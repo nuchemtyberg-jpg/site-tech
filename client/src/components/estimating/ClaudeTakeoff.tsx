@@ -60,6 +60,7 @@ export function RunProgress({ run, opportunityId, dirty, selected, onOpenRevisio
     {run.error && <p className="ai-error" role="alert">{run.error}</p>}{error && <p className="ai-error" role="alert">{error}</p>}
     <div className="ai-row">
       {live && <Button size="sm" variant="outline" disabled={action.isPending} onClick={() => { if (window.confirm("Cancel this takeoff? Already incurred costs still apply.")) perform("cancel"); }}>Cancel takeoff</Button>}
+      {run.status==="failed" && <Button size="sm" variant="outline" disabled={action.isPending||run.cost>=run.budget||run.steps>=run.stepLimit} onClick={()=>{if(window.confirm("Retry from the last saved checkpoint? This can make paid Claude calls using the remaining approved budget. Documents, settings and limits stay unchanged.")) perform("retry");}}>Retry</Button>}
       {run.status === "stopped_at_cap" && <Button size="sm" disabled={action.isPending} onClick={() => { setContinueOpen(true); setApproved(false); }}>Approve more budget & continue</Button>}
       {run.revisionId && <Button size="sm" variant="outline" disabled={selected || dirty} onClick={() => onOpenRevision(run.revisionId!)}>{selected ? "Revision open" : "Open generated revision"}</Button>}
       {run.revisionId && dirty && !selected && <p className="ai-muted">Save your draft before opening this revision. Your edits have not been discarded.</p>}

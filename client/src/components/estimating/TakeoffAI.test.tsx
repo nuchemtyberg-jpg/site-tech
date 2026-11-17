@@ -73,6 +73,16 @@ describe("Claude takeoff review & approval", () => {
     expect((screen.getByRole("button", { name: "Open generated revision" }) as HTMLButtonElement).disabled).toBe(true);
     expect(screen.getByText(/Your edits have not been discarded/)).toBeTruthy();
   });
+  it("requires confirmation before retrying the same failed run", () => {
+    const confirm=vi.spyOn(window,"confirm").mockReturnValueOnce(false).mockReturnValueOnce(true);
+    render(<RunProgress run={run({status:"failed",error:"Anthropic rejected the token count: credit balance too low"})} opportunityId={3} dirty={false} selected={false} onOpenRevision={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button",{name:"Retry",exact:true}));
+    expect(mocks.mutate).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button",{name:"Retry",exact:true}));
+    expect(mocks.mutate.mock.calls[0][0]).toEqual({action:"runs/9/retry",data:undefined});
+    expect(confirm).toHaveBeenCalledWith(expect.stringContaining("paid Claude calls"));
+    confirm.mockRestore();
+  });
   it("shows estimate-local added rates as read-only information to verify", () => {
     render(<TakeoffReview run={run({ addedRates: [
       { id: "rate-1", key: "FLOWABLE_FILL", desc: "Flowable fill delivered to Newark", unit: "CY", value: "187.65", computedValue: 187.65 },

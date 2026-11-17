@@ -7,7 +7,8 @@ import fs from "node:fs";
 import assert from "node:assert/strict";
 import { and, eq, sql } from "drizzle-orm";
 import { db, pool } from "../server/db";
-import { customers, opportunities, estimateRevisions, estimatingCompanyRates, estimatingRateHistory } from "../shared/schema";
+import { customers, opportunities, estimateRevisions, estimatingCompanyRates, estimatingRateHistory, takeoffRuns, notifications } from "../shared/schema";
+import { aiSettingsSchema, type TakeoffState } from "../shared/estimating/takeoff";
 import { lockEstimateRevision } from "../server/services/estimating";
 import { emptyJob, newCategory, newLine } from "../shared/estimating/model";
 
@@ -41,6 +42,24 @@ async function main() {
       oppIds.push(o.id);
     }
     const root = `/api/opportunities/${oppIds[0]}/estimates`;
+    // Deliberately missing preparation: even if claimed, this fixture fails
+    // before any model lookup/count/generation. Never retry a real run in tests.
+    const retryState:TakeoffState={job:emptyJob(),settings:aiSettingsSchema.parse({}),documents:[{
+      fileId:999999,name:"Retry fixture.pdf",objectPath:"/objects/missing-test",snapshotPath:"/objects/missing-test",
+      sha256:"test",contentType:"application/pdf",pages:[1],preparationKey:tag}],
+      preparationComplete:false,instructions:"Same checkpoint",trades:[],playbook:{id:null,version:0,markdown:""},rules:[],
+      messages:[],scales:{},usage:{input:0,output:0,cacheRead:0,cacheWrite:0},cost:1,steps:0,budget:25,stepLimit:150,progress:[],
+      pendingCall:{reservation:.5,startedAt:new Date().toISOString()}};
+    const [failed]=await db.insert(takeoffRuns).values({opportunityId:oppIds[0],createdBy:estimator.id,status:"failed",state:retryState,error:"Test failure"}).returning();
+    const retryPath=`/api/opportunities/${oppIds[0]}/takeoff/runs/${failed.id}/retry`;
+    assert.equal((await request(user,retryPath,"POST")).status,403);
+    assert.equal((await request(null,retryPath,"POST")).status,401);
+    assert.equal((await request(estimator,`/api/opportunities/${oppIds[1]}/takeoff/runs/${failed.id}/retry`,"POST")).status,409);
+    const retried=await request(estimator,retryPath,"POST");
+    assert.equal(retried.status,200);assert.equal(retried.body.id,failed.id);assert.equal(retried.body.status,"queued");
+    assert.equal(retried.body.cost,1);assert.equal(retried.body.budget,25);assert.equal(retried.body.stepLimit,150);
+    assert.deepEqual(retried.body.documents[0].pages,[1]);assert.equal(retried.body.instructions,"Same checkpoint");
+    console.log("PASS failed-run Retry authorization, same ID/checkpoint/documents and unchanged spending limits");
     for (const who of [admin, manager, estimator]) {
       assert.equal((await request(who, "/api/estimating-rates")).status, 200);
       assert.equal((await request(who, root)).status, 200);
@@ -168,7 +187,7 @@ async function main() {
     assert.equal(list[0].revisionNumber, 5);
     console.log("PASS validation, lightweight revision list, server-authoritative totals; ALL ESTIMATING API TESTS PASSED");
   } finally {
-    for (const id of oppIds) { await db.delete(estimateRevisions).where(eq(estimateRevisions.opportunityId, id)); await db.delete(opportunities).where(eq(opportunities.id, id)); }
+    for (const id of oppIds) { await db.delete(takeoffRuns).where(eq(takeoffRuns.opportunityId,id)); await db.delete(estimateRevisions).where(eq(estimateRevisions.opportunityId, id)); await db.delete(opportunities).where(eq(opportunities.id, id)); }
     if (customerId) await db.delete(customers).where(eq(customers.id, customerId));
     if (companyChanged) {
       const owned = and(eq(estimatingCompanyRates.id, 1), eq(estimatingCompanyRates.savedBy, lastCompanyWriter));
@@ -177,7 +196,7 @@ async function main() {
     }
     for (const id of ids) await db.delete(estimatingRateHistory).where(eq(estimatingRateHistory.savedBy, id));
     for (const sid of sessions) await db.execute(sql`DELETE FROM sessions WHERE sid=${sid}`);
-    for (const id of ids) await db.execute(sql`DELETE FROM users WHERE id=${id}`);
+    for (const id of ids) { await db.delete(notifications).where(eq(notifications.userId,id)); await db.execute(sql`DELETE FROM users WHERE id=${id}`); }
     await pool.end();
   }
 }
