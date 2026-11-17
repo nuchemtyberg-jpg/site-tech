@@ -7,7 +7,8 @@ export function useTakeoffConfig(id: number) {
   return useQuery({ queryKey: [takeoffRoot(id), "config"], queryFn: () => takeoffRequest<TakeoffConfig>(`${takeoffRoot(id)}/config`) });
 }
 export function useTakeoffSheets(id: number, fileId: number, enabled: boolean) {
-  return useQuery({ queryKey: [takeoffRoot(id), "documents", fileId, "sheets"], queryFn: () => takeoffRequest<{ pages: SheetInfo[] }>(`${takeoffRoot(id)}/documents/${fileId}/sheets`), enabled });
+  return useQuery({ queryKey: [takeoffRoot(id), "documents", fileId, "sheets"], queryFn: () => takeoffRequest<{status?:string; pages: SheetInfo[] }>(`${takeoffRoot(id)}/documents/${fileId}/sheets`), enabled,
+    refetchInterval:query=>["queued","processing"].includes(query.state.data?.status||"")?2000:false });
 }
 export function useSavePlaybook() {
   const client = useQueryClient();

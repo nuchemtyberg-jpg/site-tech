@@ -6,6 +6,8 @@ import type { TakeoffState } from "@shared/estimating/takeoff";
 import { readObject, readSpreadsheet } from "./documents";
 import { openPDF, pageText, pageVectors, sheetIndex, renderPage, measurePaths, type Region } from "./pdf";
 import { assertAppendOnlyRates, ensureRateSnapshot } from "./rate-snapshot";
+import { cachedPage, cachedJSON, preparedDocument, isolatedRender } from "./preparation";
+import type { VectorPath } from "./pdf";
 
 const region=z.tuple([z.number().nonnegative(),z.number().nonnegative(),z.number().positive(),z.number().positive()])
   .refine(r=>r[2]>r[0]&&r[3]>r[1],"Region must be [left,top,right,bottom] in page points.");
@@ -68,12 +70,12 @@ export async function executeTool(name:string,raw:unknown,state:TakeoffState):Pr
   const documentId=z.object({document:z.number().int().positive()}).parse(raw).document;
   const file=state.documents.find(d=>d.fileId===documentId);
   if(!file) throw new Error("This document was not selected for the run.");
-  const bytes=await readObject(file.snapshotPath);
   if(name==="read_spreadsheet") {
     if(!/\.(xlsx|csv)$/i.test(file.name)) throw new Error("Select an XLSX or CSV document.");
-    return {result:await readSpreadsheet(file.name,bytes)};
+    return {result:await readSpreadsheet(file.name,await readObject(file.snapshotPath))};
   }
   if(!/\.pdf$/i.test(file.name)) {
+    const bytes=await readObject(file.snapshotPath);
     if(name==="sheet_index") {
       const result=[{page:1,title:file.name,sheetNumber:"",scaleText:[],vector:false,warning:"Raster/spreadsheet; read visually or use read_spreadsheet."}];
       (state.sheetIndexes??={})[String(documentId)]=result;
@@ -86,10 +88,11 @@ export async function executeTool(name:string,raw:unknown,state:TakeoffState):Pr
     const canvas=createCanvas(Math.ceil(w*s),Math.ceil(h*s));canvas.getContext("2d").drawImage(image,box[0],box[1],w,h,0,0,canvas.width,canvas.height);
     return {result:{approximate:true,warning:"Raster image: no vector measurement data."},image:canvas.toBuffer("image/png").toString("base64")};
   }
-  const doc=await openPDF(bytes);
-  try {
+  const prepared=await preparedDocument(file);
+  const readText=async(page:number)=>cachedJSON<Awaited<ReturnType<typeof pageText>>>((await cachedPage(file,page)).textPath);
+  {
     if(name==="sheet_index") {
-      const result=await sheetIndex(doc,file.pages);
+      const result=prepared.manifest.pages.filter(p=>file.pages.includes(p.page)).map(({textPath,vectorsPath,thumbnailPath,...p})=>p);
       (state.sheetIndexes??={})[String(documentId)]=result;
       return {result};
     }
@@ -100,7 +103,7 @@ export async function executeTool(name:string,raw:unknown,state:TakeoffState):Pr
       const result=[];
       for(const page of a.pages||file.pages) {
         if(!file.pages.includes(page)) throw new Error("Page not selected.");
-        for(const item of await pageText(doc,page)) {
+        for(const item of await readText(page)) {
           if(pattern) {
             for(const match of item.text.slice(0,2000).matchAll(pattern)) if(match[0].length) result.push({page,...item,characterOffset:match.index});
             continue;
@@ -116,8 +119,8 @@ export async function executeTool(name:string,raw:unknown,state:TakeoffState):Pr
     const a=pageArgs.parse(raw);
     if(!file.pages.includes(a.page)) throw new Error("Page not selected.");
     const key=`${documentId}:${a.page}`;
-    if(name==="page_text") return {result:await pageText(doc,a.page,a.region)};
-    if(name==="view_page") return {result:{page:a.page},image:(await renderPage(doc,a.page,z.object({zoom:z.number().min(.1).max(4).default(1)}).parse(raw).zoom,a.region)).toString("base64")};
+    if(name==="page_text") return {result:(await readText(a.page)).filter(t=>!a.region||(t.x>=a.region[0]&&t.y>=a.region[1]&&t.x<=a.region[2]&&t.y<=a.region[3]))};
+    if(name==="view_page") return {result:{page:a.page},image:(await isolatedRender(file,a.page,z.object({zoom:z.number().min(.1).max(4).default(1)}).parse(raw).zoom,a.region)).toString("base64")};
     if(name==="set_scale"||name==="calibrate") {
       const source=z.object({source:z.string().trim().min(1).max(2000)}).parse(raw).source;
       let feetPerPoint:number;
@@ -130,7 +133,7 @@ export async function executeTool(name:string,raw:unknown,state:TakeoffState):Pr
       state.scales[key]={feetPerPoint,method:`${name}: ${source}`};
       return {result:state.scales[key]};
     }
-    const paths=await pageVectors(doc,a.page);
+    const paths=await cachedJSON<VectorPath[]>((await cachedPage(file,a.page)).vectorsPath);
     if(name==="layers") {
       const counts:Record<string,number>={};
       for(const p of paths) if(p.layer) counts[p.layer]=(counts[p.layer]||0)+1;
@@ -143,5 +146,5 @@ export async function executeTool(name:string,raw:unknown,state:TakeoffState):Pr
       return {result:{...measurement,count:measurement.paths.length,paths:measurement.paths.slice(f.offset,f.offset+f.limit),offset:f.offset,scale:state.scales[key]}};
     }
     throw new Error(`Unknown tool: ${name}`);
-  } finally {await doc.destroy();}
+  }
 }

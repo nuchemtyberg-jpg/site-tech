@@ -8,6 +8,7 @@ import { aiSettingsSchema, type TakeoffState } from "../shared/estimating/takeof
 import { executeClaimedRun, SYSTEM } from "../server/takeoff/worker";
 import { publicRun } from "../server/takeoff/service";
 import { executeTool } from "../server/takeoff/tools";
+import { pinSource, preparationTick, getPreparation } from "../server/takeoff/preparation";
 import { PDFDocument } from "pdf-lib";
 import { writePrivate } from "../server/takeoff/documents";
 import { ObjectStorageService } from "../server/replit_integrations/object_storage/objectStorage";
@@ -49,6 +50,13 @@ async function main() {
     const pdf=await PDFDocument.create();pdf.addPage().drawText("C-101 SITE PLAN");
     testObject=await writePrivate(Buffer.from(await pdf.save()),"pdf","application/pdf");
     const indexed=state();indexed.documents=[{fileId:999,name:"Synthetic.pdf",contentType:"application/pdf",pages:[1],sha256:"test",objectPath:testObject,snapshotPath:testObject}];
+    const cached=await pinSource(999,"Synthetic.pdf",testObject);
+    indexed.documents[0].preparationKey=cached.key;
+    for(let i=0;i<60;i++) {
+      await preparationTick();
+      if((await getPreparation(cached.key)).status==="ready") break;
+      await new Promise(r=>setTimeout(r,1000));
+    }
     const indexResult=await executeTool("sheet_index",{document:999},indexed);
     assert.deepEqual(indexed.sheetIndexes?.["999"],indexResult.result);
     await executeTool("set_scale",{document:999,page:1,feetPerPoint:30/72,source:"Synthetic plan stated scale"},indexed);

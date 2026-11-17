@@ -28,6 +28,7 @@ export const selectionSchema = z.object({
   fileId: z.number().int().positive(), pages: z.array(z.number().int().positive()).min(1).max(500),
 });
 export const startTakeoffSchema = z.object({
+  requestKey: z.string().uuid().optional(),
   documents: z.array(selectionSchema).min(1).max(30),
   instructions: z.string().max(20000).default(""),
   trades: z.array(z.string().trim().min(1).max(100)).max(30).default([]),
@@ -39,10 +40,16 @@ export type RunStatus = "queued" | "running" | "needs_review" | "completed" | "f
 export interface RunDocument {
   fileId: number; name: string; contentType: string; objectPath: string;
   pages: number[]; sha256: string; snapshotPath: string;
+  preparationKey?: string;
+  sourceGeneration?: string;
+  documentVersion?: number;
 }
 export interface TokenUsage { input: number; output: number; cacheRead: number; cacheWrite: number }
 export type AddedMaterialRate = EstimateRates["rates"][number] & { computedValue: number | null };
 export interface TakeoffState {
+  requestKey?: string;
+  requestFingerprint?: string;
+  preparationComplete?: boolean;
   documents: RunDocument[];
   instructions: string;
   trades: string[];

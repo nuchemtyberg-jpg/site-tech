@@ -72,6 +72,7 @@ export async function pageVectors(doc: Awaited<ReturnType<typeof openPDF>>, numb
       const finish=(closed=false) => {
         if(points.length>1) {
           if(closed && (points[0][0]!==points.at(-1)![0] || points[0][1]!==points.at(-1)![1])) points.push(points[0]);
+          if(paths.length>=100000) throw new Error(`Page ${number} exceeds 100,000 vector paths. Split or simplify this sheet; quantities have not been truncated.`);
           paths.push({points,closed,curved,layer:state.layer,color:state.color,weight:state.weight,
             lengthPoints:points.slice(1).reduce((n,p,j)=>n+Math.hypot(p[0]-points[j][0],p[1]-points[j][1]),0),
             areaPoints:closed?polygonArea(points):0});
@@ -79,6 +80,7 @@ export async function pageVectors(doc: Awaited<ReturnType<typeof openPDF>>, numb
         points=[];curved=false;
       };
       for(let j=0;j<data.length;) {
+        if(points.length>500000) throw new Error(`Page ${number} exceeds 500,000 points in a path. Simplify this sheet; quantities have not been truncated.`);
         const op=data[j++];
         if(op===0) { finish(); points=[transform(matrix,[data[j++],data[j++]])]; }
         else if(op===1) points.push(transform(matrix,[data[j++],data[j++]]));

@@ -6,9 +6,13 @@ import type { PublicRun } from "@/hooks/use-takeoff";
 export function estimateTakeoffUsage(pages: number, config: TakeoffConfig) {
   const inputTokens = pages * config.estimatedInputPerPage + 12000;
   if (!config.prices) return { inputTokens, low: null, high: null };
-  const { input, output, cacheWrite } = config.prices;
-  const low = inputTokens * (input + .1 * output) / 1_000_000;
-  const high = inputTokens * (4 * input + .5 * output + cacheWrite) / 1_000_000;
+  const { input, output, cacheRead, cacheWrite } = config.prices;
+  // Include repeated cached context, fresh tool input and substantial output on
+  // every step. Do not truncate this planning range to the user's spending cap.
+  const scenario = (steps: number, prompt: number, fresh: number, out: number) =>
+    (inputTokens * cacheWrite + steps * (prompt * cacheRead + fresh * input + out * output)) / 1_000_000;
+  const low = scenario(40, inputTokens, 3000, 2500);
+  const high = scenario(120, inputTokens * 2, 10000, 6000);
   return { inputTokens, low, high };
 }
 export const usd = (value: number) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: 3 }).format(value);

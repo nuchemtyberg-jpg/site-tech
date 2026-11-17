@@ -12,6 +12,8 @@ import { EstimateError } from "../services/estimating";
 import { documentThumbnail, inspectBytes, opportunityDocuments, permittedFile, readObject } from "./documents";
 import { getAISettings, getPlaybook, getRun, monthlySpend, progress, publicRun, startRun } from "./service";
 import { abortRun } from "./worker";
+import { pinDocument, getPreparation } from "./preparation";
+import { takeoffRequestDiagnostics } from "./diagnostics";
 const id=(raw:unknown)=>z.coerce.number().int().positive().parse(raw);
 export function registerTakeoffRoutes(app:Express) {
   const permitted:RequestHandler=async(req,res,next)=>{
@@ -64,6 +66,7 @@ export function registerTakeoffRoutes(app:Express) {
     if(!saved) throw new EstimateError(404,"Rule not found");res.json(saved);
   }));
   const root="/api/opportunities/:opportunityId/takeoff";
+  app.use(root,takeoffRequestDiagnostics);
   app.get(`${root}/config`,...guard,wrap(async(_req,res)=>{
     const {settings}=await getAISettings();res.json({model:settings.model,maxCost:settings.maxCost,maxSteps:settings.maxSteps,estimatedInputPerPage:3000,prices:settings.prices[settings.model]});
   }));
@@ -71,11 +74,17 @@ export function registerTakeoffRoutes(app:Express) {
     res.json((await opportunityDocuments(id(req.params.opportunityId))).map(f=>({id:f.id,name:f.name,contentType:f.contentType,source:f.source})));
   }));
   app.get(`${root}/documents/:fileId/sheets`,...guard,wrap(async(req,res)=>{
-    const file=await permittedFile(id(req.params.opportunityId),id(req.params.fileId));
-    res.json({pages:await inspectBytes(file.name,await readObject(file.objectPath))});
+    const file=await pinDocument(id(req.params.opportunityId),id(req.params.fileId),[]);
+    const prep=await getPreparation(file.preparationKey!);
+    if(prep.status==="failed") throw new EstimateError(422,prep.error||"Document preparation failed.");
+    res.status(prep.status==="ready"?200:202).json({status:prep.status,pages:prep.manifest?.pages.map(({textPath,vectorsPath,thumbnailPath,...p})=>p)||[]});
   }));
   app.get(`${root}/documents/:fileId/pages/:page/thumbnail`,...guard,wrap(async(req,res)=>{
-    res.set("Cache-Control","private, max-age=300").type("png").send(await documentThumbnail(id(req.params.opportunityId),id(req.params.fileId),id(req.params.page)));
+    const file=await pinDocument(id(req.params.opportunityId),id(req.params.fileId),[]);
+    const prep=await getPreparation(file.preparationKey!);
+    const sheet=prep.manifest?.pages.find(p=>p.page===id(req.params.page));
+    if(!sheet) throw new EstimateError(409,"Thumbnail is still preparing.");
+    res.set("Cache-Control","private, max-age=300").type("png").send(await readObject(sheet.thumbnailPath));
   }));
   app.get(`${root}/runs`,...guard,wrap(async(req,res)=>{
     res.json((await db.select().from(takeoffRuns).where(eq(takeoffRuns.opportunityId,id(req.params.opportunityId))).orderBy(desc(takeoffRuns.id))).map(publicRun));

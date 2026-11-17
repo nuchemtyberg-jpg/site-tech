@@ -69,7 +69,57 @@ manifest and the compacted tool-results conversation. Cache expiration still
 applies; budget reservation assumes no cache discount. Selected-page estimates
 in the wizard are heuristics, not guaranteed prices.
 
-## Long-run context management
+## Document preparation and start reliability
+
+Start uses a wizard request UUID, a per-user advisory transaction lock and a saved
+request fingerprint. Concurrent starts/retries return the original run; reusing a
+key with changed inputs returns 409. Storage-side copies pin the exact source
+generation before enqueueing; no PDF is downloaded or parsed in the start request.
+An older client without a key deduplicates by its input fingerprint.
+
+Sheet selection polls a durable preparation record (202 while queued/processing).
+PDF preparation and region renders execute in separate child processes, globally
+limited to one via a PostgreSQL session lock. The preparer uses a 768-MiB JS heap
+limit and a 15-minute process timeout; native RSS can exceed the JS heap limit.
+Children exit if the parent disconnects. Failed preparations persist a readable
+error and prevent model calls. Interrupted processing resumes from saved pages.
+
+Private App Storage caches the pinned source, each page's positioned text, vector
+paths and thumbnail, with a durable manifest of page count, title/label/scale and
+vector status. Cache keys include file identity, document version, storage generation
+and parser version. Tools read page caches rather than reopening a PDF for measurements,
+text search or layer lists. Region views use isolated rendering and are cached too.
+Each parsed page is cleaned up before the next. More than 100,000 paths per page
+or 500,000 points in one path raises an explicit error, never silently truncating quantities.
+
+Poppler (`poppler_utils`) is required in development and production. The native canvas
+thumbnail path reproducibly segfaulted on the incident PDF; Poppler rendered it successfully.
+The production build includes `dist/takeoff-preparer.cjs`. Publish applies the new
+preparation-table schema; there is no startup/production migration code.
+
+Structured logs record request arrivals, completion/abort, preparation stages,
+timing, heap/RSS, process high-water RSS, renderer sampled RSS and child exit
+codes/signals. They do not log API keys, document bytes or instructions.
+The planning range estimates 40–120 steps of repeated cached prompts, fresh tool input
+and output, plus an initial cache write. It is not clipped to the approved cap and
+is not a guarantee that the cap covers all work.
+
+### Exact-file verification, 2026-11-17
+
+The 27,554,459-byte, 22-page `260901_FULL-SET SIGNED (1).pdf` prepared successfully
+in about 117 seconds with no Anthropic calls. All 22 text/vector caches were read
+back and the immutable version reused. Preparer high-water RSS: 1,027.8 MiB;
+renderer sampled peak: 29.6 MiB. Sum of separate peaks: 1,057.4 MiB (conservative,
+not a measured simultaneous peak). The dev web server remained running, sampled
+at 352.3 MiB after preparation; its process-lifetime high-water mark was 850.3 MiB
+and includes Vite startup. A 4-GiB Reserved VM is a starting recommendation for
+one preparation at a time, with production monitoring; paid model runs were not
+memory-profiled and these figures are not a universal maximum.
+
+- `npx tsx scripts/test-takeoff-start.ts`: concurrent/retried starts, changed-input conflict,
+  pinned source generation, failure handling, and exact-file cache readback; no model calls.
+
+## Conversation context management
 
 Durable model/tool history remains unchanged for recovery and future chat. Outbound
 copies retain the latest 12 tool results in full, replacing older text/images with

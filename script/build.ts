@@ -59,6 +59,8 @@ async function buildAll() {
     external: externals,
     logLevel: "info",
   });
+  await esbuild({entryPoints:["server/takeoff/preparation-child.ts"],platform:"node",bundle:true,format:"cjs",
+    outfile:"dist/takeoff-preparer.cjs",external:externals,logLevel:"info"});
 }
 
 buildAll().catch((err) => {

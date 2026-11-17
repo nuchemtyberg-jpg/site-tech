@@ -5,7 +5,8 @@ import { aiSettingsSchema, type TakeoffState, type RunStatus, type LearnedRule, 
 import { emptyJob, money } from "@shared/estimating/model";
 import { computeJob, summarize } from "@shared/estimating/engine";
 import { EstimateError, getCompanyRates } from "../services/estimating";
-import { snapshotDocument } from "./documents";
+import { pinDocument } from "./preparation";
+import { createHash } from "node:crypto";
 import { addedMaterialRates, ensureRateSnapshot } from "./rate-snapshot";
 export type Run = typeof takeoffRuns.$inferSelect;
 export async function getAISettings() {
@@ -31,6 +32,15 @@ export function publicRun(run:Run) {
 export async function startRun(opportunityId:number,userId:string,raw:unknown) {
   if(!process.env.ANTHROPIC_API_KEY) throw new EstimateError(503,"ANTHROPIC_API_KEY is missing. An administrator must add it to Secrets.");
   const input=startTakeoffSchema.parse(raw),config=await getAISettings(),playbook=await getPlaybook();
+  const fingerprint=createHash("sha256").update(JSON.stringify({...input,requestKey:undefined,opportunityId})).digest("hex");
+  const requestKey=input.requestKey || fingerprint;
+  return db.transaction(async tx=>{
+  await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${userId}),hashtext(${requestKey}))`);
+  const [existing]=await tx.select().from(takeoffRuns).where(and(eq(takeoffRuns.createdBy,userId),sql`${takeoffRuns.state}->>'requestKey'=${requestKey}`));
+  if(existing) {
+    if(existing.state.requestFingerprint!==fingerprint) throw new EstimateError(409,"This start request was already used with different selections. Reopen the wizard to start a different takeoff.");
+    return publicRun(existing);
+  }
   const [opp]=await db.select().from(opportunities).where(and(eq(opportunities.id,opportunityId),isNull(opportunities.deletedAt)));
   if(!opp) throw new EstimateError(404,"Opportunity not found");
   let job=emptyJob();
@@ -45,17 +55,18 @@ export async function startRun(opportunityId:number,userId:string,raw:unknown) {
   }
   if(Object.keys(computeJob(job).errs).length) throw new EstimateError(422,"Fix formulas in the source rate tables before starting Claude.");
   const documents=[];
-  for(const selection of input.documents) documents.push(await snapshotDocument(opportunityId,selection.fileId,selection.pages));
+  for(const selection of input.documents) documents.push(await pinDocument(opportunityId,selection.fileId,selection.pages));
   const active=playbook.rules.filter(r=>r.active&&(r.appliesTo.toLowerCase()==="all"||input.trades.some(t=>t.toLowerCase()===r.appliesTo.toLowerCase())));
   const latest=playbook.versions[0];
-  const state:TakeoffState={documents,instructions:input.instructions,trades:input.trades,settings:config.settings,
+  const state:TakeoffState={requestKey,requestFingerprint:fingerprint,preparationComplete:false,documents,instructions:input.instructions,trades:input.trades,settings:config.settings,
     playbook:{id:latest?.id||null,version:latest?.id||0,markdown:latest?.markdown||""},
     rules:active.map(r=>({...r,createdAt:r.createdAt.toISOString()})) as LearnedRule[],
     job,messages:[],scales:{},sheetIndexes:{},usage:{input:0,output:0,cacheRead:0,cacheWrite:0},cost:0,steps:0,
     budget:Math.min(config.settings.maxCost,input.approvedBudget),stepLimit:Math.min(config.settings.maxSteps,input.approvedSteps),progress:[{at:new Date().toISOString(),message:"Queued: documents and rate snapshot saved."}]};
   ensureRateSnapshot(state);
-  const [run]=await db.insert(takeoffRuns).values({opportunityId,createdBy:userId,state}).returning();
+  const [run]=await tx.insert(takeoffRuns).values({opportunityId,createdBy:userId,state}).returning();
   return publicRun(run);
+  });
 }
 export async function getRun(opportunityId:number,id:number) {
   const [row]=await db.select().from(takeoffRuns).where(and(eq(takeoffRuns.id,id),eq(takeoffRuns.opportunityId,opportunityId)));

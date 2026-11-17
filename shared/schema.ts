@@ -1643,6 +1643,19 @@ export const takeoffRules = pgTable("takeoff_rules", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
+export const takeoffDocumentPreparations = pgTable("takeoff_document_preparations", {
+  key: text("key").primaryKey(),
+  fileId: integer("file_id").notNull(),
+  name: text("name").notNull(),
+  sourcePath: text("source_path").notNull(),
+  sourceGeneration: text("source_generation").notNull(),
+  snapshotPath: text("snapshot_path"),
+  status: text("status").$type<"queued" | "processing" | "ready" | "failed">().notNull().default("queued"),
+  manifest: jsonb("manifest").$type<import("./estimating/preparation").PreparationManifest>(),
+  error: text("error"),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
 export const takeoffRuns = pgTable("takeoff_runs", {
   id: serial("id").primaryKey(),
   opportunityId: integer("opportunity_id").notNull().references(() => opportunities.id),

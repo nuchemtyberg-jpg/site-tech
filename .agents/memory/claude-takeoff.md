@@ -26,3 +26,9 @@ Context compaction must retain canonical checkpoint/scales/sheet indexes indepen
 **Why:** The owner permits Claude to add reusable material keys, not to rewrite existing prices; long drawing runs must not depend on resending old images or geometry.
 
 **How to apply:** Preserve the original baseline through checkpoints, restart and Continue; prune outbound copies, never the data needed to recover unfinished work.
+
+Native canvas PDF rendering cannot be assumed safe for signed construction plan sets.
+
+**Why:** The office's 22-page signed drawing set reproducibly caused SIGSEGV during thumbnail rendering, after successful text/vector extraction. A native crash cannot be caught by Express.
+
+**How to apply:** Keep PDF work outside the web process, use the separate Poppler rendering path, and validate with real drawings as well as generated PDFs. Keep cache provenance tied to immutable storage generations.

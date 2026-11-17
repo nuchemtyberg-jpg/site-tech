@@ -46,6 +46,7 @@ async function main() {
     await page.getByRole("button", { name: "New Claude takeoff", exact: true }).click();
     await expect(page.getByRole("dialog")).toContainText("Select documents");
     await page.getByRole("checkbox", {name:/Takeoff test drawing/}).check();
+    await expect(page.getByRole("dialog")).toContainText("0 of 1",{timeout:60000});
     await page.getByRole("button", {name:"Select all",exact:true}).click();
     await expect(page.getByRole("dialog")).toContainText("1 of 1");
     await expect(page.getByRole("dialog").locator("img").first()).toBeVisible();
@@ -92,6 +93,23 @@ async function main() {
     await page.goto(`${base}/admin/settings/users`);
     await expect(page.getByRole("heading", { name: "404 Page Not Found" })).toBeVisible();
     expect(errors).toEqual([]);
+    // Exact incident PDF: inspect cached sheets and the cost explanation only.
+    // Never approve/start a paid run in this browser test.
+    await page.setViewportSize({width:1280,height:1000});
+    await page.goto(`${base}/bidding/157`);
+    await page.getByRole("tab",{name:"Estimate",exact:true}).click();
+    await page.getByRole("button",{name:/Claude takeoff/}).first().click();
+    const setup=page.getByRole("dialog");
+    await setup.locator("label").filter({hasText:"260901_FULL-SET SIGNED (1).pdf"}).first().getByRole("checkbox").check();
+    await expect(setup.getByText("0 of 22 prepared pages / sheets selected")).toBeVisible({timeout:30000});
+    await setup.getByRole("button",{name:"Select all",exact:true}).click();
+    await setup.getByRole("button",{name:"Continue",exact:true}).click();
+    await setup.getByRole("button",{name:"Continue",exact:true}).click();
+    await expect(setup.getByText(/Assumes 40–120 tool steps/)).toBeVisible();
+    await page.screenshot({path:".local/screenshots/takeoff-cost-desktop.png"});
+    await page.setViewportSize({width:375,height:900});
+    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+    await page.screenshot({path:".local/screenshots/takeoff-cost-mobile.png"});
     console.log("PASS estimator imports exact total, saves named revision, refreshes, mobile fits, rates allowed and user admin denied");
   } finally {
     await browser.close();

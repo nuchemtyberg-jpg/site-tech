@@ -14,8 +14,15 @@ export interface SheetInfo { page: number; title: string; sheetNumber: string; s
 export interface PlaybookVersion { id: number; markdown: string; createdAt: string; createdBy: string; restoredFrom: number | null }
 export async function takeoffRequest<T>(url: string, method = "GET", body?: unknown): Promise<T> {
   const r = await fetch(url, { method, credentials: "include", headers: { "Content-Type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) });
-  const data = await r.json();
-  if (!r.ok) throw new Error(data.message || "Takeoff request failed");
+  const text = await r.text();
+  let data: any;
+  try { data = text.trim() ? JSON.parse(text) : undefined; } catch { /* Never expose a proxy's HTML as an application error. */ }
+  if (!r.ok || data === undefined) {
+    const detail = typeof data?.message === "string" ? data.message : !text.trim()
+      ? "The server returned an empty response. It may have stopped or the connection was interrupted."
+      : "The server returned an unexpected response instead of JSON. It may be unavailable.";
+    throw new Error(`HTTP ${r.status}: ${detail} If you were starting a takeoff, check the runs list before retrying.`);
+  }
   return data;
 }
 export const takeoffRoot = (id: number) => `/api/opportunities/${id}/takeoff`;

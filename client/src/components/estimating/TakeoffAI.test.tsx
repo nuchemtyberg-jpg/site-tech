@@ -184,8 +184,8 @@ describe("Planning estimate", () => {
   it("includes selected-page input plus fixed overhead and labels a range", () => {
     const estimate = estimateTakeoffUsage(7, { model: "claude-opus-5-5", maxCost: 25, maxSteps: 150, estimatedInputPerPage: 3000, prices: { input: 7, output: 31, cacheRead: .4, cacheWrite: 9 } });
     expect(estimate.inputTokens).toBe(33000);
-    expect(estimate.low).toBeCloseTo(33000 * (7 + .1 * 31) / 1_000_000);
-    expect(estimate.high).toBeCloseTo(33000 * (4 * 7 + .5 * 31 + 9) / 1_000_000);
+    expect(estimate.low).toBeCloseTo((33000*9+40*(33000*.4+3000*7+2500*31))/1_000_000);
+    expect(estimate.high).toBeCloseTo((33000*9+120*(66000*.4+10000*7+6000*31))/1_000_000);
   });
   it("does not invent model prices when config omits them", () => {
     const estimate = estimateTakeoffUsage(7, { model: "claude-sonnet-5-5", maxCost: 25, maxSteps: 150, estimatedInputPerPage: 3000 });

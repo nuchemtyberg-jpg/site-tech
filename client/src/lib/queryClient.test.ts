@@ -35,7 +35,7 @@ describe("API response handling", () => {
     });
 
     await expect(parseJsonResponse(response)).rejects.toThrow(
-      "Invalid API response: the server returned malformed JSON.",
+      "Invalid API response (HTTP 200): the server returned empty or malformed JSON.",
     );
   });
 });

@@ -39,13 +39,13 @@ export async function parseJsonResponse<T>(res: Response): Promise<T> {
   const contentType = res.headers.get("content-type") ?? "";
   if (!contentType.includes("application/json")) {
     const message = await readErrorMessage(res);
-    throw new Error(`Invalid API response: ${message}`);
+    throw new Error(`Invalid API response (HTTP ${res.status}): ${message}`);
   }
 
   try {
     return await res.json() as T;
   } catch {
-    throw new Error("Invalid API response: the server returned malformed JSON.");
+    throw new Error(`Invalid API response (HTTP ${res.status}): the server returned empty or malformed JSON. The connection may have been interrupted; check saved progress before retrying.`);
   }
 }
 
@@ -62,6 +62,7 @@ export async function apiRequest(
   });
 
   await throwIfResNotOk(res);
+  if (/^\/api\/document-tools\//.test(url) && res.status !== 204) await parseJsonResponse(res.clone());
   return res;
 }
 

@@ -207,8 +207,11 @@ export function NativeFileUploader({
       }),
     });
 
-    if (!res.ok) throw new Error("Failed to get upload URL");
-    const { uploadURL, objectPath } = await res.json();
+    if (!res.ok) throw new Error(`HTTP ${res.status}: Failed to get upload URL. The server may be unavailable.`);
+    let uploadData;
+    try { uploadData = await res.json(); }
+    catch { throw new Error(`HTTP ${res.status}: The upload server returned empty or invalid JSON. Retry when the server is available.`); }
+    const { uploadURL, objectPath } = uploadData;
 
     const uploadRes = await fetch(uploadURL, {
       method: "PUT",

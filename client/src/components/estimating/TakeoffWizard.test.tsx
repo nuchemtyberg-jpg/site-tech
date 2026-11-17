@@ -67,7 +67,7 @@ describe("Claude takeoff setup", () => {
     expect(start.disabled).toBe(true);
     fireEvent.click(screen.getByRole("checkbox", { name: /I approve spending/ }));
     fireEvent.click(start);
-    expect(mocks.action.mock.calls[0][0]).toEqual({ action: "runs", data: { documents: [{ fileId: 41, pages: [2] }], revisionId: 7, instructions: "Separate rock quantities.", trades: ["SOE"], approvedBudget: 18.75, approvedSteps: 120 } });
+    expect(mocks.action.mock.calls[0][0]).toEqual({ action: "runs", data: { requestKey:expect.any(String), documents: [{ fileId: 41, pages: [2] }], revisionId: 7, instructions: "Separate rock quantities.", trades: ["SOE"], approvedBudget: 18.75, approvedSteps: 120 } });
   });
   it("does not start without a successfully loaded budget configuration", () => {
     mocks.configError = true;
